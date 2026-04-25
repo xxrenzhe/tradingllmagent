@@ -39,6 +39,9 @@ ALLOWED_INDICATOR_TYPES = {
     "opening_range",
     "realized_volatility",
     "z_score",
+    "momentum",
+    "time_of_day",
+    "gap",
 }
 ALLOWED_EXIT_TYPES = {"points", "atr_multiple"}
 ALLOWED_POSITION_SIZING_TYPES = {"fixed_contracts"}

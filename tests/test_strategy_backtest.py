@@ -92,6 +92,22 @@ def mean_reversion_spec() -> dict:
     return payload
 
 
+def family_spec(strategy_family: str, indicators: dict, parameters: dict, direction: str = "long") -> dict:
+    payload = base_spec()
+    payload["name"] = f"test_{strategy_family}"
+    payload["strategy_family"] = strategy_family
+    payload["market_hypothesis"] = (
+        f"{strategy_family} is tested as a bounded deterministic intraday NQ strategy family."
+    )
+    payload["direction"] = direction
+    payload["indicators"] = indicators
+    payload["parameters"] = parameters
+    payload["entry"] = {"long": {"all": [{"left": "close", "op": ">", "right": "open"}]}}
+    if direction in {"short", "long_short"}:
+        payload["entry"]["short"] = {"all": [{"left": "close", "op": "<", "right": "open"}]}
+    return payload
+
+
 def symbol_config() -> SymbolConfig:
     return SymbolConfig(
         alias="NQmain",
@@ -108,18 +124,65 @@ def symbol_config() -> SymbolConfig:
     )
 
 
+def build_bar_rows(start: datetime, prices: list[tuple[float, float, float, float]]) -> list[dict]:
+    rows = []
+    for index, (open_, high, low, close) in enumerate(prices):
+        rows.append(
+            {
+                "symbol": "NQmain",
+                "timestamp": start + timedelta(minutes=index),
+                "open": open_,
+                "high": high,
+                "low": low,
+                "close": close,
+                "bid_close": close - 0.1,
+                "ask_close": close + 0.1,
+                "tick_count": 10,
+                "avg_spread": 0.2,
+            }
+        )
+    return rows
+
+
+def run_bar_result_for_rows(spec_payload: dict, rows: list[dict]):
+    parquet_rows = [
+        (
+            row["symbol"],
+            row["timestamp"],
+            row["open"],
+            row["high"],
+            row["low"],
+            row["close"],
+            row["bid_close"],
+            row["ask_close"],
+            row["tick_count"],
+            1.0,
+            1.0,
+            row["avg_spread"],
+        )
+        for row in rows
+    ]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output = bar_path(Path(temp_dir), "NQmain", "1m", rows[0]["timestamp"].date())
+        write_bars_parquet(output, parquet_rows)
+        return run_bar_backtest(parse_strategy_spec(spec_payload), symbol_config(), [output])
+
+
 class StrategyValidationTests(unittest.TestCase):
     def test_valid_example_spec_loads(self) -> None:
-        spec = load_strategy_spec(Path("strategies/example_opening_range_breakout.yaml"))
-        self.assertEqual(spec.strategy_family, "opening_range_breakout")
-        self.assertEqual(spec.symbol, "NQmain")
-
-        trend = load_strategy_spec(Path("strategies/example_trend_pullback.yaml"))
-        mean_reversion = load_strategy_spec(
-            Path("strategies/example_regime_filtered_mean_reversion.yaml")
-        )
-        self.assertEqual(trend.strategy_family, "trend_pullback")
-        self.assertEqual(mean_reversion.strategy_family, "regime_filtered_mean_reversion")
+        expected = {
+            "example_opening_range_breakout.yaml": "opening_range_breakout",
+            "example_trend_pullback.yaml": "trend_pullback",
+            "example_regime_filtered_mean_reversion.yaml": "regime_filtered_mean_reversion",
+            "example_volatility_expansion.yaml": "volatility_expansion",
+            "example_intraday_momentum.yaml": "intraday_momentum",
+            "example_time_of_day_edge.yaml": "time_of_day_edge",
+            "example_gap_fade_or_continuation.yaml": "gap_fade_or_continuation",
+        }
+        for filename, family in expected.items():
+            spec = load_strategy_spec(Path("strategies") / filename)
+            self.assertEqual(spec.strategy_family, family)
+            self.assertEqual(spec.symbol, "NQmain")
 
     def test_cost_model_loads_from_config(self) -> None:
         cost_model = get_cost_model("nq_conservative_v1", Path("configs"))
@@ -292,6 +355,70 @@ class BarBacktestTests(unittest.TestCase):
         self.assertEqual(trade.entry_reason, "z_close_below_negative_1")
         self.assertEqual(trade.exit_reason, "take_profit")
         self.assertAlmostEqual(trade.net_pnl, 45.0)
+
+    def test_volatility_expansion_produces_deterministic_trade(self) -> None:
+        spec = family_spec(
+            "volatility_expansion",
+            {"realized_volatility": {"type": "realized_volatility", "window": 3, "expansion_multiple": 1.5}},
+            {"volatility_window": {"values": [3]}, "volatility_expansion_multiple": {"values": [1.5]}},
+        )
+        rows = build_bar_rows(
+            datetime(2025, 3, 19, 13, 30),
+            [(100, 100.2, 99.9, 100.0), (100, 100.2, 99.9, 100.1), (100, 100.2, 99.9, 100.2), (100.2, 104.5, 100.0, 104.0), (104.0, 107.5, 103.8, 107.0)],
+        )
+        result = run_bar_result_for_rows(spec, rows)
+
+        self.assertEqual(result.trades[0].entry_reason, "range_expansion_1.5_close_above_prior_high")
+        self.assertEqual(result.trades[0].exit_reason, "take_profit")
+
+    def test_intraday_momentum_produces_deterministic_trade(self) -> None:
+        spec = family_spec(
+            "intraday_momentum",
+            {"momentum": {"type": "momentum", "lookback_minutes": 3, "threshold_points": 2}},
+            {"momentum_lookback_minutes": {"values": [3]}, "momentum_threshold_points": {"values": [2]}},
+        )
+        rows = build_bar_rows(
+            datetime(2025, 3, 19, 13, 30),
+            [(100, 100.3, 99.8, 100.0), (100, 100.8, 99.8, 100.5), (100.5, 101.2, 100.3, 101.0), (101.0, 103.4, 100.8, 103.0), (103.0, 106.5, 102.8, 106.2)],
+        )
+        result = run_bar_result_for_rows(spec, rows)
+
+        self.assertEqual(result.trades[0].entry_reason, "momentum_3m_above_2")
+        self.assertEqual(result.trades[0].exit_reason, "take_profit")
+
+    def test_time_of_day_edge_produces_deterministic_trade(self) -> None:
+        spec = family_spec(
+            "time_of_day_edge",
+            {"time_of_day": {"type": "time_of_day", "entry_time": "13:32", "entry_side": "long"}},
+            {"entry_time": {"values": ["13:32"]}, "entry_side": {"values": ["long"]}},
+        )
+        rows = build_bar_rows(
+            datetime(2025, 3, 19, 13, 30),
+            [(100, 100.3, 99.8, 100.0), (100, 100.3, 99.8, 100.0), (100, 100.4, 99.8, 100.1), (100.1, 103.5, 100.0, 103.1)],
+        )
+        result = run_bar_result_for_rows(spec, rows)
+
+        self.assertEqual(result.trades[0].entry_reason, "time_of_day_13:32:00_long")
+        self.assertEqual(result.trades[0].exit_reason, "take_profit")
+
+    def test_gap_fade_produces_deterministic_trade(self) -> None:
+        spec = family_spec(
+            "gap_fade_or_continuation",
+            {"gap": {"type": "gap", "threshold_points": 1, "mode": "fade"}},
+            {"gap_threshold_points": {"values": [1]}, "gap_mode": {"values": ["fade"]}},
+            direction="short",
+        )
+        rows = build_bar_rows(
+            datetime(2025, 3, 18, 20, 54),
+            [(100, 100.2, 99.8, 100.0), (103.0, 103.4, 102.8, 103.0), (103.0, 103.2, 99.5, 100.0)],
+        )
+        rows[1] = {**rows[1], "timestamp": datetime(2025, 3, 19, 13, 30)}
+        rows[2] = {**rows[2], "timestamp": datetime(2025, 3, 19, 13, 31)}
+        result = run_bar_result_for_rows(spec, rows)
+
+        self.assertEqual(result.trades[0].side, "short")
+        self.assertEqual(result.trades[0].entry_reason, "gap_fade_up")
+        self.assertEqual(result.trades[0].exit_reason, "take_profit")
 
 
 class TickReplayBacktestTests(unittest.TestCase):

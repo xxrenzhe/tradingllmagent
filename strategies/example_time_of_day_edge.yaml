@@ -1,0 +1,42 @@
+{
+  "schema_version": 0,
+  "name": "nq_time_of_day_edge_v1",
+  "strategy_family": "time_of_day_edge",
+  "market_hypothesis": "Some NQ intraday time windows can show directional edge when bounded by hard stops, take profit, and session flattening.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {"timezone": "UTC", "trade": "13:30-20:45", "flatten": "20:55"},
+  "regime_filter": {},
+  "indicators": {
+    "time_of_day": {"type": "time_of_day", "entry_time": "14:30", "entry_side": "long"}
+  },
+  "entry": {
+    "long": {"all": [{"left": "time", "op": "==", "right": "14:30"}]},
+    "short": {"all": [{"left": "time", "op": "==", "right": "14:30"}]}
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 14},
+    "take_profit": {"type": "points", "value": 20},
+    "max_holding_minutes": 25
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 1,
+    "max_daily_loss_r": 2
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "entry_time": {"values": ["14:00", "14:30"]},
+    "entry_side": {"values": ["long", "short"]},
+    "stop_points": {"values": [10, 14]},
+    "take_profit_points": {"values": [16, 20]},
+    "max_holding_minutes": {"values": [15, 25]}
+  },
+  "cost_model": "nq_conservative_v1"
+}

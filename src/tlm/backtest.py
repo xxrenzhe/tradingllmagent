@@ -18,7 +18,11 @@ from .strategy import StrategySpec
 EXECUTABLE_STRATEGY_FAMILIES = {
     "opening_range_breakout",
     "trend_pullback",
+    "volatility_expansion",
+    "intraday_momentum",
     "regime_filtered_mean_reversion",
+    "time_of_day_edge",
+    "gap_fade_or_continuation",
 }
 
 
@@ -223,8 +227,16 @@ def run_bar_strategy(
         return run_opening_range_breakout(spec, symbol_config, bars, cost_model)
     if spec.strategy_family == "trend_pullback":
         return run_trend_pullback(spec, symbol_config, bars, cost_model)
+    if spec.strategy_family == "volatility_expansion":
+        return run_volatility_expansion(spec, symbol_config, bars, cost_model)
+    if spec.strategy_family == "intraday_momentum":
+        return run_intraday_momentum(spec, symbol_config, bars, cost_model)
     if spec.strategy_family == "regime_filtered_mean_reversion":
         return run_regime_filtered_mean_reversion(spec, symbol_config, bars, cost_model)
+    if spec.strategy_family == "time_of_day_edge":
+        return run_time_of_day_edge(spec, symbol_config, bars, cost_model)
+    if spec.strategy_family == "gap_fade_or_continuation":
+        return run_gap_fade_or_continuation(spec, symbol_config, bars, cost_model)
     raise ValueError(f"Unsupported strategy_family: {spec.strategy_family}")
 
 
@@ -408,6 +420,139 @@ def run_regime_filtered_mean_reversion(
             return "long", f"{indicator_name}_below_negative_{threshold:g}"
         if spec.direction in {"short", "long_short"} and z_score >= threshold:
             return "short", f"{indicator_name}_above_positive_{threshold:g}"
+        return None, None
+
+    return run_signal_bar_strategy(spec, bars, cost_model or default_cost_model(symbol_config, spec.cost_model), signal)
+
+
+def run_volatility_expansion(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
+) -> list[Trade]:
+    if not bars:
+        return []
+    indicator = _optional_indicator_by_type(spec, "realized_volatility")
+    window = int((indicator or {}).get("window", _parameter_first(spec, "volatility_window", 5)))
+    multiplier = float(
+        (indicator or {}).get(
+            "expansion_multiple",
+            _parameter_first(spec, "volatility_expansion_multiple", 1.5),
+        )
+    )
+    ranges = [bar["high"] - bar["low"] for bar in bars]
+    average_ranges = _rolling_mean_series(ranges, window)
+
+    def signal(index: int, _session_index: int, bar: dict) -> tuple[str | None, str | None]:
+        if index <= 0 or average_ranges[index - 1] is None:
+            return None, None
+        if ranges[index] < average_ranges[index - 1] * multiplier:
+            return None, None
+        previous = bars[index - 1]
+        if spec.direction in {"long", "long_short"} and bar["close"] > previous["high"]:
+            return "long", f"range_expansion_{multiplier:g}_close_above_prior_high"
+        if spec.direction in {"short", "long_short"} and bar["close"] < previous["low"]:
+            return "short", f"range_expansion_{multiplier:g}_close_below_prior_low"
+        return None, None
+
+    return run_signal_bar_strategy(spec, bars, cost_model or default_cost_model(symbol_config, spec.cost_model), signal)
+
+
+def run_intraday_momentum(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
+) -> list[Trade]:
+    if not bars:
+        return []
+    indicator = _optional_indicator_by_type(spec, "momentum")
+    lookback = int((indicator or {}).get("lookback_minutes", _parameter_first(spec, "momentum_lookback_minutes", 3)))
+    threshold = float((indicator or {}).get("threshold_points", _parameter_first(spec, "momentum_threshold_points", 1.0)))
+
+    def signal(index: int, session_index: int, bar: dict) -> tuple[str | None, str | None]:
+        if session_index < lookback:
+            return None, None
+        momentum = bar["close"] - bars[index - lookback]["close"]
+        if spec.direction in {"long", "long_short"} and momentum >= threshold:
+            return "long", f"momentum_{lookback}m_above_{threshold:g}"
+        if spec.direction in {"short", "long_short"} and momentum <= -threshold:
+            return "short", f"momentum_{lookback}m_below_negative_{threshold:g}"
+        return None, None
+
+    return run_signal_bar_strategy(spec, bars, cost_model or default_cost_model(symbol_config, spec.cost_model), signal)
+
+
+def run_time_of_day_edge(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
+) -> list[Trade]:
+    if not bars:
+        return []
+    indicator = _optional_indicator_by_type(spec, "time_of_day")
+    entry_time = parse_clock(
+        str((indicator or {}).get("entry_time", _parameter_first(spec, "entry_time", spec.session.trade.split("-", 1)[0])))
+    )
+    side = str((indicator or {}).get("entry_side", _parameter_first(spec, "entry_side", "long")))
+    if side not in {"long", "short"}:
+        raise ValueError("time_of_day_edge entry_side must be long or short")
+
+    def signal(_index: int, _session_index: int, bar: dict) -> tuple[str | None, str | None]:
+        if bar["timestamp"].time() < entry_time:
+            return None, None
+        if side == "long" and spec.direction in {"long", "long_short"}:
+            return "long", f"time_of_day_{entry_time.isoformat()}_long"
+        if side == "short" and spec.direction in {"short", "long_short"}:
+            return "short", f"time_of_day_{entry_time.isoformat()}_short"
+        return None, None
+
+    return run_signal_bar_strategy(spec, bars, cost_model or default_cost_model(symbol_config, spec.cost_model), signal)
+
+
+def run_gap_fade_or_continuation(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
+) -> list[Trade]:
+    if not bars:
+        return []
+    indicator = _optional_indicator_by_type(spec, "gap")
+    threshold = float((indicator or {}).get("threshold_points", _parameter_first(spec, "gap_threshold_points", 1.0)))
+    mode = str((indicator or {}).get("mode", _parameter_first(spec, "gap_mode", "fade")))
+    if mode not in {"fade", "continuation"}:
+        raise ValueError("gap_mode must be fade or continuation")
+    trade_start, _ = parse_session_range(spec.session.trade)
+
+    first_session_index_by_day: dict[object, int] = {}
+    previous_close_by_day: dict[object, float] = {}
+    prior_close = None
+    for index, bar in enumerate(bars):
+        day = bar["timestamp"].date()
+        if bar["timestamp"].time() >= trade_start and day not in first_session_index_by_day:
+            first_session_index_by_day[day] = index
+            if prior_close is not None:
+                previous_close_by_day[day] = prior_close
+        prior_close = bar["close"]
+
+    def signal(index: int, _session_index: int, bar: dict) -> tuple[str | None, str | None]:
+        day = bar["timestamp"].date()
+        if first_session_index_by_day.get(day) != index or day not in previous_close_by_day:
+            return None, None
+        gap = bar["open"] - previous_close_by_day[day]
+        if abs(gap) < threshold:
+            return None, None
+        if gap > 0:
+            side = "short" if mode == "fade" else "long"
+        else:
+            side = "long" if mode == "fade" else "short"
+        if side == "long" and spec.direction in {"long", "long_short"}:
+            return "long", f"gap_{mode}_up" if gap > 0 else f"gap_{mode}_down"
+        if side == "short" and spec.direction in {"short", "long_short"}:
+            return "short", f"gap_{mode}_up" if gap > 0 else f"gap_{mode}_down"
         return None, None
 
     return run_signal_bar_strategy(spec, bars, cost_model or default_cost_model(symbol_config, spec.cost_model), signal)
@@ -694,6 +839,20 @@ def _indicator_by_type(spec: StrategySpec, indicator_type: str) -> tuple[str, di
     raise ValueError(f"{spec.strategy_family} requires indicator type {indicator_type}")
 
 
+def _optional_indicator_by_type(spec: StrategySpec, indicator_type: str) -> dict | None:
+    for config in spec.indicators.values():
+        if config.get("type") == indicator_type:
+            return config
+    return None
+
+
+def _parameter_first(spec: StrategySpec, name: str, default):
+    config = spec.parameters.get(name)
+    if isinstance(config, dict) and config.get("values"):
+        return config["values"][0]
+    return default
+
+
 def _ema_pair(spec: StrategySpec) -> tuple[str, dict, str, dict]:
     emas = [
         (name, config)
@@ -731,6 +890,19 @@ def _z_score_series(values: Sequence[float], window: int) -> list[float | None]:
         variance = sum((item - mean) ** 2 for item in sample) / window
         stddev = variance**0.5
         series.append((value - mean) / stddev if stddev else 0.0)
+    return series
+
+
+def _rolling_mean_series(values: Sequence[float], window: int) -> list[float | None]:
+    if window <= 0:
+        raise ValueError("rolling mean window must be positive")
+    series: list[float | None] = []
+    for index, _value in enumerate(values):
+        if index + 1 < window:
+            series.append(None)
+            continue
+        sample = values[index + 1 - window : index + 1]
+        series.append(sum(sample) / window)
     return series
 
 

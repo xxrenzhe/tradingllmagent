@@ -1,0 +1,42 @@
+{
+  "schema_version": 0,
+  "name": "nq_volatility_expansion_v1",
+  "strategy_family": "volatility_expansion",
+  "market_hypothesis": "NQ can trend after a sudden intraday range expansion closes beyond the prior bar range.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {"timezone": "UTC", "trade": "13:30-20:45", "flatten": "20:55"},
+  "regime_filter": {},
+  "indicators": {
+    "realized_volatility": {"type": "realized_volatility", "window": 8, "expansion_multiple": 1.6}
+  },
+  "entry": {
+    "long": {"all": [{"left": "close", "op": ">", "right": "prior_high"}]},
+    "short": {"all": [{"left": "close", "op": "<", "right": "prior_low"}]}
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 18},
+    "take_profit": {"type": "points", "value": 28},
+    "max_holding_minutes": 35
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 24,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "volatility_window": {"values": [6, 8]},
+    "volatility_expansion_multiple": {"values": [1.4, 1.6]},
+    "stop_points": {"values": [14, 18]},
+    "take_profit_points": {"values": [24, 28]},
+    "max_holding_minutes": {"values": [25, 35]}
+  },
+  "cost_model": "nq_conservative_v1"
+}
