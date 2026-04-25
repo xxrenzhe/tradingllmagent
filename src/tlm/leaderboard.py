@@ -5,6 +5,7 @@ from statistics import median
 from typing import Sequence
 
 from .metrics import BacktestMetrics
+from .variants import DEFAULT_PARAMETER_BUDGET
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,9 @@ def robustness_score(
     test_metrics: BacktestMetrics,
     holdout_metrics: BacktestMetrics,
     fold_test_metrics: Sequence[BacktestMetrics],
+    parameter_budget_exceeded: bool = False,
+    parameter_combination_count: int = 1,
+    default_parameter_budget: int = DEFAULT_PARAMETER_BUDGET,
 ) -> float | None:
     gates = evaluate_hard_gates(test_metrics, fold_test_metrics, holdout_metrics)
     if not gates.passed:
@@ -70,10 +74,13 @@ def robustness_score(
     stability_score = positive_folds / len(fold_test_metrics) if fold_test_metrics else 0
     drawdown_score = 1 / (1 + test_metrics.max_drawdown / 10_000)
     trade_count_score = min(test_metrics.annual_trades / 3000, 1)
-    return (
+    score = (
         0.35 * sharpe_score
         + 0.20 * pnl_score
         + 0.20 * stability_score
         + 0.15 * drawdown_score
         + 0.10 * trade_count_score
     )
+    if parameter_budget_exceeded:
+        score *= min(1.0, (default_parameter_budget / max(parameter_combination_count, 1)) ** 0.5)
+    return score

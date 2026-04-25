@@ -28,6 +28,7 @@ from .storage import (
     write_ticks_parquet,
 )
 from .strategy import StrategySpecError, load_strategy_spec
+from .variants import DEFAULT_PARAMETER_BUDGET, ParameterBudgetError
 
 
 def parse_date(value: str) -> date:
@@ -202,6 +203,7 @@ def cmd_research_run(args: argparse.Namespace) -> int:
         final_holdout_days=args.final_holdout_days,
         min_folds=args.min_folds,
         max_parameter_combinations=args.max_parameter_combinations,
+        allow_high_parameter_budget=args.allow_high_parameter_budget,
     )
     for result in results:
         output_path = Path(args.experiments_root) / result.experiment_id / "leaderboard.json"
@@ -356,7 +358,12 @@ def build_parser() -> argparse.ArgumentParser:
     research_run.add_argument("--experiments-root", default="experiments")
     research_run.add_argument("--experiment-db", default="experiments/research.sqlite3")
     research_run.add_argument("--max-trials", type=int, default=1)
-    research_run.add_argument("--max-parameter-combinations", type=int, default=500)
+    research_run.add_argument(
+        "--max-parameter-combinations",
+        type=int,
+        default=DEFAULT_PARAMETER_BUDGET,
+    )
+    research_run.add_argument("--allow-high-parameter-budget", action="store_true")
     research_run.add_argument("--starting-equity", type=float, default=100_000)
     research_run.add_argument("--train-days", type=int, default=730)
     research_run.add_argument("--validation-days", type=int, default=182)
@@ -396,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (ConfigError, StrategySpecError) as exc:
+    except (ConfigError, StrategySpecError, ParameterBudgetError) as exc:
         parser.error(str(exc))
         return 2
 

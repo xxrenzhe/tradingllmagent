@@ -28,6 +28,7 @@ BANNED_FAMILIES = {
 ALLOWED_DIRECTIONS = {"long", "short", "long_short"}
 ALLOWED_LOGIC = {"all", "any", "not"}
 ALLOWED_OPERATORS = {">", ">=", "<", "<=", "==", "crosses_above", "crosses_below"}
+MAX_VALUES_PER_PARAMETER = 500
 
 
 class StrategySpecError(ValueError):
@@ -232,7 +233,7 @@ def _validate_parameters(parameters: dict[str, Any]) -> None:
             if maximum < minimum or step <= 0:
                 raise StrategySpecError(f"parameters.{name} has invalid min/max/step")
             combinations = int((maximum - minimum) / step) + 1
-            if combinations > 500:
+            if combinations > MAX_VALUES_PER_PARAMETER:
                 raise StrategySpecError(f"parameters.{name} expands to too many values")
             continue
         raise StrategySpecError(f"parameters.{name} must define values or min/max/step")

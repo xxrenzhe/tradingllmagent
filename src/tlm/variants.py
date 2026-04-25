@@ -4,10 +4,14 @@ import copy
 import hashlib
 import itertools
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from .strategy import StrategySpec, parse_strategy_spec
 
+
+DEFAULT_PARAMETER_BUDGET = 50
+DEFAULT_HIGH_RISK_PARAMETER_LIMIT = 200
 
 SUPPORTED_PARAMETER_TARGETS = {
     "opening_range_minutes": ("indicators", "opening_range", "minutes"),
@@ -15,6 +19,36 @@ SUPPORTED_PARAMETER_TARGETS = {
     "take_profit_points": ("exit", "take_profit", "value"),
     "max_holding_minutes": ("exit", "max_holding_minutes"),
 }
+
+
+@dataclass(frozen=True)
+class ParameterGridMetadata:
+    parameter_names: list[str]
+    parameter_ranges: dict[str, Any]
+    total_combinations: int
+    selected_combinations: int
+    default_budget: int
+    high_risk_limit: int
+    budget_exceeded: bool
+    high_risk_budget: bool
+    parameter_grid_hash: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "parameter_names": self.parameter_names,
+            "parameter_ranges": self.parameter_ranges,
+            "total_combinations": self.total_combinations,
+            "selected_combinations": self.selected_combinations,
+            "default_budget": self.default_budget,
+            "high_risk_limit": self.high_risk_limit,
+            "budget_exceeded": self.budget_exceeded,
+            "high_risk_budget": self.high_risk_budget,
+            "parameter_grid_hash": self.parameter_grid_hash,
+        }
+
+
+class ParameterBudgetError(ValueError):
+    """Raised when a strategy parameter grid exceeds the configured research budget."""
 
 
 def stable_json(payload: Any) -> str:
@@ -53,11 +87,61 @@ def parameter_values(parameter_spec: dict[str, Any]) -> list[Any]:
     return values
 
 
+def parameter_grid_metadata(
+    spec: StrategySpec,
+    max_trials: int,
+    max_parameter_combinations: int = DEFAULT_PARAMETER_BUDGET,
+    default_budget: int = DEFAULT_PARAMETER_BUDGET,
+    high_risk_limit: int = DEFAULT_HIGH_RISK_PARAMETER_LIMIT,
+) -> ParameterGridMetadata:
+    parameters = {
+        name: parameter_values(parameter_spec)
+        for name, parameter_spec in spec.parameters.items()
+        if name in SUPPORTED_PARAMETER_TARGETS
+    }
+    names = sorted(parameters)
+    total = 1
+    for name in names:
+        total *= len(parameters[name])
+    if not names:
+        total = 1
+    selected = min(total, max_trials, max_parameter_combinations)
+    parameter_ranges = {name: parameters[name] for name in names}
+    return ParameterGridMetadata(
+        parameter_names=names,
+        parameter_ranges=parameter_ranges,
+        total_combinations=total,
+        selected_combinations=selected,
+        default_budget=default_budget,
+        high_risk_limit=high_risk_limit,
+        budget_exceeded=total > default_budget,
+        high_risk_budget=total > high_risk_limit,
+        parameter_grid_hash=stable_hash(
+            {
+                "parameter_names": names,
+                "parameter_ranges": parameter_ranges,
+            }
+        ),
+    )
+
+
 def expand_strategy_variants(
     spec: StrategySpec,
     max_trials: int,
-    max_parameter_combinations: int = 500,
+    max_parameter_combinations: int = DEFAULT_PARAMETER_BUDGET,
+    allow_high_parameter_budget: bool = False,
 ) -> list[StrategySpec]:
+    metadata = parameter_grid_metadata(
+        spec,
+        max_trials=max_trials,
+        max_parameter_combinations=max_parameter_combinations,
+    )
+    if metadata.high_risk_budget and not allow_high_parameter_budget:
+        raise ParameterBudgetError(
+            "Parameter grid exceeds high-risk limit "
+            f"({metadata.total_combinations} > {metadata.high_risk_limit}); "
+            "explicitly allow high parameter budget to continue"
+        )
     parameters = {
         name: parameter_values(parameter_spec)
         for name, parameter_spec in spec.parameters.items()

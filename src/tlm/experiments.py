@@ -159,7 +159,7 @@ def load_experiment_summary(path: Path, experiment_id: str) -> dict[str, Any]:
             raise KeyError(f"Unknown experiment_id: {experiment_id}")
         trials = connection.execute(
             "SELECT trial_id, strategy_name, passed, robustness_score, net_pnl_test, "
-            "sharpe_test, annual_trades_test, net_pnl_holdout, reasons_json "
+            "sharpe_test, annual_trades_test, net_pnl_holdout, reasons_json, result_json "
             "FROM trials WHERE experiment_id = ? ORDER BY trial_id",
             (experiment_id,),
         ).fetchall()
@@ -172,18 +172,24 @@ def load_experiment_summary(path: Path, experiment_id: str) -> dict[str, Any]:
             "updated_at": experiment[4],
             "metadata": json.loads(experiment[5]),
         },
-        "trials": [
-            {
-                "trial_id": row[0],
-                "strategy_name": row[1],
-                "passed": bool(row[2]),
-                "robustness_score": row[3],
-                "net_pnl_test": row[4],
-                "sharpe_test": row[5],
-                "annual_trades_test": row[6],
-                "net_pnl_holdout": row[7],
-                "reasons": json.loads(row[8]),
-            }
-            for row in trials
-        ],
+        "trials": [_trial_summary(row) for row in trials],
+    }
+
+
+def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
+    result = json.loads(row[9])
+    return {
+        "trial_id": row[0],
+        "strategy_name": row[1],
+        "passed": bool(row[2]),
+        "robustness_score": row[3],
+        "net_pnl_test": row[4],
+        "sharpe_test": row[5],
+        "annual_trades_test": row[6],
+        "net_pnl_holdout": row[7],
+        "reasons": json.loads(row[8]),
+        "trial_count": result.get("trial_count", 1),
+        "parameter_combination_count": result.get("parameter_combination_count", 1),
+        "parameter_budget_exceeded": result.get("parameter_budget_exceeded", False),
+        "parameter_grid_hash": result.get("parameter_grid_hash"),
     }

@@ -16,7 +16,13 @@ from tlm.research import (
 )
 from tlm.storage import bar_path, write_bars_parquet
 from tlm.strategy import parse_strategy_spec
-from tlm.variants import expand_strategy_variants, strategy_spec_hash
+from tlm.variants import (
+    DEFAULT_PARAMETER_BUDGET,
+    ParameterBudgetError,
+    expand_strategy_variants,
+    parameter_grid_metadata,
+    strategy_spec_hash,
+)
 from tlm.validation import generate_rolling_folds
 
 from test_strategy_backtest import base_spec
@@ -98,9 +104,19 @@ class RollingValidationTests(unittest.TestCase):
         )
         fold_metrics = [strong, strong, strong]
         gates = evaluate_hard_gates(strong, fold_metrics, strong, max_drawdown_limit=10_000)
+        normal_score = robustness_score(strong, strong, fold_metrics)
+        penalized_score = robustness_score(
+            strong,
+            strong,
+            fold_metrics,
+            parameter_budget_exceeded=True,
+            parameter_combination_count=100,
+        )
 
         self.assertTrue(gates.passed)
-        self.assertIsNotNone(robustness_score(strong, strong, fold_metrics))
+        self.assertIsNotNone(normal_score)
+        self.assertIsNotNone(penalized_score)
+        self.assertLess(penalized_score, normal_score)
 
     def test_research_run_writes_leaderboard_row(self) -> None:
         spec = parse_strategy_spec(base_spec())
@@ -148,6 +164,43 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(variants[0].raw["indicators"]["opening_range"]["minutes"], 3)
         self.assertIn("variant_parameters", variants[0].raw)
 
+    def test_parameter_grid_metadata_marks_budget_exceeded(self) -> None:
+        payload = base_spec()
+        payload["parameters"] = {
+            "opening_range_minutes": {"values": [3, 4, 5, 6, 7]},
+            "stop_points": {"values": [1, 2, 3, 4]},
+            "take_profit_points": {"values": [2, 3, 4]},
+        }
+        seed = parse_strategy_spec(payload)
+        metadata = parameter_grid_metadata(seed, max_trials=100)
+
+        self.assertEqual(DEFAULT_PARAMETER_BUDGET, 50)
+        self.assertEqual(metadata.total_combinations, 60)
+        self.assertEqual(metadata.selected_combinations, 50)
+        self.assertTrue(metadata.budget_exceeded)
+        self.assertFalse(metadata.high_risk_budget)
+        self.assertTrue(metadata.parameter_grid_hash)
+
+    def test_high_risk_parameter_grid_requires_explicit_allow(self) -> None:
+        payload = base_spec()
+        payload["parameters"] = {
+            "opening_range_minutes": {"values": list(range(1, 11))},
+            "stop_points": {"values": list(range(1, 11))},
+            "take_profit_points": {"values": list(range(1, 11))},
+        }
+        seed = parse_strategy_spec(payload)
+
+        with self.assertRaises(ParameterBudgetError):
+            expand_strategy_variants(seed, max_trials=5)
+
+        variants = expand_strategy_variants(
+            seed,
+            max_trials=5,
+            max_parameter_combinations=5,
+            allow_high_parameter_budget=True,
+        )
+        self.assertEqual(len(variants), 5)
+
     def test_budgeted_research_writes_multiple_leaderboard_rows(self) -> None:
         payload = base_spec()
         payload["parameters"] = {
@@ -188,6 +241,10 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertTrue(all(row["strategy_spec_hash"] for row in rows))
         self.assertTrue(all(row["variant_parameters"] for row in rows))
+        self.assertTrue(all(row["trial_count"] == 2 for row in rows))
+        self.assertTrue(all(row["parameter_grid_hash"] for row in rows))
+        self.assertTrue(all(row["parameter_combination_count"] == 2 for row in rows))
+        self.assertFalse(any(row["parameter_budget_exceeded"] for row in rows))
 
 
 if __name__ == "__main__":

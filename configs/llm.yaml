@@ -4,6 +4,7 @@
   },
   "research": {
     "default_max_trials": 100,
-    "max_parameter_combinations_per_spec": 500
+    "max_parameter_combinations_per_spec": 50,
+    "high_risk_parameter_combinations": 200
   }
 }
