@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from tlm.config import SymbolConfig
+from tlm.dukascopy import Tick
 from tlm.leaderboard import evaluate_hard_gates, robustness_score
 from tlm.metrics import calculate_metrics
 from tlm.research import (
@@ -14,7 +15,7 @@ from tlm.research import (
     run_research_bar_validation,
     write_research_result,
 )
-from tlm.storage import bar_path, write_bars_parquet
+from tlm.storage import bar_path, normalized_tick_path, write_bars_parquet, write_ticks_parquet
 from tlm.strategy import parse_strategy_spec
 from tlm.variants import (
     DEFAULT_PARAMETER_BUDGET,
@@ -73,6 +74,19 @@ def write_breakout_day(data_root: Path, day: date) -> None:
             )
         )
     write_bars_parquet(bar_path(data_root, "NQmain", "1m", day), rows)
+
+
+def write_breakout_ticks(data_root: Path, day: date) -> None:
+    start = datetime(day.year, day.month, day.day, 13, 30)
+    ticks = [
+        Tick(start + timedelta(seconds=0), bid=99.9, ask=100.1, bid_size=1, ask_size=1),
+        Tick(start + timedelta(minutes=1), bid=100.0, ask=100.2, bid_size=1, ask_size=1),
+        Tick(start + timedelta(minutes=2), bid=100.1, ask=100.3, bid_size=1, ask_size=1),
+        Tick(start + timedelta(minutes=3), bid=104.0, ask=104.2, bid_size=1, ask_size=1),
+        Tick(start + timedelta(minutes=3, seconds=1), bid=104.1, ask=104.3, bid_size=1, ask_size=1),
+        Tick(start + timedelta(minutes=4), bid=107.6, ask=107.8, bid_size=1, ask_size=1),
+    ]
+    write_ticks_parquet(normalized_tick_path(data_root, "NQmain", day), "NQmain", ticks)
 
 
 class RollingValidationTests(unittest.TestCase):
@@ -147,7 +161,40 @@ class RollingValidationTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["experiment_id"], "exp_test")
+        self.assertEqual(rows[0]["execution_mode"], "bar")
         self.assertIn("passed", rows[0])
+
+    def test_research_run_can_use_tick_replay_execution(self) -> None:
+        spec = parse_strategy_spec(base_spec())
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            experiments_root = Path(temp_dir) / "experiments"
+            for offset in range(40):
+                write_breakout_ticks(data_root, date(2025, 1, 1) + timedelta(days=offset))
+
+            result = run_research_bar_validation(
+                spec=spec,
+                symbol_config=symbol_config(),
+                data_root=data_root,
+                experiment_id="exp_tick",
+                date_from=date(2025, 1, 1),
+                date_to=date(2025, 2, 9),
+                train_days=5,
+                validation_days=5,
+                test_days=5,
+                step_days=5,
+                embargo_days=1,
+                final_holdout_days=5,
+                min_folds=1,
+                execution_mode="tick",
+            )
+            output = experiments_root / "exp_tick" / "leaderboard.json"
+            write_research_result(output, result)
+            rows = load_leaderboard(experiments_root)
+
+        self.assertEqual(result.execution_mode, "tick")
+        self.assertGreater(result.aggregate_test_metrics.trade_count, 0)
+        self.assertEqual(rows[0]["execution_mode"], "tick")
 
     def test_expand_strategy_variants_applies_supported_parameters(self) -> None:
         payload = base_spec()

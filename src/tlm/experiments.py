@@ -189,6 +189,7 @@ def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
         "net_pnl_holdout": row[7],
         "reasons": json.loads(row[8]),
         "trial_count": result.get("trial_count", 1),
+        "execution_mode": result.get("execution_mode", "bar"),
         "parameter_combination_count": result.get("parameter_combination_count", 1),
         "parameter_budget_exceeded": result.get("parameter_budget_exceeded", False),
         "parameter_grid_hash": result.get("parameter_grid_hash"),

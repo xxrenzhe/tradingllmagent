@@ -201,6 +201,7 @@ def cmd_research_run(args: argparse.Namespace) -> int:
         metadata={
             "date_from": date_from.isoformat(),
             "date_to": date_to.isoformat(),
+            "execution_mode": args.execution_mode,
             "max_trials": args.max_trials,
             "seed_spec": str(Path(args.spec)),
         },
@@ -223,6 +224,7 @@ def cmd_research_run(args: argparse.Namespace) -> int:
         min_folds=args.min_folds,
         max_parameter_combinations=args.max_parameter_combinations,
         allow_high_parameter_budget=args.allow_high_parameter_budget,
+        execution_mode=args.execution_mode,
     )
     for result in results:
         output_path = Path(args.experiments_root) / result.experiment_id / "leaderboard.json"
@@ -246,7 +248,7 @@ def cmd_research_run(args: argparse.Namespace) -> int:
         experiment_id=experiment_id,
         symbol=args.symbol or spec.symbol,
         status="completed",
-        metadata={"trials": len(results)},
+        metadata={"trials": len(results), "execution_mode": args.execution_mode},
     )
     print(json.dumps({"trials": len(results)}, indent=2, sort_keys=True))
     return 0
@@ -386,6 +388,7 @@ def build_parser() -> argparse.ArgumentParser:
     research_run.add_argument("--experiments-root", default="experiments")
     research_run.add_argument("--experiment-db", default="experiments/research.sqlite3")
     research_run.add_argument("--max-trials", type=int, default=1)
+    research_run.add_argument("--execution-mode", choices=["bar", "tick"], default="bar")
     research_run.add_argument(
         "--max-parameter-combinations",
         type=int,

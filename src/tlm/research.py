@@ -6,12 +6,12 @@ from datetime import date
 from pathlib import Path
 from typing import Sequence
 
-from .backtest import BacktestResult, run_bar_backtest
+from .backtest import BacktestResult, run_bar_backtest, run_tick_backtest
 from .cli_dates import iter_dates
 from .config import SymbolConfig
 from .leaderboard import evaluate_hard_gates, robustness_score
 from .metrics import BacktestMetrics, calculate_metrics
-from .storage import bar_path
+from .storage import bar_path, normalized_tick_path
 from .strategy import StrategySpec
 from .variants import (
     DEFAULT_PARAMETER_BUDGET,
@@ -27,6 +27,7 @@ from .validation import ValidationPlan, generate_rolling_folds
 @dataclass(frozen=True)
 class ResearchRunResult:
     experiment_id: str
+    execution_mode: str
     strategy_name: str
     strategy_spec_hash: str
     prompt_hash: str
@@ -46,6 +47,7 @@ class ResearchRunResult:
     def to_dict(self) -> dict:
         return {
             "experiment_id": self.experiment_id,
+            "execution_mode": self.execution_mode,
             "strategy_name": self.strategy_name,
             "strategy_spec_hash": self.strategy_spec_hash,
             "prompt_hash": self.prompt_hash,
@@ -80,8 +82,11 @@ def run_research_bar_validation(
     final_holdout_days: int = 365,
     min_folds: int = 1,
     grid_metadata: ParameterGridMetadata | None = None,
+    execution_mode: str = "bar",
 ) -> ResearchRunResult:
     grid_metadata = grid_metadata or parameter_grid_metadata(spec, max_trials=1)
+    if execution_mode not in {"bar", "tick"}:
+        raise ValueError(f"Unsupported execution_mode: {execution_mode}")
     plan = generate_rolling_folds(
         start=date_from,
         end=date_to,
@@ -99,11 +104,33 @@ def run_research_bar_validation(
     all_test_equity = [starting_equity]
 
     for fold in plan.folds:
-        train = _run_range(spec, symbol_config, data_root, fold.train.start, fold.train.end, starting_equity)
-        validation = _run_range(
-            spec, symbol_config, data_root, fold.validation.start, fold.validation.end, starting_equity
+        train = _run_range(
+            spec,
+            symbol_config,
+            data_root,
+            fold.train.start,
+            fold.train.end,
+            starting_equity,
+            execution_mode,
         )
-        test = _run_range(spec, symbol_config, data_root, fold.test.start, fold.test.end, starting_equity)
+        validation = _run_range(
+            spec,
+            symbol_config,
+            data_root,
+            fold.validation.start,
+            fold.validation.end,
+            starting_equity,
+            execution_mode,
+        )
+        test = _run_range(
+            spec,
+            symbol_config,
+            data_root,
+            fold.test.start,
+            fold.test.end,
+            starting_equity,
+            execution_mode,
+        )
         fold_test_metrics.append(test.metrics)
         for trade in test.trades:
             all_test_pnls.append(trade.net_pnl)
@@ -134,6 +161,7 @@ def run_research_bar_validation(
         plan.final_holdout.start,
         plan.final_holdout.end,
         starting_equity,
+        execution_mode,
     )
     gates = evaluate_hard_gates(aggregate_test_metrics, fold_test_metrics, holdout.metrics)
     score = robustness_score(
@@ -146,6 +174,7 @@ def run_research_bar_validation(
     )
     return ResearchRunResult(
         experiment_id=experiment_id,
+        execution_mode=execution_mode,
         strategy_name=spec.name,
         strategy_spec_hash=strategy_spec_hash(spec),
         prompt_hash=prompt_hash(spec),
@@ -182,7 +211,10 @@ def run_budgeted_research(
     min_folds: int = 1,
     max_parameter_combinations: int = DEFAULT_PARAMETER_BUDGET,
     allow_high_parameter_budget: bool = False,
+    execution_mode: str = "bar",
 ) -> list[ResearchRunResult]:
+    if execution_mode not in {"bar", "tick"}:
+        raise ValueError(f"Unsupported execution_mode: {execution_mode}")
     grid_metadata = parameter_grid_metadata(
         seed_spec,
         max_trials=max_trials,
@@ -214,6 +246,7 @@ def run_budgeted_research(
                 final_holdout_days=final_holdout_days,
                 min_folds=min_folds,
                 grid_metadata=grid_metadata,
+                execution_mode=execution_mode,
             )
         )
     return results
@@ -226,9 +259,15 @@ def _run_range(
     start: date,
     end: date,
     starting_equity: float,
+    execution_mode: str,
 ) -> BacktestResult:
-    files = [bar_path(data_root, spec.symbol, spec.timeframe, day) for day in iter_dates(start, end)]
-    return run_bar_backtest(spec, symbol_config, files, starting_equity=starting_equity)
+    if execution_mode == "bar":
+        files = [bar_path(data_root, spec.symbol, spec.timeframe, day) for day in iter_dates(start, end)]
+        return run_bar_backtest(spec, symbol_config, files, starting_equity=starting_equity)
+    if execution_mode == "tick":
+        files = [normalized_tick_path(data_root, spec.symbol, day) for day in iter_dates(start, end)]
+        return run_tick_backtest(spec, symbol_config, files, starting_equity=starting_equity)
+    raise ValueError(f"Unsupported execution_mode: {execution_mode}")
 
 
 def write_research_result(path: Path, result: ResearchRunResult) -> None:
@@ -243,6 +282,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
         rows.append(
             {
                 "experiment_id": payload["experiment_id"],
+                "execution_mode": payload.get("execution_mode", "bar"),
                 "strategy_name": payload["strategy_name"],
                 "strategy_spec_hash": payload.get("strategy_spec_hash"),
                 "variant_parameters": payload.get("variant_parameters", {}),
