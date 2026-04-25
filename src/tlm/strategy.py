@@ -28,6 +28,36 @@ BANNED_FAMILIES = {
 ALLOWED_DIRECTIONS = {"long", "short", "long_short"}
 ALLOWED_LOGIC = {"all", "any", "not"}
 ALLOWED_OPERATORS = {">", ">=", "<", "<=", "==", "crosses_above", "crosses_below"}
+ALLOWED_INDICATOR_TYPES = {
+    "ema",
+    "sma",
+    "atr",
+    "rsi",
+    "bollinger_bands",
+    "vwap",
+    "session_vwap",
+    "opening_range",
+    "realized_volatility",
+    "z_score",
+}
+ALLOWED_EXIT_TYPES = {"points", "atr_multiple"}
+ALLOWED_POSITION_SIZING_TYPES = {"fixed_contracts"}
+CODELIKE_TOKENS = (
+    "import ",
+    "exec(",
+    "eval(",
+    "subprocess",
+    "os.system",
+    "__import__",
+    "lambda ",
+    "function ",
+    "=>",
+    "<script",
+    "rm -rf",
+    "curl ",
+    "wget ",
+    "powershell",
+)
 MAX_VALUES_PER_PARAMETER = 500
 
 
@@ -77,6 +107,7 @@ def load_strategy_spec(path: Path) -> StrategySpec:
 def parse_strategy_spec(payload: dict[str, Any]) -> StrategySpec:
     if not isinstance(payload, dict):
         raise StrategySpecError("Strategy spec must be an object")
+    _reject_codelike_values(payload)
 
     required = [
         "schema_version",
@@ -133,9 +164,11 @@ def parse_strategy_spec(payload: dict[str, Any]) -> StrategySpec:
     parameters = _require_object(payload["parameters"], "parameters")
 
     _validate_anti_martingale(family, anti_martingale, risk)
+    _validate_indicators(indicators)
     _validate_entry(entry)
     _validate_parameters(parameters)
     _validate_exit(exit_spec)
+    _validate_risk(risk)
 
     return StrategySpec(
         schema_version=int(payload["schema_version"]),
@@ -188,6 +221,17 @@ def _validate_entry(entry: dict[str, Any]) -> None:
     for side in ["long", "short"]:
         if side in entry:
             _validate_logic_node(entry[side], f"entry.{side}")
+
+
+def _validate_indicators(indicators: dict[str, Any]) -> None:
+    if not indicators:
+        raise StrategySpecError("indicators must define at least one indicator")
+    for name, indicator in indicators.items():
+        if not isinstance(indicator, dict):
+            raise StrategySpecError(f"indicators.{name} must be an object")
+        indicator_type = indicator.get("type")
+        if indicator_type not in ALLOWED_INDICATOR_TYPES:
+            raise StrategySpecError(f"indicators.{name} uses unsupported type: {indicator_type}")
 
 
 def _validate_logic_node(node: Any, path: str) -> None:
@@ -246,3 +290,31 @@ def _validate_exit(exit_spec: dict[str, Any]) -> None:
         raise StrategySpecError("exit.take_profit is required")
     if "max_holding_minutes" not in exit_spec:
         raise StrategySpecError("exit.max_holding_minutes is required")
+    for name in ["stop_loss", "take_profit"]:
+        config = _require_object(exit_spec[name], f"exit.{name}")
+        exit_type = config.get("type")
+        if exit_type not in ALLOWED_EXIT_TYPES:
+            raise StrategySpecError(f"exit.{name} uses unsupported type: {exit_type}")
+
+
+def _validate_risk(risk: dict[str, Any]) -> None:
+    sizing = _require_object(risk.get("position_sizing"), "risk.position_sizing")
+    sizing_type = sizing.get("type")
+    if sizing_type not in ALLOWED_POSITION_SIZING_TYPES:
+        raise StrategySpecError(f"risk.position_sizing uses unsupported type: {sizing_type}")
+
+
+def _reject_codelike_values(value: Any, path: str = "strategy_spec") -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            _reject_codelike_values(child, f"{path}.{key}")
+        return
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_codelike_values(child, f"{path}[{index}]")
+        return
+    if not isinstance(value, str):
+        return
+    lowered = value.lower()
+    if any(token in lowered for token in CODELIKE_TOKENS):
+        raise StrategySpecError(f"{path} contains executable code or shell-like content")

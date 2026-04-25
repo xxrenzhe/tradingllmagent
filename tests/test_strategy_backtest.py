@@ -97,6 +97,29 @@ class StrategyValidationTests(unittest.TestCase):
         with self.assertRaises(StrategySpecError):
             parse_strategy_spec(payload)
 
+    def test_unsupported_indicator_type_rejected(self) -> None:
+        payload = base_spec()
+        payload["indicators"]["custom_alpha"] = {"type": "python_function", "window": 5}
+        with self.assertRaises(StrategySpecError):
+            parse_strategy_spec(payload)
+
+    def test_executable_payload_rejected(self) -> None:
+        payload = base_spec()
+        payload["market_hypothesis"] = "Opening range breakout. import os; os.system('rm -rf /')"
+        with self.assertRaises(StrategySpecError):
+            parse_strategy_spec(payload)
+
+    def test_unsupported_exit_and_position_sizing_rejected(self) -> None:
+        payload = base_spec()
+        payload["exit"]["stop_loss"] = {"type": "python_callback", "value": 2}
+        with self.assertRaises(StrategySpecError):
+            parse_strategy_spec(payload)
+
+        payload = base_spec()
+        payload["risk"]["position_sizing"] = {"type": "martingale", "contracts": 1}
+        with self.assertRaises(StrategySpecError):
+            parse_strategy_spec(payload)
+
 
 class BarBacktestTests(unittest.TestCase):
     def test_opening_range_breakout_produces_deterministic_trade(self) -> None:
