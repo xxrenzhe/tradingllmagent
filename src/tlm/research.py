@@ -519,6 +519,16 @@ def load_leaderboard_report(experiments_root: Path) -> dict:
         "leaderboard": leaderboard,
         "rejected": rejected,
         "rows": rows,
+        "conclusion": (
+            "qualified_strategies_found"
+            if leaderboard
+            else "no_qualified_strategies_found"
+        ),
+        "message": (
+            f"Found {len(leaderboard)} qualified strategies."
+            if leaderboard
+            else "No qualified strategies found under the current out-of-sample gates."
+        ),
         "summary": {
             "passed": len(leaderboard),
             "rejected": len(rejected),

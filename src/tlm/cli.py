@@ -341,6 +341,16 @@ def cmd_report_leaderboard(args: argparse.Namespace) -> int:
             "rejected": len(report["rejected"]),
             "total": len(report["rows"]),
         }
+        report["conclusion"] = (
+            "qualified_strategies_found"
+            if report["leaderboard"]
+            else "no_qualified_strategies_found"
+        )
+        report["message"] = (
+            f"Found {len(report['leaderboard'])} qualified strategies."
+            if report["leaderboard"]
+            else "No qualified strategies found under the current out-of-sample gates."
+        )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 

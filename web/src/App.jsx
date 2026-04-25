@@ -283,6 +283,9 @@ export default function App() {
       </section>
 
       <Panel title="Leaderboard" kicker="Out-of-sample only">
+        <p className={`notice ${leaderboard.conclusion === "qualified_strategies_found" ? "success" : "warn"}`}>
+          {leaderboard.message || "No leaderboard report loaded."}
+        </p>
         <div className="toolbar">
           <label className="inline-control">
             <span>Min test Sharpe</span>

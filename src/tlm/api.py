@@ -76,6 +76,16 @@ def build_leaderboard_response(experiments_root: Path, experiment_id: str | None
             "rejected": len(report["rejected"]),
             "total": len(report["rows"]),
         }
+        report["conclusion"] = (
+            "qualified_strategies_found"
+            if report["leaderboard"]
+            else "no_qualified_strategies_found"
+        )
+        report["message"] = (
+            f"Found {len(report['leaderboard'])} qualified strategies."
+            if report["leaderboard"]
+            else "No qualified strategies found under the current out-of-sample gates."
+        )
     return report
 
 

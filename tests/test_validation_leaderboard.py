@@ -351,10 +351,13 @@ class RollingValidationTests(unittest.TestCase):
             filtered = json.loads(stdout.getvalue())
 
         self.assertEqual(report["summary"], {"passed": 1, "rejected": 1, "total": 2})
+        self.assertEqual(report["conclusion"], "qualified_strategies_found")
         self.assertEqual(report["leaderboard"][0]["experiment_id"], "split_trial_0000")
         self.assertEqual(report["rejected"][0]["experiment_id"], "split_trial_0001")
         self.assertEqual(exit_code, 0)
         self.assertEqual(filtered["summary"], {"passed": 0, "rejected": 1, "total": 1})
+        self.assertEqual(filtered["conclusion"], "no_qualified_strategies_found")
+        self.assertIn("No qualified strategies found", filtered["message"])
         self.assertEqual(filtered["rejected"][0]["reasons"], ["test_rejection"])
 
     def test_research_run_can_use_tick_replay_execution(self) -> None:
