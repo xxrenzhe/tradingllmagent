@@ -15,6 +15,13 @@ from .storage import compute_data_version_hash
 from .strategy import StrategySpec
 
 
+EXECUTABLE_STRATEGY_FAMILIES = {
+    "opening_range_breakout",
+    "trend_pullback",
+    "regime_filtered_mean_reversion",
+}
+
+
 @dataclass(frozen=True)
 class Trade:
     symbol: str
@@ -143,11 +150,11 @@ def run_bar_backtest(
     starting_equity: float = 100_000,
     cost_model: CostModelConfig | None = None,
 ) -> BacktestResult:
-    if spec.strategy_family != "opening_range_breakout":
-        raise ValueError("Phase 2 bar backtester supports opening_range_breakout only")
+    if spec.strategy_family not in EXECUTABLE_STRATEGY_FAMILIES:
+        raise ValueError(f"Bar backtester does not support strategy_family: {spec.strategy_family}")
     cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     bars = load_bar_rows(bar_files)
-    trades = run_opening_range_breakout(spec, symbol_config, bars, cost_model)
+    trades = run_bar_strategy(spec, symbol_config, bars, cost_model)
     trade_pnls = [trade.net_pnl for trade in trades]
     equity = [starting_equity]
     for pnl in trade_pnls:
@@ -178,11 +185,11 @@ def run_tick_backtest(
     starting_equity: float = 100_000,
     cost_model: CostModelConfig | None = None,
 ) -> BacktestResult:
-    if spec.strategy_family != "opening_range_breakout":
-        raise ValueError("Phase 3 tick replay supports opening_range_breakout only")
+    if spec.strategy_family not in EXECUTABLE_STRATEGY_FAMILIES:
+        raise ValueError(f"Tick replay does not support strategy_family: {spec.strategy_family}")
     cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     ticks = load_tick_rows(tick_files)
-    trades = run_opening_range_breakout_tick_replay(spec, symbol_config, ticks, cost_model)
+    trades = run_tick_strategy(spec, symbol_config, ticks, cost_model)
     trade_pnls = [trade.net_pnl for trade in trades]
     equity = [starting_equity]
     for pnl in trade_pnls:
@@ -204,6 +211,33 @@ def run_tick_backtest(
         trades,
         metrics,
     )
+
+
+def run_bar_strategy(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig,
+) -> list[Trade]:
+    if spec.strategy_family == "opening_range_breakout":
+        return run_opening_range_breakout(spec, symbol_config, bars, cost_model)
+    if spec.strategy_family == "trend_pullback":
+        return run_trend_pullback(spec, symbol_config, bars, cost_model)
+    if spec.strategy_family == "regime_filtered_mean_reversion":
+        return run_regime_filtered_mean_reversion(spec, symbol_config, bars, cost_model)
+    raise ValueError(f"Unsupported strategy_family: {spec.strategy_family}")
+
+
+def run_tick_strategy(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    ticks: Sequence[dict],
+    cost_model: CostModelConfig,
+) -> list[Trade]:
+    if spec.strategy_family == "opening_range_breakout":
+        return run_opening_range_breakout_tick_replay(spec, symbol_config, ticks, cost_model)
+    bars = minute_bars_from_ticks(ticks)
+    return run_bar_strategy(spec, symbol_config, bars, cost_model)
 
 
 def run_opening_range_breakout(
@@ -306,6 +340,148 @@ def run_opening_range_breakout(
 
         if position is not None:
             last_bar = session_bars[-1]
+            exit_price = last_bar["bid_close"] if position["side"] == "long" else last_bar["ask_close"]
+            trades.append(_close_position(position, last_bar, exit_price, "end_of_data", cost_model))
+
+    return trades
+
+
+def run_trend_pullback(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
+) -> list[Trade]:
+    if not bars:
+        return []
+    fast_name, fast_config, slow_name, slow_config = _ema_pair(spec)
+    fast = _ema_series([bar["close"] for bar in bars], int(fast_config.get("window", 9)))
+    slow = _ema_series([bar["close"] for bar in bars], int(slow_config.get("window", 21)))
+
+    def signal(index: int, _session_index: int, bar: dict) -> tuple[str | None, str | None]:
+        if index <= 0 or fast[index] is None or slow[index] is None or fast[index - 1] is None:
+            return None, None
+        close = bar["close"]
+        previous_close = bars[index - 1]["close"]
+        if (
+            spec.direction in {"long", "long_short"}
+            and fast[index] > slow[index]
+            and previous_close < fast[index - 1]
+            and close >= fast[index]
+        ):
+            return "long", f"close_pullback_reclaim_{fast_name}_above_{slow_name}"
+        if (
+            spec.direction in {"short", "long_short"}
+            and fast[index] < slow[index]
+            and previous_close > fast[index - 1]
+            and close <= fast[index]
+        ):
+            return "short", f"close_pullback_reject_{fast_name}_below_{slow_name}"
+        return None, None
+
+    return run_signal_bar_strategy(spec, bars, cost_model or default_cost_model(symbol_config, spec.cost_model), signal)
+
+
+def run_regime_filtered_mean_reversion(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
+) -> list[Trade]:
+    if not bars:
+        return []
+    indicator_name, indicator = _indicator_by_type(spec, "z_score")
+    window = int(indicator.get("window", 20))
+    threshold = float(
+        indicator.get(
+            "entry_z",
+            spec.parameters.get("mean_reversion_entry_z", {}).get("values", [1.5])[0],
+        )
+    )
+    z_scores = _z_score_series([bar["close"] for bar in bars], window)
+
+    def signal(index: int, _session_index: int, _bar: dict) -> tuple[str | None, str | None]:
+        z_score = z_scores[index]
+        if z_score is None:
+            return None, None
+        if spec.direction in {"long", "long_short"} and z_score <= -threshold:
+            return "long", f"{indicator_name}_below_negative_{threshold:g}"
+        if spec.direction in {"short", "long_short"} and z_score >= threshold:
+            return "short", f"{indicator_name}_above_positive_{threshold:g}"
+        return None, None
+
+    return run_signal_bar_strategy(spec, bars, cost_model or default_cost_model(symbol_config, spec.cost_model), signal)
+
+
+def run_signal_bar_strategy(
+    spec: StrategySpec,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig,
+    signal_fn,
+) -> list[Trade]:
+    stop_points = float(_exit_value(spec.exit["stop_loss"]))
+    take_profit_points = float(_exit_value(spec.exit["take_profit"]))
+    max_holding_minutes = int(spec.exit["max_holding_minutes"])
+    contracts = int(spec.risk.get("position_sizing", {}).get("contracts", 1))
+    max_trades_per_day = int(spec.risk.get("max_trades_per_day", 999_999))
+    trade_start, trade_end = parse_session_range(spec.session.trade)
+    flatten_time = parse_clock(spec.session.flatten)
+
+    trades: list[Trade] = []
+    by_day: dict[object, list[tuple[int, dict]]] = {}
+    for index, bar in enumerate(bars):
+        by_day.setdefault(bar["timestamp"].date(), []).append((index, bar))
+
+    for _, indexed_day_bars in sorted(by_day.items(), key=lambda item: item[0]):
+        session_bars = [
+            (global_index, bar)
+            for global_index, bar in indexed_day_bars
+            if trade_start <= bar["timestamp"].time() <= flatten_time
+        ]
+        position = None
+        trades_today = 0
+        for session_index, (global_index, bar) in enumerate(session_bars):
+            if bar["timestamp"].time() > trade_end and position is None:
+                continue
+            if position is None and trades_today < max_trades_per_day:
+                side, reason = signal_fn(global_index, session_index, bar)
+                if side is not None and reason is not None:
+                    position = _open_position(side, bar, contracts, session_index, reason)
+                    trades_today += 1
+                    continue
+
+            if position is not None:
+                holding_minutes = session_index - position["entry_index"]
+                exit_reason = None
+                exit_price = None
+                if position["side"] == "long":
+                    stop_price = position["entry_price"] - stop_points
+                    take_price = position["entry_price"] + take_profit_points
+                    if bar["low"] <= stop_price:
+                        exit_reason, exit_price = "stop_loss", stop_price
+                    elif bar["high"] >= take_price:
+                        exit_reason, exit_price = "take_profit", take_price
+                    elif holding_minutes >= max_holding_minutes:
+                        exit_reason, exit_price = "max_holding", bar["bid_close"]
+                    elif bar["timestamp"].time() >= flatten_time:
+                        exit_reason, exit_price = "session_flatten", bar["bid_close"]
+                else:
+                    stop_price = position["entry_price"] + stop_points
+                    take_price = position["entry_price"] - take_profit_points
+                    if bar["high"] >= stop_price:
+                        exit_reason, exit_price = "stop_loss", stop_price
+                    elif bar["low"] <= take_price:
+                        exit_reason, exit_price = "take_profit", take_price
+                    elif holding_minutes >= max_holding_minutes:
+                        exit_reason, exit_price = "max_holding", bar["ask_close"]
+                    elif bar["timestamp"].time() >= flatten_time:
+                        exit_reason, exit_price = "session_flatten", bar["ask_close"]
+                if exit_reason and exit_price is not None:
+                    trades.append(_close_position(position, bar, exit_price, exit_reason, cost_model))
+                    position = None
+
+        if position is not None and session_bars:
+            last_bar = session_bars[-1][1]
             exit_price = last_bar["bid_close"] if position["side"] == "long" else last_bar["ask_close"]
             trades.append(_close_position(position, last_bar, exit_price, "end_of_data", cost_model))
 
@@ -419,6 +595,33 @@ def run_opening_range_breakout_tick_replay(
     return trades
 
 
+def minute_bars_from_ticks(ticks: Sequence[dict]) -> list[dict]:
+    buckets: dict[datetime, list[dict]] = {}
+    for tick in ticks:
+        timestamp = tick["timestamp"].replace(second=0, microsecond=0)
+        buckets.setdefault(timestamp, []).append(tick)
+
+    bars: list[dict] = []
+    for timestamp in sorted(buckets):
+        bucket = sorted(buckets[timestamp], key=lambda item: item["timestamp"])
+        mids = [tick["mid"] for tick in bucket]
+        bars.append(
+            {
+                "symbol": bucket[-1]["symbol"],
+                "timestamp": timestamp,
+                "open": mids[0],
+                "high": max(mids),
+                "low": min(mids),
+                "close": mids[-1],
+                "bid_close": bucket[-1]["bid"],
+                "ask_close": bucket[-1]["ask"],
+                "tick_count": len(bucket),
+                "avg_spread": sum(tick["spread"] for tick in bucket) / len(bucket),
+            }
+        )
+    return bars
+
+
 def _open_tick_position(
     side: str,
     tick: dict,
@@ -482,6 +685,53 @@ def _exit_value(exit_config: dict) -> float:
     if exit_config.get("type") == "points":
         return float(exit_config["value"])
     raise ValueError("Phase 2 backtester supports point-based exits only")
+
+
+def _indicator_by_type(spec: StrategySpec, indicator_type: str) -> tuple[str, dict]:
+    for name, config in spec.indicators.items():
+        if config.get("type") == indicator_type:
+            return name, config
+    raise ValueError(f"{spec.strategy_family} requires indicator type {indicator_type}")
+
+
+def _ema_pair(spec: StrategySpec) -> tuple[str, dict, str, dict]:
+    emas = [
+        (name, config)
+        for name, config in spec.indicators.items()
+        if config.get("type") == "ema"
+    ]
+    if len(emas) < 2:
+        raise ValueError("trend_pullback requires at least two EMA indicators")
+    fast, slow = sorted(emas, key=lambda item: int(item[1].get("window", 0)))[:2]
+    return fast[0], fast[1], slow[0], slow[1]
+
+
+def _ema_series(values: Sequence[float], window: int) -> list[float | None]:
+    if window <= 0:
+        raise ValueError("EMA window must be positive")
+    alpha = 2 / (window + 1)
+    series: list[float | None] = []
+    ema = None
+    for index, value in enumerate(values):
+        ema = value if ema is None else alpha * value + (1 - alpha) * ema
+        series.append(ema if index + 1 >= window else None)
+    return series
+
+
+def _z_score_series(values: Sequence[float], window: int) -> list[float | None]:
+    if window <= 1:
+        raise ValueError("z_score window must be greater than 1")
+    series: list[float | None] = []
+    for index, value in enumerate(values):
+        if index + 1 < window:
+            series.append(None)
+            continue
+        sample = values[index + 1 - window : index + 1]
+        mean = sum(sample) / window
+        variance = sum((item - mean) ** 2 for item in sample) / window
+        stddev = variance**0.5
+        series.append((value - mean) / stddev if stddev else 0.0)
+    return series
 
 
 def _open_position(

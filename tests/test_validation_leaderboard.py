@@ -32,7 +32,7 @@ from tlm.variants import (
 )
 from tlm.validation import generate_rolling_folds
 
-from test_strategy_backtest import base_spec
+from test_strategy_backtest import base_spec, trend_pullback_spec
 
 
 def symbol_config() -> SymbolConfig:
@@ -406,6 +406,21 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(len({strategy_spec_hash(variant) for variant in variants}), 3)
         self.assertEqual(variants[0].raw["indicators"]["opening_range"]["minutes"], 3)
         self.assertIn("variant_parameters", variants[0].raw)
+
+    def test_expand_strategy_variants_applies_trend_parameters(self) -> None:
+        payload = trend_pullback_spec()
+        payload["parameters"] = {
+            "ema_fast_window": {"values": [2, 3]},
+            "ema_slow_window": {"values": [4]},
+            "stop_points": {"values": [2]},
+            "take_profit_points": {"values": [3]},
+        }
+        seed = parse_strategy_spec(payload)
+        variants = expand_strategy_variants(seed, max_trials=2)
+
+        self.assertEqual(len(variants), 2)
+        self.assertEqual(variants[0].raw["indicators"]["ema_fast"]["window"], 2)
+        self.assertEqual(variants[1].raw["indicators"]["ema_fast"]["window"], 3)
 
     def test_expand_strategy_variants_deduplicates_repeated_parameter_values(self) -> None:
         payload = base_spec()

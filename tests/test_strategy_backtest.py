@@ -50,6 +50,48 @@ def base_spec() -> dict:
     }
 
 
+def trend_pullback_spec() -> dict:
+    payload = base_spec()
+    payload["name"] = "test_trend_pullback"
+    payload["strategy_family"] = "trend_pullback"
+    payload["market_hypothesis"] = (
+        "Trend pullbacks can resume after price reclaims a fast EMA while the fast EMA "
+        "stays above the slow EMA."
+    )
+    payload["direction"] = "long"
+    payload["indicators"] = {
+        "ema_fast": {"type": "ema", "window": 2},
+        "ema_slow": {"type": "ema", "window": 4},
+    }
+    payload["entry"] = {
+        "long": {
+            "all": [
+                {"left": "ema_fast", "op": ">", "right": "ema_slow"},
+                {"left": "close", "op": ">=", "right": "ema_fast"},
+            ]
+        }
+    }
+    payload["parameters"] = {"ema_fast_window": {"values": [2]}, "ema_slow_window": {"values": [4]}}
+    return payload
+
+
+def mean_reversion_spec() -> dict:
+    payload = base_spec()
+    payload["name"] = "test_mean_reversion"
+    payload["strategy_family"] = "regime_filtered_mean_reversion"
+    payload["market_hypothesis"] = (
+        "In range-bound intraday regimes, extreme negative z-score deviations can revert "
+        "toward the recent session mean."
+    )
+    payload["direction"] = "long"
+    payload["indicators"] = {"z_close": {"type": "z_score", "window": 3, "entry_z": 1.0}}
+    payload["entry"] = {
+        "long": {"all": [{"left": "z_close", "op": "<=", "right": "-1.0"}]}
+    }
+    payload["parameters"] = {"mean_reversion_entry_z": {"values": [1.0]}}
+    return payload
+
+
 def symbol_config() -> SymbolConfig:
     return SymbolConfig(
         alias="NQmain",
@@ -71,6 +113,13 @@ class StrategyValidationTests(unittest.TestCase):
         spec = load_strategy_spec(Path("strategies/example_opening_range_breakout.yaml"))
         self.assertEqual(spec.strategy_family, "opening_range_breakout")
         self.assertEqual(spec.symbol, "NQmain")
+
+        trend = load_strategy_spec(Path("strategies/example_trend_pullback.yaml"))
+        mean_reversion = load_strategy_spec(
+            Path("strategies/example_regime_filtered_mean_reversion.yaml")
+        )
+        self.assertEqual(trend.strategy_family, "trend_pullback")
+        self.assertEqual(mean_reversion.strategy_family, "regime_filtered_mean_reversion")
 
     def test_cost_model_loads_from_config(self) -> None:
         cost_model = get_cost_model("nq_conservative_v1", Path("configs"))
@@ -174,6 +223,76 @@ class BarBacktestTests(unittest.TestCase):
             "close_above_opening_range_high",
         )
 
+    def test_trend_pullback_produces_deterministic_trade(self) -> None:
+        start = datetime(2025, 3, 19, 13, 30)
+        closes = [100.0, 101.0, 102.0, 101.0, 103.0, 106.4]
+        rows = []
+        for index, close in enumerate(closes):
+            timestamp = start + timedelta(minutes=index)
+            rows.append(
+                (
+                    "NQmain",
+                    timestamp,
+                    close,
+                    close + 0.4,
+                    close - 0.4,
+                    close,
+                    close - 0.1,
+                    close + 0.1,
+                    10,
+                    1.0,
+                    1.0,
+                    0.2,
+                )
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = bar_path(Path(temp_dir), "NQmain", "1m", start.date())
+            write_bars_parquet(output, rows)
+            result = run_bar_backtest(parse_strategy_spec(trend_pullback_spec()), symbol_config(), [output])
+
+        self.assertEqual(len(result.trades), 1)
+        trade = result.trades[0]
+        self.assertEqual(trade.side, "long")
+        self.assertEqual(trade.entry_reason, "close_pullback_reclaim_ema_fast_above_ema_slow")
+        self.assertEqual(trade.exit_reason, "take_profit")
+        self.assertAlmostEqual(trade.net_pnl, 45.0)
+
+    def test_regime_filtered_mean_reversion_produces_deterministic_trade(self) -> None:
+        start = datetime(2025, 3, 19, 13, 30)
+        closes = [100.0, 100.5, 99.0, 102.3]
+        rows = []
+        for index, close in enumerate(closes):
+            timestamp = start + timedelta(minutes=index)
+            rows.append(
+                (
+                    "NQmain",
+                    timestamp,
+                    close,
+                    close + 0.4,
+                    close - 0.4,
+                    close,
+                    close - 0.1,
+                    close + 0.1,
+                    10,
+                    1.0,
+                    1.0,
+                    0.2,
+                )
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = bar_path(Path(temp_dir), "NQmain", "1m", start.date())
+            write_bars_parquet(output, rows)
+            result = run_bar_backtest(parse_strategy_spec(mean_reversion_spec()), symbol_config(), [output])
+
+        self.assertEqual(len(result.trades), 1)
+        trade = result.trades[0]
+        self.assertEqual(trade.side, "long")
+        self.assertEqual(trade.entry_reason, "z_close_below_negative_1")
+        self.assertEqual(trade.exit_reason, "take_profit")
+        self.assertAlmostEqual(trade.net_pnl, 45.0)
+
 
 class TickReplayBacktestTests(unittest.TestCase):
     def test_opening_range_breakout_uses_next_tick_bid_ask_execution(self) -> None:
@@ -272,6 +391,28 @@ class TickReplayBacktestTests(unittest.TestCase):
         self.assertAlmostEqual(trade.net_pnl, 20.0)
         self.assertEqual(result.cost_model["name"], "expensive_test")
         self.assertTrue(result.data_version_hash)
+
+    def test_tick_replay_supports_trend_pullback_family(self) -> None:
+        start = datetime(2025, 3, 19, 13, 30)
+        mids = [100.0, 101.0, 102.0, 101.0, 103.0, 106.4]
+        ticks = [
+            Tick(
+                start + timedelta(minutes=index),
+                bid=mid - 0.1,
+                ask=mid + 0.1,
+                bid_size=1,
+                ask_size=1,
+            )
+            for index, mid in enumerate(mids)
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tick_path = normalized_tick_path(Path(temp_dir), "NQmain", start.date())
+            write_ticks_parquet(tick_path, "NQmain", ticks)
+            result = run_tick_backtest(parse_strategy_spec(trend_pullback_spec()), symbol_config(), [tick_path])
+
+        self.assertEqual(len(result.trades), 1)
+        self.assertEqual(result.trades[0].entry_reason, "close_pullback_reclaim_ema_fast_above_ema_slow")
 
 
 if __name__ == "__main__":

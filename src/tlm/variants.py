@@ -15,6 +15,10 @@ DEFAULT_HIGH_RISK_PARAMETER_LIMIT = 200
 
 SUPPORTED_PARAMETER_TARGETS = {
     "opening_range_minutes": ("indicators", "opening_range", "minutes"),
+    "ema_fast_window": ("indicators", "ema_fast", "window"),
+    "ema_slow_window": ("indicators", "ema_slow", "window"),
+    "mean_reversion_window": ("indicators", "z_close", "window"),
+    "mean_reversion_entry_z": ("indicators", "z_close", "entry_z"),
     "stop_points": ("exit", "stop_loss", "value"),
     "take_profit_points": ("exit", "take_profit", "value"),
     "max_holding_minutes": ("exit", "max_holding_minutes"),

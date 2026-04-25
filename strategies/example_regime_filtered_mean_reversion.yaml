@@ -1,0 +1,54 @@
+{
+  "schema_version": 0,
+  "name": "nq_regime_filtered_mean_reversion_v1",
+  "strategy_family": "regime_filtered_mean_reversion",
+  "market_hypothesis": "During range-bound intraday NQ regimes, large z-score deviations from the recent mean can revert before the session flatten time.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:30-20:45",
+    "flatten": "20:55"
+  },
+  "regime_filter": {},
+  "indicators": {
+    "z_close": {"type": "z_score", "window": 20, "entry_z": 1.8}
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {"left": "z_close", "op": "<=", "right": "-1.8"}
+      ]
+    },
+    "short": {
+      "all": [
+        {"left": "z_close", "op": ">=", "right": "1.8"}
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 14},
+    "take_profit": {"type": "points", "value": 18},
+    "max_holding_minutes": 35
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 24,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "mean_reversion_window": {"values": [16, 30]},
+    "mean_reversion_entry_z": {"values": [1.5, 2.0]},
+    "stop_points": {"values": [10, 18]},
+    "take_profit_points": {"values": [14, 24]},
+    "max_holding_minutes": {"values": [25, 45]}
+  },
+  "cost_model": "nq_conservative_v1"
+}
