@@ -64,6 +64,7 @@ def build_nt_export_signal_response(payload: dict) -> dict:
 def create_app():
     try:
         from fastapi import Body, FastAPI, HTTPException
+        from fastapi.middleware.cors import CORSMiddleware
         from fastapi.responses import StreamingResponse
     except ModuleNotFoundError as exc:
         raise RuntimeError(
@@ -82,6 +83,17 @@ def create_app():
             await worker
 
     app = FastAPI(title="Trading LLM Agent", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
+            "http://127.0.0.1:4173",
+            "http://localhost:4173",
+        ],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.get("/api/health")
     def health() -> dict:
