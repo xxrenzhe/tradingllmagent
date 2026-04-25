@@ -26,6 +26,8 @@ class ParameterGridMetadata:
     parameter_names: list[str]
     parameter_ranges: dict[str, Any]
     total_combinations: int
+    unique_combinations: int
+    duplicate_combinations: int
     selected_combinations: int
     default_budget: int
     high_risk_limit: int
@@ -38,6 +40,8 @@ class ParameterGridMetadata:
             "parameter_names": self.parameter_names,
             "parameter_ranges": self.parameter_ranges,
             "total_combinations": self.total_combinations,
+            "unique_combinations": self.unique_combinations,
+            "duplicate_combinations": self.duplicate_combinations,
             "selected_combinations": self.selected_combinations,
             "default_budget": self.default_budget,
             "high_risk_limit": self.high_risk_limit,
@@ -61,6 +65,12 @@ def stable_hash(payload: Any) -> str:
 
 def strategy_spec_hash(spec: StrategySpec) -> str:
     return stable_hash(spec.raw)
+
+
+def strategy_logic_hash(spec: StrategySpec) -> str:
+    raw = copy.deepcopy(spec.raw)
+    raw.pop("name", None)
+    return stable_hash(raw)
 
 
 def prompt_hash(spec: StrategySpec) -> str:
@@ -105,12 +115,21 @@ def parameter_grid_metadata(
         total *= len(parameters[name])
     if not names:
         total = 1
-    selected = min(total, max_trials, max_parameter_combinations)
     parameter_ranges = {name: parameters[name] for name in names}
+    unique_combinations = len(
+        unique_parameter_combinations(
+            spec,
+            max_parameter_combinations=max_parameter_combinations,
+        )
+    )
+    duplicate_combinations = max(0, min(total, max_parameter_combinations) - unique_combinations)
+    selected = min(unique_combinations, max_trials, max_parameter_combinations)
     return ParameterGridMetadata(
         parameter_names=names,
         parameter_ranges=parameter_ranges,
         total_combinations=total,
+        unique_combinations=unique_combinations,
+        duplicate_combinations=duplicate_combinations,
         selected_combinations=selected,
         default_budget=default_budget,
         high_risk_limit=high_risk_limit,
@@ -151,26 +170,58 @@ def expand_strategy_variants(
         return [spec]
 
     names = sorted(parameters)
-    combinations = list(itertools.product(*(parameters[name] for name in names)))
-    if len(combinations) > max_parameter_combinations:
-        combinations = combinations[:max_parameter_combinations]
-
+    combinations = unique_parameter_combinations(
+        spec,
+        max_parameter_combinations=max_parameter_combinations,
+    )
     variants: list[StrategySpec] = []
     seen: set[str] = set()
     for index, combination in enumerate(combinations[:max_trials]):
-        values = dict(zip(names, combination, strict=True))
         raw = copy.deepcopy(spec.raw)
         raw["name"] = f"{spec.name}_trial_{index:04d}"
-        raw["variant_parameters"] = values
-        for name, value in values.items():
+        raw["variant_parameters"] = combination
+        for name, value in combination.items():
             set_nested(raw, SUPPORTED_PARAMETER_TARGETS[name], value)
         variant = parse_strategy_spec(raw)
-        digest = strategy_spec_hash(variant)
+        digest = strategy_logic_hash(variant)
         if digest in seen:
             continue
         seen.add(digest)
         variants.append(variant)
     return variants or [spec]
+
+
+def unique_parameter_combinations(
+    spec: StrategySpec,
+    max_parameter_combinations: int = DEFAULT_PARAMETER_BUDGET,
+) -> list[dict[str, Any]]:
+    parameters = {
+        name: parameter_values(parameter_spec)
+        for name, parameter_spec in spec.parameters.items()
+        if name in SUPPORTED_PARAMETER_TARGETS
+    }
+    if not parameters:
+        return [{}]
+    names = sorted(parameters)
+    combinations = list(itertools.product(*(parameters[name] for name in names)))
+    if len(combinations) > max_parameter_combinations:
+        combinations = combinations[:max_parameter_combinations]
+
+    unique: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for combination in combinations:
+        values = dict(zip(names, combination, strict=True))
+        raw = copy.deepcopy(spec.raw)
+        raw.pop("name", None)
+        raw["variant_parameters"] = values
+        for name, value in values.items():
+            set_nested(raw, SUPPORTED_PARAMETER_TARGETS[name], value)
+        digest = stable_hash(raw)
+        if digest in seen:
+            continue
+        seen.add(digest)
+        unique.append(values)
+    return unique
 
 
 def set_nested(payload: dict[str, Any], path: tuple[str, ...], value: Any) -> None:

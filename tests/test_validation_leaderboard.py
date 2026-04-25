@@ -339,6 +339,23 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(variants[0].raw["indicators"]["opening_range"]["minutes"], 3)
         self.assertIn("variant_parameters", variants[0].raw)
 
+    def test_expand_strategy_variants_deduplicates_repeated_parameter_values(self) -> None:
+        payload = base_spec()
+        payload["parameters"] = {
+            "opening_range_minutes": {"values": [3, 3]},
+            "stop_points": {"values": [2, 2]},
+            "take_profit_points": {"values": [3]},
+        }
+        seed = parse_strategy_spec(payload)
+        metadata = parameter_grid_metadata(seed, max_trials=10)
+        variants = expand_strategy_variants(seed, max_trials=10)
+
+        self.assertEqual(metadata.total_combinations, 4)
+        self.assertEqual(metadata.unique_combinations, 1)
+        self.assertEqual(metadata.duplicate_combinations, 3)
+        self.assertEqual(metadata.selected_combinations, 1)
+        self.assertEqual(len(variants), 1)
+
     def test_parameter_grid_metadata_marks_budget_exceeded(self) -> None:
         payload = base_spec()
         payload["parameters"] = {
@@ -351,6 +368,8 @@ class RollingValidationTests(unittest.TestCase):
 
         self.assertEqual(DEFAULT_PARAMETER_BUDGET, 50)
         self.assertEqual(metadata.total_combinations, 60)
+        self.assertEqual(metadata.unique_combinations, 50)
+        self.assertEqual(metadata.duplicate_combinations, 0)
         self.assertEqual(metadata.selected_combinations, 50)
         self.assertTrue(metadata.budget_exceeded)
         self.assertFalse(metadata.high_risk_budget)
