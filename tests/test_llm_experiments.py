@@ -6,7 +6,13 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
-from tlm.experiments import load_experiment_summary, record_audit_event, record_experiment, record_trial
+from tlm.experiments import (
+    load_experiment_audit_logs,
+    load_experiment_summary,
+    record_audit_event,
+    record_experiment,
+    record_trial,
+)
 from tlm.llm import DeterministicLocalLLM, append_audit_log, train_validation_feedback
 from tlm.research import run_research_bar_validation
 from tlm.strategy import parse_strategy_spec
@@ -91,6 +97,7 @@ class LLMAndExperimentTests(unittest.TestCase):
             )
             record_experiment(db_path, "exp_db", "NQmain", "completed")
             summary = load_experiment_summary(db_path, "exp_db")
+            audit_logs = load_experiment_audit_logs(db_path, "exp_db")
 
         self.assertEqual(summary["experiment"]["status"], "completed")
         self.assertEqual(len(summary["trials"]), 1)
@@ -105,6 +112,9 @@ class LLMAndExperimentTests(unittest.TestCase):
         self.assertIn("validation_to_test_sharpe_decay", summary["trials"][0])
         self.assertIn("test_to_holdout_sharpe_decay", summary["trials"][0])
         self.assertIn("sharpe_non_overlap_test", summary["trials"][0])
+        self.assertEqual(len(audit_logs), 1)
+        self.assertEqual(audit_logs[0]["event_type"], "research_trial_completed")
+        self.assertEqual(audit_logs[0]["payload"]["strategy_spec_hash"], result.strategy_spec_hash)
 
 
 if __name__ == "__main__":

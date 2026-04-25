@@ -16,7 +16,7 @@ Open `http://127.0.0.1:5173`. Leave the API base field empty when using the Vite
 
 ## Scope
 
-- Creates local data download, bar build, and research tasks.
+- Creates local data download, bar build, tick backtest, and research tasks.
 - Streams task status and logs from Server-Sent Events.
-- Shows data quality, leaderboard, rejected strategies, and experiment details.
+- Shows data quality, leaderboard, rejected strategies, experiment details, and audit logs.
 - Does not expose live brokerage actions or NinjaTrader live execution controls.

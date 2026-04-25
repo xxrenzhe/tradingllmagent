@@ -8,7 +8,7 @@ from pathlib import Path
 
 import duckdb
 
-from tlm.api import build_nt_export_signal_response, build_paper_replay_response
+from tlm.api import build_nt_export_signal_response, build_paper_replay_response, create_app
 from tlm.dukascopy import Tick
 from tlm.storage import normalized_tick_path, write_ticks_parquet
 from tlm.tasks import (
@@ -220,6 +220,16 @@ class APIImportTests(unittest.TestCase):
         self.assertEqual(exported["format"], "oif")
         self.assertEqual(exported["line_count"], 2)
         self.assertIn("PLACE;Sim101;NQ 06-26;BUY;1;MARKET", exported["content"])
+
+    def test_fastapi_app_registers_research_console_routes_when_installed(self) -> None:
+        try:
+            app = create_app()
+        except RuntimeError:
+            self.skipTest("FastAPI is not installed")
+        paths = {route.path for route in app.routes}
+
+        self.assertIn("/api/backtests/tick", paths)
+        self.assertIn("/api/experiments/{experiment_id}/audit-logs", paths)
 
 
 if __name__ == "__main__":

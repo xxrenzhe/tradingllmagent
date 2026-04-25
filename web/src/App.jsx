@@ -27,6 +27,7 @@ export default function App() {
   const [taskEvents, setTaskEvents] = useState([]);
   const [experimentId, setExperimentId] = useState("");
   const [experiment, setExperiment] = useState(null);
+  const [auditLogs, setAuditLogs] = useState([]);
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
   const [filters, setFilters] = useState({ minSharpe: "2", onlyPassed: false });
@@ -150,8 +151,12 @@ export default function App() {
     if (!id) {
       throw new Error("experiment_id is required");
     }
-    const payload = await apiRequest(apiBase, `/api/experiments/${encodeURIComponent(id)}`);
+    const [payload, auditPayload] = await Promise.all([
+      apiRequest(apiBase, `/api/experiments/${encodeURIComponent(id)}`),
+      apiRequest(apiBase, `/api/experiments/${encodeURIComponent(id)}/audit-logs?limit=50`)
+    ]);
     setExperiment(payload);
+    setAuditLogs(auditPayload.audit_logs ?? []);
     return { task_id: id };
   }
 
@@ -222,6 +227,9 @@ export default function App() {
             </ActionButton>
             <ActionButton disabled={isPending} onClick={() => runAction("Research queued", () => createTask("/api/experiments/research-runs", researchPayload(forms)))}>
               Run Research
+            </ActionButton>
+            <ActionButton disabled={isPending} onClick={() => runAction("Tick backtest queued", () => createTask("/api/backtests/tick", backtestPayload(forms)))}>
+              Tick Backtest
             </ActionButton>
             <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Quality", refreshQuality)}>
               Refresh Quality
@@ -300,21 +308,42 @@ export default function App() {
           </div>
           {experiment ? <JsonBlock payload={experiment} /> : <EmptyState title="No experiment loaded" text="Use an experiment id from a research task result." />}
         </Panel>
-        <Panel title="Paper Replay Boundary" kicker="No live brokerage controls">
-          <p className="body-copy">
-            Paper replay and NinjaTrader export are API-only safety actions. The UI shows the boundary instead of placing real orders:
-            use `/api/paper/replay` for simulated fills and `/api/paper/nt-export-signal` for offline CSV/OIF content.
-          </p>
-          <div className="safety-strip">
-            <span>Local replay</span>
-            <span>Offline export</span>
-            <span>No Alpaca live account</span>
-            <span>No NinjaTrader live bridge</span>
-          </div>
+        <Panel title="LLM Audit" kicker="Prompt and tool trace">
+          {auditLogs.length ? (
+            <div className="event-feed">
+              {auditLogs.map((entry) => (
+                <pre key={entry.id} className="log">{JSON.stringify(entry, null, 2)}</pre>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No audit logs loaded" text="Load an experiment to inspect prompt hashes, response hashes, and trial audit events." />
+          )}
         </Panel>
       </section>
+
+      <Panel title="Paper Replay Boundary" kicker="No live brokerage controls">
+        <p className="body-copy">
+          Paper replay and NinjaTrader export are API-only safety actions. The UI shows the boundary instead of placing real orders:
+          use `/api/paper/replay` for simulated fills and `/api/paper/nt-export-signal` for offline CSV/OIF content.
+        </p>
+        <div className="safety-strip">
+          <span>Local replay</span>
+          <span>Offline export</span>
+          <span>No Alpaca live account</span>
+          <span>No NinjaTrader live bridge</span>
+        </div>
+      </Panel>
     </main>
   );
+}
+
+function backtestPayload(forms) {
+  return {
+    symbol: forms.symbol,
+    spec: forms.spec,
+    date_from: forms.dateFrom,
+    date_to: forms.dateTo
+  };
 }
 
 function dataPayload(forms) {

@@ -7,7 +7,7 @@ from pathlib import Path
 from time import sleep
 
 from .config import load_symbols
-from .experiments import load_experiment_summary
+from .experiments import load_experiment_audit_logs, load_experiment_summary
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import load_leaderboard_report
 from .strategy import StrategySpecError, load_strategy_spec
@@ -59,6 +59,24 @@ def build_nt_export_signal_response(payload: dict) -> dict:
         "content": content,
         "line_count": len([line for line in content.splitlines() if line.strip()]),
     }
+
+
+def build_leaderboard_response(experiments_root: Path, experiment_id: str | None = None) -> dict:
+    report = load_leaderboard_report(experiments_root)
+    if experiment_id:
+        for key in ["leaderboard", "rejected", "rows"]:
+            report[key] = [
+                row
+                for row in report[key]
+                if row["experiment_id"] == experiment_id
+                or row["experiment_id"].startswith(f"{experiment_id}_")
+            ]
+        report["summary"] = {
+            "passed": len(report["leaderboard"]),
+            "rejected": len(report["rejected"]),
+            "total": len(report["rows"]),
+        }
+    return report
 
 
 def create_app():
@@ -215,6 +233,10 @@ def create_app():
     def backtests_bar(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "backtest.bar", payload)
 
+    @app.post("/api/backtests/tick")
+    def backtests_tick(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "backtest.tick", payload)
+
     @app.post("/api/experiments/research-runs")
     def experiments_research_runs(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "research.run", payload)
@@ -229,9 +251,29 @@ def create_app():
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @app.get("/api/experiments/{experiment_id}/audit-logs")
+    def experiments_audit_logs(
+        experiment_id: str,
+        experiment_db: str = "experiments/research.sqlite3",
+        limit: int = 100,
+    ) -> dict:
+        try:
+            return {
+                "audit_logs": load_experiment_audit_logs(
+                    Path(experiment_db),
+                    experiment_id,
+                    limit=limit,
+                )
+            }
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.get("/api/reports/leaderboard")
-    def reports_leaderboard(experiments_root: str = "experiments") -> dict:
-        return load_leaderboard_report(Path(experiments_root))
+    def reports_leaderboard(
+        experiments_root: str = "experiments",
+        experiment_id: str | None = None,
+    ) -> dict:
+        return build_leaderboard_response(Path(experiments_root), experiment_id=experiment_id)
 
     @app.post("/api/paper/replay")
     def paper_replay(payload: dict = Body(...)) -> dict:

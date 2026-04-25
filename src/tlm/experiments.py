@@ -176,6 +176,39 @@ def load_experiment_summary(path: Path, experiment_id: str) -> dict[str, Any]:
     }
 
 
+def load_experiment_audit_logs(
+    path: Path,
+    experiment_id: str,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    with connect_experiment_db(path) as connection:
+        exists = connection.execute(
+            "SELECT 1 FROM experiments WHERE experiment_id = ?",
+            (experiment_id,),
+        ).fetchone()
+        if exists is None:
+            raise KeyError(f"Unknown experiment_id: {experiment_id}")
+        rows = connection.execute(
+            "SELECT id, experiment_id, trial_id, event_type, prompt_hash, response_hash, "
+            "payload_json, created_at FROM audit_logs WHERE experiment_id = ? "
+            "ORDER BY id DESC LIMIT ?",
+            (experiment_id, max(int(limit), 1)),
+        ).fetchall()
+    return [
+        {
+            "id": row[0],
+            "experiment_id": row[1],
+            "trial_id": row[2],
+            "event_type": row[3],
+            "prompt_hash": row[4],
+            "response_hash": row[5],
+            "payload": json.loads(row[6]),
+            "created_at": row[7],
+        }
+        for row in rows
+    ]
+
+
 def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
     result = json.loads(row[9])
     return {
