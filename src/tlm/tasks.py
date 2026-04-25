@@ -9,6 +9,7 @@ from typing import Any
 
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+RUNNING_STATUSES = {"queued", "running"}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
@@ -103,6 +104,41 @@ def list_tasks(path: Path, limit: int = 100) -> list[dict[str, Any]]:
             (limit,),
         ).fetchall()
     return [_task_from_row(row) for row in rows]
+
+
+def next_queued_task(path: Path) -> dict[str, Any] | None:
+    with connect_task_db(path) as connection:
+        row = connection.execute(
+            """
+            SELECT task_id, task_type, status, payload_json, result_json,
+                   error, created_at, updated_at
+            FROM tasks
+            WHERE status = 'queued'
+            ORDER BY created_at ASC
+            LIMIT 1
+            """
+        ).fetchone()
+    return _task_from_row(row) if row is not None else None
+
+
+def claim_queued_task(path: Path, task_id: str) -> dict[str, Any] | None:
+    now = _now()
+    with connect_task_db(path) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE tasks
+            SET status = 'running', updated_at = ?
+            WHERE task_id = ? AND status = 'queued'
+            """,
+            (now, task_id),
+        )
+        if cursor.rowcount == 0:
+            return None
+        connection.execute(
+            "INSERT INTO task_logs (task_id, level, message, created_at) VALUES (?, ?, ?, ?)",
+            (task_id, "info", "Task status changed to running", now),
+        )
+    return get_task(path, task_id)
 
 
 def update_task(

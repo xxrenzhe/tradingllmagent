@@ -8,17 +8,19 @@ from pathlib import Path
 from tlm.api import build_nt_export_signal_response, build_paper_replay_response
 from tlm.tasks import (
     append_task_log,
+    claim_queued_task,
     cancel_task,
     create_task,
     encode_sse_event,
     get_task,
     get_task_logs,
     list_tasks,
+    next_queued_task,
     task_event_snapshot,
     task_snapshot_sse,
     update_task,
 )
-from tlm.worker import run_task
+from tlm.worker import run_next_queued_task, run_task
 from test_paper_nt import sample_result
 
 
@@ -90,6 +92,27 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(completed["status"], "completed")
         self.assertEqual(completed["result"]["strategy_family"], "opening_range_breakout")
         self.assertTrue(any(log["message"] == "Completed strategy.validate" for log in logs))
+
+    def test_run_next_queued_task_claims_and_executes_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "tasks.sqlite3"
+            create_task(
+                db_path,
+                "strategy.validate",
+                {"spec": "strategies/example_opening_range_breakout.yaml"},
+                task_id="task_next",
+            )
+            queued = next_queued_task(db_path)
+            claimed = claim_queued_task(db_path, "task_next")
+            second_claim = claim_queued_task(db_path, "task_next")
+            completed = run_task(db_path, "task_next")
+            no_work = run_next_queued_task(db_path)
+
+        self.assertEqual(queued["task_id"], "task_next")
+        self.assertEqual(claimed["status"], "running")
+        self.assertIsNone(second_claim)
+        self.assertEqual(completed["status"], "completed")
+        self.assertIsNone(no_work)
 
     def test_run_task_marks_unknown_task_failed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

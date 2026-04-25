@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from time import sleep
 
@@ -17,7 +20,7 @@ from .tasks import (
     get_task_logs,
     list_tasks,
 )
-from .worker import run_task
+from .worker import run_task, worker_loop
 
 
 def build_paper_replay_response(payload: dict) -> dict:
@@ -67,7 +70,18 @@ def create_app():
             "FastAPI is not installed. Install the API extras before running the server."
         ) from exc
 
-    app = FastAPI(title="Trading LLM Agent", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_app):
+        task_db = Path(os.environ.get("TLM_TASK_DB", "experiments/tasks.sqlite3"))
+        stop_event = asyncio.Event()
+        worker = asyncio.create_task(worker_loop(task_db, stop_event))
+        try:
+            yield
+        finally:
+            stop_event.set()
+            await worker
+
+    app = FastAPI(title="Trading LLM Agent", version="0.1.0", lifespan=lifespan)
 
     @app.get("/api/health")
     def health() -> dict:

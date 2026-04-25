@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -9,14 +10,17 @@ from .config import get_cost_model, get_symbol
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import run_budgeted_research, write_research_result
 from .strategy import load_strategy_spec
-from .tasks import append_task_log, get_task, update_task
+from .tasks import append_task_log, claim_queued_task, get_task, next_queued_task, update_task
 
 
 def run_task(task_db: Path, task_id: str) -> dict[str, Any]:
     task = get_task(task_db, task_id)
     if task["status"] in {"completed", "failed", "cancelled"}:
         return task
-    update_task(task_db, task_id, "running")
+    if task["status"] == "queued":
+        task = claim_queued_task(task_db, task_id) or get_task(task_db, task_id)
+    elif task["status"] != "running":
+        update_task(task_db, task_id, "running")
     append_task_log(task_db, task_id, f"Running {task['task_type']}")
     try:
         result = execute_task(task["task_type"], task["payload"])
@@ -25,6 +29,26 @@ def run_task(task_db: Path, task_id: str) -> dict[str, Any]:
         return update_task(task_db, task_id, "failed", error=str(exc))
     append_task_log(task_db, task_id, f"Completed {task['task_type']}")
     return update_task(task_db, task_id, "completed", result=result)
+
+
+def run_next_queued_task(task_db: Path) -> dict[str, Any] | None:
+    task = next_queued_task(task_db)
+    if task is None:
+        return None
+    claimed = claim_queued_task(task_db, task["task_id"])
+    if claimed is None:
+        return None
+    return run_task(task_db, task["task_id"])
+
+
+async def worker_loop(task_db: Path, stop_event: asyncio.Event, poll_seconds: float = 1.0) -> None:
+    while not stop_event.is_set():
+        ran = await asyncio.to_thread(run_next_queued_task, task_db)
+        if ran is None:
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=max(poll_seconds, 0.1))
+            except TimeoutError:
+                pass
 
 
 def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
