@@ -17,6 +17,7 @@ from .tasks import (
     get_task_logs,
     list_tasks,
 )
+from .worker import run_task
 
 
 def build_paper_replay_response(payload: dict) -> dict:
@@ -104,6 +105,15 @@ def create_app():
             return cancel_task(Path(task_db), task_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/tasks/{task_id}/run")
+    def task_run(task_id: str, task_db: str = "experiments/tasks.sqlite3") -> dict:
+        try:
+            return run_task(Path(task_db), task_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/tasks/{task_id}/logs")
     def task_logs(task_id: str, task_db: str = "experiments/tasks.sqlite3", limit: int = 200) -> dict:

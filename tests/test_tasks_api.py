@@ -18,6 +18,7 @@ from tlm.tasks import (
     task_snapshot_sse,
     update_task,
 )
+from tlm.worker import run_task
 from test_paper_nt import sample_result
 
 
@@ -73,6 +74,33 @@ class TaskStoreTests(unittest.TestCase):
         self.assertIn("event: task", sse)
         self.assertIn("event: log", sse)
         self.assertIn('"status": "completed"', encoded)
+
+    def test_run_task_executes_strategy_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "tasks.sqlite3"
+            create_task(
+                db_path,
+                "strategy.validate",
+                {"spec": "strategies/example_opening_range_breakout.yaml"},
+                task_id="task_validate",
+            )
+            completed = run_task(db_path, "task_validate")
+            logs = get_task_logs(db_path, "task_validate")
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["result"]["strategy_family"], "opening_range_breakout")
+        self.assertTrue(any(log["message"] == "Completed strategy.validate" for log in logs))
+
+    def test_run_task_marks_unknown_task_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "tasks.sqlite3"
+            create_task(db_path, "unknown.task", {}, task_id="task_unknown")
+            failed = run_task(db_path, "task_unknown")
+            logs = get_task_logs(db_path, "task_unknown")
+
+        self.assertEqual(failed["status"], "failed")
+        self.assertIn("Unsupported task_type", failed["error"])
+        self.assertTrue(any(log["level"] == "error" for log in logs))
 
 
 class APIImportTests(unittest.TestCase):
