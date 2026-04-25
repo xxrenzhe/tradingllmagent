@@ -17,6 +17,7 @@ from .cli_dates import iter_dates
 from .config import CostModelConfig, SymbolConfig
 from .leaderboard import evaluate_hard_gates, robustness_score
 from .metrics import BacktestMetrics, calculate_metrics
+from .snapshot import research_snapshot
 from .storage import bar_path, normalized_tick_path
 from .strategy import StrategySpec
 from .variants import (
@@ -35,6 +36,7 @@ class ResearchRunResult:
     experiment_id: str
     execution_mode: str
     data_version_hash: str
+    snapshot: dict
     cost_model: dict
     strategy_name: str
     strategy_spec_hash: str
@@ -58,6 +60,7 @@ class ResearchRunResult:
             "experiment_id": self.experiment_id,
             "execution_mode": self.execution_mode,
             "data_version_hash": self.data_version_hash,
+            "snapshot": self.snapshot,
             "cost_model": self.cost_model,
             "strategy_name": self.strategy_name,
             "strategy_spec_hash": self.strategy_spec_hash,
@@ -96,6 +99,8 @@ def run_research_bar_validation(
     grid_metadata: ParameterGridMetadata | None = None,
     execution_mode: str = "bar",
     cost_model: CostModelConfig | None = None,
+    config_dir: Path = Path("configs"),
+    random_seed: int = 0,
 ) -> ResearchRunResult:
     grid_metadata = grid_metadata or parameter_grid_metadata(spec, max_trials=1)
     if execution_mode not in {"bar", "tick"}:
@@ -120,6 +125,12 @@ def run_research_bar_validation(
         embargo_days=embargo_days,
         final_holdout_days=final_holdout_days,
         min_folds=min_folds,
+    )
+    snapshot = research_snapshot(
+        plan=plan,
+        cost_model=active_cost_model,
+        config_dir=config_dir,
+        random_seed=random_seed,
     )
     fold_results: list[dict] = []
     fold_test_metrics: list[BacktestMetrics] = []
@@ -206,6 +217,7 @@ def run_research_bar_validation(
         experiment_id=experiment_id,
         execution_mode=execution_mode,
         data_version_hash=data_version_hash,
+        snapshot=snapshot,
         cost_model=active_cost_model.to_dict(),
         strategy_name=spec.name,
         strategy_spec_hash=strategy_spec_hash(spec),
@@ -246,6 +258,8 @@ def run_budgeted_research(
     allow_high_parameter_budget: bool = False,
     execution_mode: str = "bar",
     cost_model: CostModelConfig | None = None,
+    config_dir: Path = Path("configs"),
+    random_seed: int = 0,
 ) -> list[ResearchRunResult]:
     if execution_mode not in {"bar", "tick"}:
         raise ValueError(f"Unsupported execution_mode: {execution_mode}")
@@ -282,6 +296,8 @@ def run_budgeted_research(
                 grid_metadata=grid_metadata,
                 execution_mode=execution_mode,
                 cost_model=cost_model,
+                config_dir=config_dir,
+                random_seed=random_seed,
             )
         )
     return results
@@ -359,6 +375,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "experiment_id": payload["experiment_id"],
                 "execution_mode": payload.get("execution_mode", "bar"),
                 "data_version_hash": payload.get("data_version_hash"),
+                "snapshot": payload.get("snapshot", {}),
                 "cost_model": payload.get("cost_model", {}),
                 "strategy_name": payload["strategy_name"],
                 "strategy_spec_hash": payload.get("strategy_spec_hash"),

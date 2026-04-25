@@ -241,6 +241,8 @@ def cmd_research_run(args: argparse.Namespace) -> int:
         allow_high_parameter_budget=args.allow_high_parameter_budget,
         execution_mode=args.execution_mode,
         cost_model=cost_model,
+        config_dir=Path(args.config_dir),
+        random_seed=args.random_seed,
     )
     for result in results:
         output_path = Path(args.experiments_root) / result.experiment_id / "leaderboard.json"
@@ -405,6 +407,7 @@ def build_parser() -> argparse.ArgumentParser:
     research_run.add_argument("--experiment-db", default="experiments/research.sqlite3")
     research_run.add_argument("--max-trials", type=int, default=1)
     research_run.add_argument("--execution-mode", choices=["bar", "tick"], default="bar")
+    research_run.add_argument("--random-seed", type=int, default=0)
     research_run.add_argument(
         "--max-parameter-combinations",
         type=int,

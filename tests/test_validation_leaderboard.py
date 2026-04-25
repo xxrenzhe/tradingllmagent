@@ -154,6 +154,7 @@ class RollingValidationTests(unittest.TestCase):
                 embargo_days=1,
                 final_holdout_days=5,
                 min_folds=1,
+                random_seed=123,
             )
             output = experiments_root / "exp_test" / "leaderboard.json"
             write_research_result(output, result)
@@ -163,8 +164,14 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(rows[0]["experiment_id"], "exp_test")
         self.assertEqual(rows[0]["execution_mode"], "bar")
         self.assertTrue(rows[0]["data_version_hash"])
+        self.assertEqual(rows[0]["snapshot"]["random_seed"], 123)
+        self.assertTrue(rows[0]["snapshot"]["code_version"])
+        self.assertTrue(rows[0]["snapshot"]["config_snapshot_hash"])
+        self.assertTrue(rows[0]["snapshot"]["fold_definition_hash"])
+        self.assertTrue(rows[0]["snapshot"]["cost_model_hash"])
         self.assertEqual(rows[0]["cost_model"]["name"], "nq_conservative_v1")
         self.assertIn("passed", rows[0])
+        self.assertEqual(result.snapshot["random_seed"], 123)
         self.assertTrue(result.final_holdout_data_version_hash)
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])
         self.assertTrue(result.fold_results[0]["validation_data_version_hash"])
@@ -200,6 +207,7 @@ class RollingValidationTests(unittest.TestCase):
 
         self.assertEqual(result.execution_mode, "tick")
         self.assertTrue(result.data_version_hash)
+        self.assertTrue(result.snapshot["fold_definition_hash"])
         self.assertGreater(result.aggregate_test_metrics.trade_count, 0)
         self.assertEqual(rows[0]["execution_mode"], "tick")
         self.assertTrue(rows[0]["data_version_hash"])

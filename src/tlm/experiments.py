@@ -191,6 +191,7 @@ def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
         "trial_count": result.get("trial_count", 1),
         "execution_mode": result.get("execution_mode", "bar"),
         "data_version_hash": result.get("data_version_hash"),
+        "snapshot": result.get("snapshot", {}),
         "cost_model": result.get("cost_model", {}),
         "parameter_combination_count": result.get("parameter_combination_count", 1),
         "parameter_budget_exceeded": result.get("parameter_budget_exceeded", False),
