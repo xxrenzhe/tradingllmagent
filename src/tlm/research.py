@@ -8,6 +8,7 @@ from typing import Sequence
 
 from .backtest import (
     BacktestResult,
+    Trade,
     backtest_data_version_hash,
     default_cost_model,
     run_bar_backtest,
@@ -49,6 +50,9 @@ class ResearchRunResult:
     parameter_grid_hash: str
     validation_plan: ValidationPlan
     fold_results: list[dict]
+    yearly_results: list[dict]
+    positive_year_ratio: float
+    round_trip_cost: float
     aggregate_test_metrics: BacktestMetrics
     final_holdout_data_version_hash: str
     final_holdout_metrics: BacktestMetrics
@@ -73,6 +77,9 @@ class ResearchRunResult:
             "parameter_grid_hash": self.parameter_grid_hash,
             "validation_plan": self.validation_plan.to_dict(),
             "fold_results": self.fold_results,
+            "yearly_results": self.yearly_results,
+            "positive_year_ratio": self.positive_year_ratio,
+            "round_trip_cost": self.round_trip_cost,
             "aggregate_test_metrics": self.aggregate_test_metrics.to_dict(),
             "final_holdout_data_version_hash": self.final_holdout_data_version_hash,
             "final_holdout_metrics": self.final_holdout_metrics.to_dict(),
@@ -136,6 +143,7 @@ def run_research_bar_validation(
     fold_test_metrics: list[BacktestMetrics] = []
     all_test_pnls: list[float] = []
     all_test_equity = [starting_equity]
+    all_test_trades: list[Trade] = []
 
     for fold in plan.folds:
         train = _run_range(
@@ -170,6 +178,7 @@ def run_research_bar_validation(
         )
         fold_test_metrics.append(test.metrics)
         for trade in test.trades:
+            all_test_trades.append(trade)
             all_test_pnls.append(trade.net_pnl)
             all_test_equity.append(all_test_equity[-1] + trade.net_pnl)
         fold_results.append(
@@ -194,6 +203,8 @@ def run_research_bar_validation(
         starting_equity,
         aggregate_days,
     )
+    yearly_results = summarize_yearly_trades(all_test_trades)
+    positive_year_ratio = calculate_positive_year_ratio(yearly_results)
     holdout = _run_range(
         spec,
         symbol_config,
@@ -204,7 +215,14 @@ def run_research_bar_validation(
         execution_mode,
         active_cost_model,
     )
-    gates = evaluate_hard_gates(aggregate_test_metrics, fold_test_metrics, holdout.metrics)
+    round_trip_cost = calculate_round_trip_cost(active_cost_model)
+    gates = evaluate_hard_gates(
+        aggregate_test_metrics,
+        fold_test_metrics,
+        holdout.metrics,
+        positive_year_ratio=positive_year_ratio,
+        round_trip_cost=round_trip_cost,
+    )
     score = robustness_score(
         aggregate_test_metrics,
         holdout.metrics,
@@ -212,6 +230,8 @@ def run_research_bar_validation(
         parameter_budget_exceeded=grid_metadata.budget_exceeded,
         parameter_combination_count=grid_metadata.total_combinations,
         default_parameter_budget=grid_metadata.default_budget,
+        positive_year_ratio=positive_year_ratio,
+        round_trip_cost=round_trip_cost,
     )
     return ResearchRunResult(
         experiment_id=experiment_id,
@@ -230,6 +250,9 @@ def run_research_bar_validation(
         parameter_grid_hash=grid_metadata.parameter_grid_hash,
         validation_plan=plan,
         fold_results=fold_results,
+        yearly_results=yearly_results,
+        positive_year_ratio=positive_year_ratio,
+        round_trip_cost=round_trip_cost,
         aggregate_test_metrics=aggregate_test_metrics,
         final_holdout_data_version_hash=holdout.data_version_hash,
         final_holdout_metrics=holdout.metrics,
@@ -384,6 +407,9 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "parameter_combination_count": payload.get("parameter_combination_count", 1),
                 "parameter_budget_exceeded": payload.get("parameter_budget_exceeded", False),
                 "parameter_grid_hash": payload.get("parameter_grid_hash"),
+                "positive_year_ratio": payload.get("positive_year_ratio"),
+                "round_trip_cost": payload.get("round_trip_cost"),
+                "yearly_results": payload.get("yearly_results", []),
                 "passed": payload["gates"]["passed"],
                 "robustness_score": payload["robustness_score"],
                 "net_pnl_test": payload["aggregate_test_metrics"]["net_pnl"],
@@ -401,3 +427,30 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
             -item["net_pnl_test"],
         ),
     )
+
+
+def summarize_yearly_trades(trades: Sequence[Trade]) -> list[dict]:
+    by_year: dict[int, dict] = {}
+    for trade in trades:
+        year = trade.exit_time.year
+        row = by_year.setdefault(year, {"year": year, "trade_count": 0, "net_pnl": 0.0})
+        row["trade_count"] += 1
+        row["net_pnl"] += trade.net_pnl
+    return [by_year[year] for year in sorted(by_year)]
+
+
+def calculate_positive_year_ratio(yearly_results: Sequence[dict]) -> float:
+    if not yearly_results:
+        return 0.0
+    positive = sum(1 for row in yearly_results if row["net_pnl"] > 0)
+    return positive / len(yearly_results)
+
+
+def calculate_round_trip_cost(cost_model: CostModelConfig) -> float:
+    slippage_cost = (
+        2
+        * cost_model.slippage_ticks_per_side
+        * cost_model.tick_size
+        * cost_model.point_value
+    )
+    return cost_model.round_trip_fees_usd + slippage_cost

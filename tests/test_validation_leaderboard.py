@@ -132,6 +132,34 @@ class RollingValidationTests(unittest.TestCase):
         self.assertIsNotNone(penalized_score)
         self.assertLess(penalized_score, normal_score)
 
+    def test_hard_gates_require_yearly_stability_and_cost_edge(self) -> None:
+        strong = calculate_metrics(
+            [300, -50, 250, 400, -40, 280],
+            [100_000, 100_300, 100_250, 100_500, 100_900, 100_860, 101_140],
+            100_000,
+            1,
+        )
+        fold_metrics = [strong, strong, strong]
+
+        weak_cost_edge = evaluate_hard_gates(
+            strong,
+            fold_metrics,
+            strong,
+            max_drawdown_limit=10_000,
+            round_trip_cost=200,
+        )
+        unstable_years = evaluate_hard_gates(
+            strong,
+            fold_metrics,
+            strong,
+            max_drawdown_limit=10_000,
+            positive_year_ratio=0.5,
+        )
+
+        self.assertIn("avg_trade_net_pnl", weak_cost_edge.reasons)
+        self.assertIn("positive_year_ratio", unstable_years.reasons)
+        self.assertIsNone(robustness_score(strong, strong, fold_metrics, round_trip_cost=200))
+
     def test_research_run_writes_leaderboard_row(self) -> None:
         spec = parse_strategy_spec(base_spec())
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -171,6 +199,13 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(rows[0]["snapshot"]["cost_model_hash"])
         self.assertEqual(rows[0]["cost_model"]["name"], "nq_conservative_v1")
         self.assertIn("passed", rows[0])
+        self.assertEqual(rows[0]["round_trip_cost"], 15.0)
+        self.assertEqual(rows[0]["positive_year_ratio"], 1.0)
+        self.assertEqual(rows[0]["yearly_results"][0]["year"], 2025)
+        self.assertGreater(rows[0]["yearly_results"][0]["trade_count"], 0)
+        self.assertEqual(result.round_trip_cost, 15.0)
+        self.assertEqual(result.positive_year_ratio, 1.0)
+        self.assertEqual(result.yearly_results[0]["year"], 2025)
         self.assertEqual(result.snapshot["random_seed"], 123)
         self.assertTrue(result.final_holdout_data_version_hash)
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])
