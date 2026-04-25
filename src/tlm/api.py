@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import sleep
 
 from .config import load_symbols
 from .experiments import load_experiment_summary
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import load_leaderboard_report
 from .strategy import StrategySpecError, load_strategy_spec
-from .tasks import cancel_task, create_task, get_task, get_task_logs, list_tasks
+from .tasks import (
+    TERMINAL_STATUSES,
+    cancel_task,
+    create_task,
+    encode_sse_event,
+    get_task,
+    get_task_logs,
+    list_tasks,
+)
 
 
 def build_paper_replay_response(payload: dict) -> dict:
@@ -51,6 +60,7 @@ def build_nt_export_signal_response(payload: dict) -> dict:
 def create_app():
     try:
         from fastapi import Body, FastAPI, HTTPException
+        from fastapi.responses import StreamingResponse
     except ModuleNotFoundError as exc:
         raise RuntimeError(
             "FastAPI is not installed. Install the API extras before running the server."
@@ -101,6 +111,33 @@ def create_app():
             return {"logs": get_task_logs(Path(task_db), task_id, limit=limit)}
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/tasks/{task_id}/events")
+    def task_events(
+        task_id: str,
+        task_db: str = "experiments/tasks.sqlite3",
+        poll_seconds: float = 1.0,
+    ):
+        path = Path(task_db)
+        try:
+            get_task(path, task_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        def event_stream():
+            seen_log_count = 0
+            while True:
+                task = get_task(path, task_id)
+                yield encode_sse_event("task", task)
+                logs = get_task_logs(path, task_id)
+                for log in logs[seen_log_count:]:
+                    yield encode_sse_event("log", log)
+                seen_log_count = len(logs)
+                if task["status"] in TERMINAL_STATUSES:
+                    break
+                sleep(max(poll_seconds, 0.1))
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     @app.post("/api/data/download")
     def data_download(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:

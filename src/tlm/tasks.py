@@ -179,6 +179,24 @@ def get_task_logs(path: Path, task_id: str, limit: int = 200) -> list[dict[str, 
     ]
 
 
+def task_event_snapshot(path: Path, task_id: str, log_limit: int = 200) -> dict[str, Any]:
+    return {
+        "task": get_task(path, task_id),
+        "logs": get_task_logs(path, task_id, limit=log_limit),
+    }
+
+
+def encode_sse_event(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, sort_keys=True, default=str)}\n\n"
+
+
+def task_snapshot_sse(path: Path, task_id: str, log_limit: int = 200) -> str:
+    snapshot = task_event_snapshot(path, task_id, log_limit=log_limit)
+    events = [encode_sse_event("task", snapshot["task"])]
+    events.extend(encode_sse_event("log", log) for log in snapshot["logs"])
+    return "".join(events)
+
+
 def _task_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
     return {
         "task_id": row[0],

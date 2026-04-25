@@ -10,9 +10,12 @@ from tlm.tasks import (
     append_task_log,
     cancel_task,
     create_task,
+    encode_sse_event,
     get_task,
     get_task_logs,
     list_tasks,
+    task_event_snapshot,
+    task_snapshot_sse,
     update_task,
 )
 from test_paper_nt import sample_result
@@ -54,6 +57,22 @@ class TaskStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             with self.assertRaises(KeyError):
                 get_task(Path(temp_dir) / "tasks.sqlite3", "missing")
+
+    def test_task_sse_snapshot_includes_task_and_logs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "tasks.sqlite3"
+            create_task(db_path, "research.run", {"symbol": "NQmain"}, task_id="task_sse")
+            append_task_log(db_path, "task_sse", "worker started")
+            update_task(db_path, "task_sse", "completed", result={"trials": 1})
+            snapshot = task_event_snapshot(db_path, "task_sse")
+            sse = task_snapshot_sse(db_path, "task_sse")
+            encoded = encode_sse_event("task", snapshot["task"])
+
+        self.assertEqual(snapshot["task"]["status"], "completed")
+        self.assertTrue(any(log["message"] == "worker started" for log in snapshot["logs"]))
+        self.assertIn("event: task", sse)
+        self.assertIn("event: log", sse)
+        self.assertIn('"status": "completed"', encoded)
 
 
 class APIImportTests(unittest.TestCase):
