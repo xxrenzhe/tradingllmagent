@@ -1,0 +1,55 @@
+{
+  "schema_version": 0,
+  "name": "nq_opening_range_breakout_v1",
+  "strategy_family": "opening_range_breakout",
+  "market_hypothesis": "NQ can continue in the breakout direction after the opening range when intraday momentum confirms.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:30-20:45",
+    "flatten": "20:55"
+  },
+  "regime_filter": {},
+  "indicators": {
+    "opening_range": {
+      "type": "opening_range",
+      "minutes": 15
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {"left": "close", "op": ">", "right": "opening_range.high"}
+      ]
+    },
+    "short": {
+      "all": [
+        {"left": "close", "op": "<", "right": "opening_range.low"}
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 20},
+    "take_profit": {"type": "points", "value": 30},
+    "max_holding_minutes": 45
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 20,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "opening_range_minutes": {"values": [5, 15, 30]},
+    "stop_points": {"min": 10, "max": 40, "step": 5},
+    "take_profit_points": {"values": [20, 30, 40]}
+  },
+  "cost_model": "nq_conservative_v1"
+}
