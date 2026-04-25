@@ -505,6 +505,28 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
     )
 
 
+def load_leaderboard_report(experiments_root: Path) -> dict:
+    rows = load_leaderboard(experiments_root)
+    leaderboard = sorted(
+        [row for row in rows if row["passed"]],
+        key=lambda item: (-(item["robustness_score"] or -1), -item["net_pnl_test"]),
+    )
+    rejected = sorted(
+        [row for row in rows if not row["passed"]],
+        key=lambda item: (-item["net_pnl_test"], item["experiment_id"]),
+    )
+    return {
+        "leaderboard": leaderboard,
+        "rejected": rejected,
+        "rows": rows,
+        "summary": {
+            "passed": len(leaderboard),
+            "rejected": len(rejected),
+            "total": len(rows),
+        },
+    }
+
+
 def summarize_yearly_trades(trades: Sequence[Trade]) -> list[dict]:
     by_year: dict[int, dict] = {}
     for trade in trades:

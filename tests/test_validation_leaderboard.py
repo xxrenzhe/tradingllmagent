@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import io
+import json
 from dataclasses import replace
+from contextlib import redirect_stdout
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from tlm.cli import main
 from tlm.config import SymbolConfig
 from tlm.dukascopy import Tick
 from tlm.leaderboard import evaluate_hard_gates, robustness_score
 from tlm.metrics import calculate_metrics
 from tlm.research import (
     load_leaderboard,
+    load_leaderboard_report,
     run_budgeted_research,
     run_research_bar_validation,
     write_research_result,
@@ -288,6 +293,69 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])
         self.assertTrue(result.fold_results[0]["validation_data_version_hash"])
         self.assertTrue(result.fold_results[0]["test_data_version_hash"])
+
+    def test_leaderboard_report_splits_passed_and_rejected_rows(self) -> None:
+        spec = parse_strategy_spec(base_spec())
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            experiments_root = Path(temp_dir) / "experiments"
+            for offset in range(40):
+                write_breakout_day(data_root, date(2025, 1, 1) + timedelta(days=offset))
+
+            result = run_research_bar_validation(
+                spec=spec,
+                symbol_config=symbol_config(),
+                data_root=data_root,
+                experiment_id="split_trial_0000",
+                date_from=date(2025, 1, 1),
+                date_to=date(2025, 2, 9),
+                train_days=5,
+                validation_days=5,
+                test_days=5,
+                step_days=5,
+                embargo_days=1,
+                final_holdout_days=5,
+                min_folds=1,
+            )
+            passed_payload = result.to_dict()
+            passed_payload["gates"] = {"passed": True, "reasons": []}
+            passed_payload["robustness_score"] = 0.5
+            rejected_payload = result.to_dict()
+            rejected_payload["experiment_id"] = "split_trial_0001"
+            rejected_payload["gates"] = {"passed": False, "reasons": ["test_rejection"]}
+            rejected_payload["robustness_score"] = None
+            (experiments_root / "split_trial_0000").mkdir(parents=True)
+            (experiments_root / "split_trial_0001").mkdir(parents=True)
+            (experiments_root / "split_trial_0000" / "leaderboard.json").write_text(
+                json.dumps(passed_payload),
+                encoding="utf-8",
+            )
+            (experiments_root / "split_trial_0001" / "leaderboard.json").write_text(
+                json.dumps(rejected_payload),
+                encoding="utf-8",
+            )
+
+            report = load_leaderboard_report(experiments_root)
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "report",
+                        "leaderboard",
+                        "--experiments-root",
+                        str(experiments_root),
+                        "--experiment-id",
+                        "split_trial_0001",
+                    ]
+                )
+            filtered = json.loads(stdout.getvalue())
+
+        self.assertEqual(report["summary"], {"passed": 1, "rejected": 1, "total": 2})
+        self.assertEqual(report["leaderboard"][0]["experiment_id"], "split_trial_0000")
+        self.assertEqual(report["rejected"][0]["experiment_id"], "split_trial_0001")
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(filtered["summary"], {"passed": 0, "rejected": 1, "total": 1})
+        self.assertEqual(filtered["rejected"][0]["reasons"], ["test_rejection"])
 
     def test_research_run_can_use_tick_replay_execution(self) -> None:
         spec = parse_strategy_spec(base_spec())

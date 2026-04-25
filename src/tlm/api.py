@@ -5,7 +5,7 @@ from pathlib import Path
 from .config import load_symbols
 from .experiments import load_experiment_summary
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
-from .research import load_leaderboard
+from .research import load_leaderboard_report
 from .strategy import StrategySpecError, load_strategy_spec
 from .tasks import cancel_task, create_task, get_task, get_task_logs, list_tasks
 
@@ -158,7 +158,7 @@ def create_app():
 
     @app.get("/api/reports/leaderboard")
     def reports_leaderboard(experiments_root: str = "experiments") -> dict:
-        return {"rows": load_leaderboard(Path(experiments_root))}
+        return load_leaderboard_report(Path(experiments_root))
 
     @app.post("/api/paper/replay")
     def paper_replay(payload: dict = Body(...)) -> dict:

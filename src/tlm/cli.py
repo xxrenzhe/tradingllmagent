@@ -19,7 +19,7 @@ from .experiments import (
 from .llm import DeterministicLocalLLM, append_audit_log
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_quality_report
-from .research import load_leaderboard, run_budgeted_research, write_research_result
+from .research import load_leaderboard_report, run_budgeted_research, write_research_result
 from .storage import (
     bar_path,
     compute_data_version_hash,
@@ -320,8 +320,21 @@ def cmd_research_propose(args: argparse.Namespace) -> int:
 
 
 def cmd_report_leaderboard(args: argparse.Namespace) -> int:
-    rows = load_leaderboard(Path(args.experiments_root))
-    print(json.dumps({"rows": rows}, indent=2, sort_keys=True))
+    report = load_leaderboard_report(Path(args.experiments_root))
+    if args.experiment_id:
+        for key in ["leaderboard", "rejected", "rows"]:
+            report[key] = [
+                row
+                for row in report[key]
+                if row["experiment_id"] == args.experiment_id
+                or row["experiment_id"].startswith(f"{args.experiment_id}_")
+            ]
+        report["summary"] = {
+            "passed": len(report["leaderboard"]),
+            "rejected": len(report["rejected"]),
+            "total": len(report["rows"]),
+        }
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
 
@@ -471,6 +484,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_subparsers = report.add_subparsers(dest="report_command", required=True)
     leaderboard = report_subparsers.add_parser("leaderboard")
     leaderboard.add_argument("--experiments-root", default="experiments")
+    leaderboard.add_argument("--experiment-id")
     leaderboard.set_defaults(func=cmd_report_leaderboard)
 
     experiment = report_subparsers.add_parser("experiment")
