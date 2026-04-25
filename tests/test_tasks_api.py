@@ -27,6 +27,8 @@ from tlm.tasks import (
 )
 from tlm.worker import run_next_queued_task, run_task
 from test_paper_nt import sample_result
+from test_strategy_backtest import base_spec, trend_pullback_spec
+from test_validation_leaderboard import write_breakout_day
 
 
 class TaskStoreTests(unittest.TestCase):
@@ -218,6 +220,49 @@ class TaskStoreTests(unittest.TestCase):
 
         self.assertEqual(failed["status"], "failed")
         self.assertIn("Only granularity=tick", failed["error"])
+
+    def test_run_task_executes_multi_family_research(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            experiments_root = root / "experiments"
+            db_path = root / "tasks.sqlite3"
+            opening_path = root / "opening.json"
+            trend_path = root / "trend.json"
+            opening_path.write_text(json.dumps(base_spec()), encoding="utf-8")
+            trend_path.write_text(json.dumps(trend_pullback_spec()), encoding="utf-8")
+            for offset in range(40):
+                write_breakout_day(data_root, datetime(2025, 1, 1).date() + timedelta(days=offset))
+            create_task(
+                db_path,
+                "research.run",
+                {
+                    "specs": [str(opening_path), str(trend_path)],
+                    "date_from": "2025-01-01",
+                    "date_to": "2025-02-09",
+                    "experiment_id": "portfolio",
+                    "data_root": str(data_root),
+                    "experiments_root": str(experiments_root),
+                    "max_trials_per_family": 1,
+                    "train_days": 5,
+                    "validation_days": 5,
+                    "test_days": 5,
+                    "step_days": 5,
+                    "embargo_days": 1,
+                    "final_holdout_days": 5,
+                    "min_folds": 1,
+                },
+                task_id="task_research_portfolio",
+            )
+            completed = run_task(db_path, "task_research_portfolio")
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["result"]["trials"], 2)
+        self.assertEqual(
+            completed["result"]["by_family"],
+            {"opening_range_breakout": 1, "trend_pullback": 1},
+        )
+        self.assertEqual(len(completed["result"]["result_paths"]), 2)
 
 
 class APIImportTests(unittest.TestCase):

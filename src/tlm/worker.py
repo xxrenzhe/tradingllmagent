@@ -246,44 +246,73 @@ def execute_nt_export_signal(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
-    spec = load_strategy_spec(Path(_required(payload, "spec")))
+    specs = _research_specs(payload)
     config_dir = Path(payload.get("config_dir", "configs"))
     data_root = Path(payload.get("data_root", "data"))
     experiments_root = Path(payload.get("experiments_root", "experiments"))
     date_from = parse_date(_required(payload, "date_from", "from"))
     date_to = parse_date(_required(payload, "date_to", "to"))
-    experiment_id = payload.get("experiment_id") or f"{spec.name}_{date_from}_{date_to}"
-    symbol = get_symbol(payload.get("symbol", spec.symbol), config_dir)
-    cost_model = get_cost_model(spec.cost_model, config_dir)
-    results = run_budgeted_research(
-        seed_spec=spec,
-        symbol_config=symbol,
-        data_root=data_root,
-        experiment_id=experiment_id,
-        date_from=date_from,
-        date_to=date_to,
-        max_trials=int(payload.get("max_trials", 1)),
-        starting_equity=float(payload.get("starting_equity", 100_000)),
-        train_days=int(payload.get("train_days", 730)),
-        validation_days=int(payload.get("validation_days", 182)),
-        test_days=int(payload.get("test_days", 182)),
-        step_days=int(payload.get("step_days", 91)),
-        embargo_days=int(payload.get("embargo_days", 5)),
-        final_holdout_days=int(payload.get("final_holdout_days", 365)),
-        min_folds=int(payload.get("min_folds", 1)),
-        max_parameter_combinations=int(payload.get("max_parameter_combinations", 50)),
-        allow_high_parameter_budget=bool(payload.get("allow_high_parameter_budget", False)),
-        execution_mode=payload.get("execution_mode", "bar"),
-        cost_model=cost_model,
-        config_dir=config_dir,
-        random_seed=int(payload.get("random_seed", 0)),
-    )
+    experiment_id = payload.get("experiment_id") or f"research_{date_from}_{date_to}"
     result_paths = []
-    for result in results:
-        output_path = experiments_root / result.experiment_id / "leaderboard.json"
-        write_research_result(output_path, result)
-        result_paths.append(str(output_path))
-    return {"trials": len(results), "result_paths": result_paths}
+    by_family: dict[str, int] = {}
+    for spec in specs:
+        family_trials = _family_trial_quota(payload, spec.strategy_family)
+        if family_trials <= 0:
+            continue
+        symbol = get_symbol(payload.get("symbol", spec.symbol), config_dir)
+        cost_model = get_cost_model(spec.cost_model, config_dir)
+        family_experiment_id = (
+            experiment_id
+            if len(specs) == 1
+            else f"{experiment_id}_{spec.strategy_family}"
+        )
+        results = run_budgeted_research(
+            seed_spec=spec,
+            symbol_config=symbol,
+            data_root=data_root,
+            experiment_id=family_experiment_id,
+            date_from=date_from,
+            date_to=date_to,
+            max_trials=family_trials,
+            starting_equity=float(payload.get("starting_equity", 100_000)),
+            train_days=int(payload.get("train_days", 730)),
+            validation_days=int(payload.get("validation_days", 182)),
+            test_days=int(payload.get("test_days", 182)),
+            step_days=int(payload.get("step_days", 91)),
+            embargo_days=int(payload.get("embargo_days", 5)),
+            final_holdout_days=int(payload.get("final_holdout_days", 365)),
+            min_folds=int(payload.get("min_folds", 1)),
+            max_parameter_combinations=int(payload.get("max_parameter_combinations", 50)),
+            allow_high_parameter_budget=bool(payload.get("allow_high_parameter_budget", False)),
+            execution_mode=payload.get("execution_mode", "bar"),
+            cost_model=cost_model,
+            config_dir=config_dir,
+            random_seed=int(payload.get("random_seed", 0)),
+        )
+        by_family[spec.strategy_family] = by_family.get(spec.strategy_family, 0) + len(results)
+        for result in results:
+            output_path = experiments_root / result.experiment_id / "leaderboard.json"
+            write_research_result(output_path, result)
+            result_paths.append(str(output_path))
+    return {"trials": sum(by_family.values()), "by_family": by_family, "result_paths": result_paths}
+
+
+def _research_specs(payload: dict[str, Any]) -> list[Any]:
+    if payload.get("specs"):
+        paths = payload["specs"]
+        if not isinstance(paths, list) or not paths:
+            raise ValueError("specs must be a non-empty list")
+        return [load_strategy_spec(Path(str(path))) for path in paths]
+    return [load_strategy_spec(Path(_required(payload, "spec")))]
+
+
+def _family_trial_quota(payload: dict[str, Any], strategy_family: str) -> int:
+    family_quotas = payload.get("family_quotas", {})
+    if isinstance(family_quotas, dict) and strategy_family in family_quotas:
+        return int(family_quotas[strategy_family])
+    if "max_trials_per_family" in payload:
+        return int(payload["max_trials_per_family"])
+    return int(payload.get("max_trials", 1))
 
 
 def _required(payload: dict[str, Any], key: str, *aliases: str) -> str:

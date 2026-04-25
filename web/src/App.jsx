@@ -207,7 +207,7 @@ export default function App() {
             <TextField label="From" type="date" value={forms.dateFrom} onChange={(value) => updateForm("dateFrom", value)} />
             <TextField label="To" type="date" value={forms.dateTo} onChange={(value) => updateForm("dateTo", value)} />
             <TextField label="Timeframe" value={forms.timeframe} onChange={(value) => updateForm("timeframe", value)} />
-            <TextField label="Strategy Spec" className="wide" value={forms.spec} onChange={(value) => updateForm("spec", value)} />
+            <TextField label="Strategy Spec(s)" className="wide" value={forms.spec} onChange={(value) => updateForm("spec", value)} />
             <TextField label="Experiment ID" value={forms.experimentId} onChange={(value) => updateForm("experimentId", value)} />
             <TextField label="Max Trials" type="number" value={forms.maxTrials} onChange={(value) => updateForm("maxTrials", value)} />
             <label className="field">
@@ -362,15 +362,25 @@ function dataPayload(forms) {
 }
 
 function researchPayload(forms) {
-  return {
+  const specs = forms.spec
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const payload = {
     symbol: forms.symbol,
-    spec: forms.spec,
     date_from: forms.dateFrom,
     date_to: forms.dateTo,
     experiment_id: forms.experimentId,
     max_trials: Number(forms.maxTrials || 1),
+    max_trials_per_family: Number(forms.maxTrials || 1),
     execution_mode: forms.executionMode
   };
+  if (specs.length > 1) {
+    payload.specs = specs;
+  } else {
+    payload.spec = specs[0] || forms.spec;
+  }
+  return payload;
 }
 
 function Panel({ title, kicker, children }) {
