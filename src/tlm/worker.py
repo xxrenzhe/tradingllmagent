@@ -4,7 +4,11 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from .bars import build_minute_bars_from_parquet
+from .bars import (
+    build_minute_bars_from_parquet,
+    build_timeframe_bars_from_1m_parquet,
+    timeframe_minutes,
+)
 from .backtest import run_bar_backtest, run_tick_backtest
 from .cli import bar_parquet_files, day_bounds, parse_date, tick_parquet_files
 from .cli_dates import iter_dates
@@ -141,8 +145,7 @@ def execute_data_download(payload: dict[str, Any]) -> dict[str, Any]:
 
 def execute_data_build_bars(payload: dict[str, Any]) -> dict[str, Any]:
     timeframe = str(payload.get("timeframe", "1m"))
-    if timeframe != "1m":
-        raise ValueError("Only timeframe=1m is supported")
+    minutes = timeframe_minutes(timeframe)
     data_root = Path(payload.get("data_root", "data"))
     symbol = _required(payload, "symbol")
     date_from = parse_date(_required(payload, "date_from", "from"))
@@ -151,16 +154,20 @@ def execute_data_build_bars(payload: dict[str, Any]) -> dict[str, Any]:
     total_rows = 0
     outputs = []
     for day in iter_dates(date_from, date_to):
-        tick_file = normalized_tick_path(data_root, symbol, day)
         output = bar_path(data_root, symbol, timeframe, day)
-        rows = build_minute_bars_from_parquet([tick_file], output)
+        if minutes == 1:
+            source_file = normalized_tick_path(data_root, symbol, day)
+            rows = build_minute_bars_from_parquet([source_file], output)
+        else:
+            source_file = bar_path(data_root, symbol, "1m", day)
+            rows = build_timeframe_bars_from_1m_parquet([source_file], output, timeframe)
         total_rows += rows
         outputs.append(
             {
                 "date": day.isoformat(),
                 "path": str(output),
                 "rows": rows,
-                "source_tick_files": [str(tick_file)] if tick_file.exists() else [],
+                "source_files": [str(source_file)] if source_file.exists() else [],
             }
         )
 

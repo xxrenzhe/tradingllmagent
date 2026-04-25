@@ -5,7 +5,11 @@ import json
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
-from .bars import build_minute_bars_from_parquet
+from .bars import (
+    build_minute_bars_from_parquet,
+    build_timeframe_bars_from_1m_parquet,
+    timeframe_minutes,
+)
 from .backtest import result_to_json, run_bar_backtest, run_tick_backtest
 from .cli_dates import iter_dates
 from .config import ConfigError, get_cost_model, get_symbol, load_symbols
@@ -97,16 +101,19 @@ def cmd_data_download(args: argparse.Namespace) -> int:
 
 
 def cmd_data_build_bars(args: argparse.Namespace) -> int:
-    if args.timeframe != "1m":
-        raise SystemExit("Only --timeframe 1m is supported in Phase 1")
+    minutes = timeframe_minutes(args.timeframe)
     data_root = Path(args.data_root)
     date_from = parse_date(args.date_from)
     date_to = parse_date(args.date_to)
     total = 0
     for day in iter_dates(date_from, date_to):
-        tick_file = normalized_tick_path(data_root, args.symbol, day)
         output = bar_path(data_root, args.symbol, args.timeframe, day)
-        count = build_minute_bars_from_parquet([tick_file], output)
+        if minutes == 1:
+            tick_file = normalized_tick_path(data_root, args.symbol, day)
+            count = build_minute_bars_from_parquet([tick_file], output)
+        else:
+            one_minute_file = bar_path(data_root, args.symbol, "1m", day)
+            count = build_timeframe_bars_from_1m_parquet([one_minute_file], output, args.timeframe)
         total += count
         print(f"wrote\t{output}\trows={count}")
     print(f"bar build complete: rows={total}")

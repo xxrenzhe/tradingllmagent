@@ -11,6 +11,18 @@ from .dukascopy import Tick
 from .storage import write_bars_parquet
 
 
+def timeframe_minutes(timeframe: str) -> int:
+    if not timeframe.endswith("m"):
+        raise ValueError("Only minute timeframes such as 1m, 5m, 15m, and 30m are supported")
+    try:
+        minutes = int(timeframe[:-1])
+    except ValueError as exc:
+        raise ValueError(f"Invalid timeframe: {timeframe}") from exc
+    if minutes <= 0 or 60 % minutes != 0:
+        raise ValueError("Timeframe minutes must be a positive divisor of 60")
+    return minutes
+
+
 def minute_bucket(value: datetime) -> datetime:
     return value.replace(second=0, microsecond=0)
 
@@ -69,6 +81,49 @@ def build_minute_bars_from_parquet(
                 sum(bid_size) AS bid_size_sum,
                 sum(ask_size) AS ask_size_sum,
                 avg(spread) AS avg_spread
+            FROM read_parquet(?)
+            GROUP BY symbol, bar_ts
+            ORDER BY bar_ts
+            """,
+            [files],
+        ).fetchall()
+    finally:
+        con.close()
+
+    write_bars_parquet(output_path, rows)
+    return len(rows)
+
+
+def build_timeframe_bars_from_1m_parquet(
+    bar_files: Sequence[Path],
+    output_path: Path,
+    timeframe: str,
+) -> int:
+    minutes = timeframe_minutes(timeframe)
+    if minutes == 1:
+        raise ValueError("Use build_minute_bars_from_parquet for 1m bars")
+    files = [str(path) for path in bar_files if path.exists()]
+    if not files:
+        write_bars_parquet(output_path, [])
+        return 0
+
+    con = duckdb.connect(":memory:")
+    try:
+        rows = con.execute(
+            f"""
+            SELECT
+                symbol,
+                time_bucket(INTERVAL '{minutes} minutes', timestamp) AS bar_ts,
+                first(open ORDER BY timestamp) AS open,
+                max(high) AS high,
+                min(low) AS low,
+                last(close ORDER BY timestamp) AS close,
+                last(bid_close ORDER BY timestamp) AS bid_close,
+                last(ask_close ORDER BY timestamp) AS ask_close,
+                sum(tick_count)::INTEGER AS tick_count,
+                sum(bid_size_sum) AS bid_size_sum,
+                sum(ask_size_sum) AS ask_size_sum,
+                sum(avg_spread * tick_count) / nullif(sum(tick_count), 0) AS avg_spread
             FROM read_parquet(?)
             GROUP BY symbol, bar_ts
             ORDER BY bar_ts

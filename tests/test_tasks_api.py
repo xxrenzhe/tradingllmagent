@@ -158,15 +158,34 @@ class TaskStoreTests(unittest.TestCase):
 
             completed = run_task(db_path, "task_build_bars")
             output_path = Path(completed["result"]["outputs"][0]["path"])
+            create_task(
+                db_path,
+                "data.build_bars",
+                {
+                    "symbol": "NQmain",
+                    "date_from": day.date().isoformat(),
+                    "date_to": day.date().isoformat(),
+                    "timeframe": "5m",
+                    "data_root": str(data_root),
+                },
+                task_id="task_build_5m_bars",
+            )
+            completed_5m = run_task(db_path, "task_build_5m_bars")
+            output_5m_path = Path(completed_5m["result"]["outputs"][0]["path"])
             con = duckdb.connect(":memory:")
             try:
                 rows = con.execute(
                     "SELECT count(*), min(open), max(close) FROM read_parquet(?)",
                     [str(output_path)],
                 ).fetchone()
+                rows_5m = con.execute(
+                    "SELECT count(*), min(open), max(close) FROM read_parquet(?)",
+                    [str(output_5m_path)],
+                ).fetchone()
             finally:
                 con.close()
             output_exists = output_path.exists()
+            output_5m_exists = output_5m_path.exists()
 
         self.assertEqual(completed["status"], "completed")
         self.assertEqual(completed["result"]["rows"], 2)
@@ -174,6 +193,12 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(rows[0], 2)
         self.assertAlmostEqual(rows[1], 100.1)
         self.assertAlmostEqual(rows[2], 100.65)
+        self.assertEqual(completed_5m["status"], "completed")
+        self.assertEqual(completed_5m["result"]["rows"], 1)
+        self.assertTrue(output_5m_exists)
+        self.assertEqual(rows_5m[0], 1)
+        self.assertAlmostEqual(rows_5m[1], 100.1)
+        self.assertAlmostEqual(rows_5m[2], 100.65)
 
     def test_run_task_rejects_non_tick_data_download(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

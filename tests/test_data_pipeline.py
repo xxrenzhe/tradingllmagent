@@ -9,7 +9,11 @@ from pathlib import Path
 
 import duckdb
 
-from tlm.bars import build_minute_bars_from_parquet, build_minute_bars_from_ticks
+from tlm.bars import (
+    build_minute_bars_from_parquet,
+    build_minute_bars_from_ticks,
+    build_timeframe_bars_from_1m_parquet,
+)
 from tlm.dukascopy import TICK_STRUCT, dukascopy_url, parse_bi5_ticks
 from tlm.quality import build_quality_report
 from tlm.storage import normalized_tick_path, write_ticks_parquet
@@ -112,6 +116,51 @@ class BarAndQualityTests(unittest.TestCase):
             self.assertEqual(report.rows, 4)
             self.assertEqual(report.duplicate_timestamps, 1)
             self.assertGreater(report.max_spread or 0, 0)
+
+    def test_build_higher_timeframe_bars_from_1m_bars(self) -> None:
+        hour = datetime(2025, 3, 19, 13, tzinfo=UTC)
+        ticks = parse_bi5_ticks(
+            make_bi5(
+                [
+                    (100, 100_200, 100_000, 1.0, 2.0),
+                    (60_100, 100_800, 100_500, 3.0, 4.0),
+                    (300_100, 101_400, 101_000, 5.0, 6.0),
+                ]
+            ),
+            hour,
+            price_scale=1000,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            tick_path = normalized_tick_path(data_root, "NQmain", hour.date())
+            write_ticks_parquet(tick_path, "NQmain", ticks)
+            one_minute_path = data_root / "bars" / "1m" / "NQmain" / "date=2025-03-19" / "part-000.parquet"
+            five_minute_path = data_root / "bars" / "5m" / "NQmain" / "date=2025-03-19" / "part-000.parquet"
+            build_minute_bars_from_parquet([tick_path], one_minute_path)
+            bar_count = build_timeframe_bars_from_1m_parquet(
+                [one_minute_path],
+                five_minute_path,
+                "5m",
+            )
+
+            con = duckdb.connect(":memory:")
+            try:
+                rows = con.execute(
+                    "SELECT open, high, low, close, tick_count FROM read_parquet(?) ORDER BY timestamp",
+                    [str(five_minute_path)],
+                ).fetchall()
+            finally:
+                con.close()
+
+        self.assertEqual(bar_count, 2)
+        self.assertEqual(len(rows), 2)
+        self.assertAlmostEqual(rows[0][0], 100.1)
+        self.assertAlmostEqual(rows[0][1], 100.65)
+        self.assertAlmostEqual(rows[0][2], 100.1)
+        self.assertAlmostEqual(rows[0][3], 100.65)
+        self.assertEqual(rows[0][4], 2)
+        self.assertAlmostEqual(rows[1][3], 101.2)
 
 
 if __name__ == "__main__":
