@@ -6,9 +6,10 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from tlm.backtest import run_bar_backtest
+from tlm.backtest import run_bar_backtest, run_tick_backtest
 from tlm.config import SymbolConfig
-from tlm.storage import bar_path, write_bars_parquet
+from tlm.dukascopy import Tick
+from tlm.storage import bar_path, normalized_tick_path, write_bars_parquet, write_ticks_parquet
 from tlm.strategy import StrategySpecError, load_strategy_spec, parse_strategy_spec
 
 
@@ -135,6 +136,63 @@ class BarBacktestTests(unittest.TestCase):
         self.assertAlmostEqual(trade.net_pnl, 45.0)
         self.assertEqual(result.metrics.trade_count, 1)
         self.assertAlmostEqual(result.metrics.net_pnl, 45.0)
+
+
+class TickReplayBacktestTests(unittest.TestCase):
+    def test_opening_range_breakout_uses_next_tick_bid_ask_execution(self) -> None:
+        start = datetime(2025, 3, 19, 13, 30)
+        ticks = [
+            Tick(start + timedelta(seconds=0), bid=99.9, ask=100.1, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=1), bid=100.0, ask=100.2, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=2), bid=100.1, ask=100.3, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=3), bid=104.0, ask=104.2, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=3, seconds=1), bid=104.1, ask=104.3, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=4), bid=107.6, ask=107.8, bid_size=1, ask_size=1),
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            tick_path = normalized_tick_path(data_root, "NQmain", start.date())
+            write_ticks_parquet(tick_path, "NQmain", ticks)
+
+            result = run_tick_backtest(parse_strategy_spec(base_spec()), symbol_config(), [tick_path])
+
+        self.assertEqual(len(result.trades), 1)
+        trade = result.trades[0]
+        self.assertEqual(trade.side, "long")
+        self.assertEqual(trade.exit_reason, "take_profit")
+        self.assertEqual(trade.entry_time, start + timedelta(minutes=3, seconds=1))
+        self.assertAlmostEqual(trade.entry_price, 104.5)
+        self.assertAlmostEqual(trade.exit_price, 107.5)
+        self.assertAlmostEqual(trade.gross_pnl, 60.0)
+        self.assertAlmostEqual(trade.net_pnl, 45.0)
+
+    def test_tick_replay_short_stop_uses_ask(self) -> None:
+        start = datetime(2025, 3, 19, 13, 30)
+        ticks = [
+            Tick(start + timedelta(seconds=0), bid=99.9, ask=100.1, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=1), bid=100.0, ask=100.2, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=2), bid=100.1, ask=100.3, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=3), bid=96.0, ask=96.2, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=3, seconds=1), bid=95.9, ask=96.1, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=4), bid=98.0, ask=98.3, bid_size=1, ask_size=1),
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            tick_path = normalized_tick_path(data_root, "NQmain", start.date())
+            write_ticks_parquet(tick_path, "NQmain", ticks)
+
+            result = run_tick_backtest(parse_strategy_spec(base_spec()), symbol_config(), [tick_path])
+
+        self.assertEqual(len(result.trades), 1)
+        trade = result.trades[0]
+        self.assertEqual(trade.side, "short")
+        self.assertEqual(trade.exit_reason, "stop_loss")
+        self.assertAlmostEqual(trade.entry_price, 95.75)
+        self.assertAlmostEqual(trade.exit_price, 98.5)
+        self.assertAlmostEqual(trade.gross_pnl, -55.0)
+        self.assertAlmostEqual(trade.net_pnl, -70.0)
 
 
 if __name__ == "__main__":

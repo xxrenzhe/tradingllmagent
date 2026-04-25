@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, time
+from datetime import datetime, timedelta, time
+from math import ceil, floor
 from pathlib import Path
 from typing import Sequence
 
@@ -94,6 +95,41 @@ def load_bar_rows(bar_files: Sequence[Path]) -> list[dict]:
     ]
 
 
+def load_tick_rows(tick_files: Sequence[Path]) -> list[dict]:
+    files = [str(path) for path in tick_files if path.exists()]
+    if not files:
+        return []
+    con = duckdb.connect(":memory:")
+    try:
+        rows = con.execute(
+            """
+            SELECT
+                symbol,
+                timestamp,
+                bid,
+                ask,
+                mid,
+                spread
+            FROM read_parquet(?)
+            ORDER BY timestamp
+            """,
+            [files],
+        ).fetchall()
+    finally:
+        con.close()
+    return [
+        {
+            "symbol": row[0],
+            "timestamp": row[1],
+            "bid": float(row[2]),
+            "ask": float(row[3]),
+            "mid": float(row[4]),
+            "spread": float(row[5]),
+        }
+        for row in rows
+    ]
+
+
 def run_bar_backtest(
     spec: StrategySpec,
     symbol_config: SymbolConfig,
@@ -109,6 +145,25 @@ def run_bar_backtest(
     for pnl in trade_pnls:
         equity.append(equity[-1] + pnl)
     days = len({bar["timestamp"].date() for bar in bars}) or 1
+    metrics = calculate_metrics(trade_pnls, equity, starting_equity, days)
+    return BacktestResult(spec.name, spec.symbol, trades, metrics)
+
+
+def run_tick_backtest(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    tick_files: Sequence[Path],
+    starting_equity: float = 100_000,
+) -> BacktestResult:
+    if spec.strategy_family != "opening_range_breakout":
+        raise ValueError("Phase 3 tick replay supports opening_range_breakout only")
+    ticks = load_tick_rows(tick_files)
+    trades = run_opening_range_breakout_tick_replay(spec, symbol_config, ticks)
+    trade_pnls = [trade.net_pnl for trade in trades]
+    equity = [starting_equity]
+    for pnl in trade_pnls:
+        equity.append(equity[-1] + pnl)
+    days = len({tick["timestamp"].date() for tick in ticks}) or 1
     metrics = calculate_metrics(trade_pnls, equity, starting_equity, days)
     return BacktestResult(spec.name, spec.symbol, trades, metrics)
 
@@ -205,6 +260,163 @@ def run_opening_range_breakout(
     return trades
 
 
+def run_opening_range_breakout_tick_replay(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    ticks: Sequence[dict],
+) -> list[Trade]:
+    if not ticks:
+        return []
+    opening_range_minutes = int(
+        spec.indicators.get("opening_range", {}).get(
+            "minutes",
+            spec.parameters.get("opening_range_minutes", {}).get("values", [15])[0],
+        )
+    )
+    stop_points = float(_exit_value(spec.exit["stop_loss"]))
+    take_profit_points = float(_exit_value(spec.exit["take_profit"]))
+    max_holding_minutes = int(spec.exit["max_holding_minutes"])
+    contracts = int(spec.risk.get("position_sizing", {}).get("contracts", 1))
+    max_trades_per_day = int(spec.risk.get("max_trades_per_day", 999_999))
+    trade_start, trade_end = parse_session_range(spec.session.trade)
+    flatten_time = parse_clock(spec.session.flatten)
+
+    trades: list[Trade] = []
+    by_day: dict[object, list[dict]] = {}
+    for tick in ticks:
+        by_day.setdefault(tick["timestamp"].date(), []).append(tick)
+
+    for _, day_ticks in sorted(by_day.items(), key=lambda item: item[0]):
+        session_ticks = [
+            tick for tick in day_ticks if trade_start <= tick["timestamp"].time() <= flatten_time
+        ]
+        if not session_ticks:
+            continue
+
+        opening_end = datetime.combine(
+            session_ticks[0]["timestamp"].date(),
+            trade_start,
+        ) + timedelta(minutes=opening_range_minutes)
+        opening = [tick for tick in session_ticks if tick["timestamp"] < opening_end]
+        if not opening:
+            continue
+        opening_high = max(tick["mid"] for tick in opening)
+        opening_low = min(tick["mid"] for tick in opening)
+
+        position = None
+        pending_side = None
+        trades_today = 0
+        for tick in session_ticks:
+            tick_time = tick["timestamp"].time()
+            if tick["timestamp"] < opening_end:
+                continue
+
+            if pending_side is not None:
+                position = _open_tick_position(
+                    pending_side,
+                    tick,
+                    contracts,
+                    symbol_config,
+                )
+                pending_side = None
+
+            if position is not None:
+                exit_reason, exit_price = _tick_exit_signal(
+                    position,
+                    tick,
+                    stop_points,
+                    take_profit_points,
+                    max_holding_minutes,
+                    flatten_time,
+                    symbol_config,
+                )
+                if exit_reason and exit_price is not None:
+                    trades.append(
+                        _close_position(position, tick, exit_price, exit_reason, symbol_config)
+                    )
+                    position = None
+                continue
+
+            if tick_time > trade_end or trades_today >= max_trades_per_day:
+                continue
+            if spec.direction in {"long", "long_short"} and tick["mid"] > opening_high:
+                pending_side = "long"
+                trades_today += 1
+                continue
+            if spec.direction in {"short", "long_short"} and tick["mid"] < opening_low:
+                pending_side = "short"
+                trades_today += 1
+
+        if position is not None:
+            last_tick = session_ticks[-1]
+            side = "sell" if position["side"] == "long" else "buy"
+            exit_price = _align_price(
+                last_tick["bid"] if position["side"] == "long" else last_tick["ask"],
+                symbol_config.tick_size,
+                side,
+            )
+            trades.append(_close_position(position, last_tick, exit_price, "end_of_data", symbol_config))
+
+    return trades
+
+
+def _open_tick_position(
+    side: str,
+    tick: dict,
+    contracts: int,
+    symbol_config: SymbolConfig,
+) -> dict:
+    entry_side = "buy" if side == "long" else "sell"
+    entry_price = _align_price(
+        tick["ask"] if side == "long" else tick["bid"],
+        symbol_config.tick_size,
+        entry_side,
+    )
+    return {
+        "side": side,
+        "entry_time": tick["timestamp"],
+        "entry_price": entry_price,
+        "entry_index": None,
+        "contracts": contracts,
+    }
+
+
+def _tick_exit_signal(
+    position: dict,
+    tick: dict,
+    stop_points: float,
+    take_profit_points: float,
+    max_holding_minutes: int,
+    flatten_time: time,
+    symbol_config: SymbolConfig,
+) -> tuple[str | None, float | None]:
+    holding_minutes = (tick["timestamp"] - position["entry_time"]).total_seconds() / 60
+    if position["side"] == "long":
+        stop_price = position["entry_price"] - stop_points
+        take_price = position["entry_price"] + take_profit_points
+        if tick["bid"] <= stop_price:
+            return "stop_loss", _align_price(tick["bid"], symbol_config.tick_size, "sell")
+        if tick["bid"] >= take_price:
+            return "take_profit", _align_price(tick["bid"], symbol_config.tick_size, "sell")
+        if holding_minutes >= max_holding_minutes:
+            return "max_holding", _align_price(tick["bid"], symbol_config.tick_size, "sell")
+        if tick["timestamp"].time() >= flatten_time:
+            return "session_flatten", _align_price(tick["bid"], symbol_config.tick_size, "sell")
+        return None, None
+
+    stop_price = position["entry_price"] + stop_points
+    take_price = position["entry_price"] - take_profit_points
+    if tick["ask"] >= stop_price:
+        return "stop_loss", _align_price(tick["ask"], symbol_config.tick_size, "buy")
+    if tick["ask"] <= take_price:
+        return "take_profit", _align_price(tick["ask"], symbol_config.tick_size, "buy")
+    if holding_minutes >= max_holding_minutes:
+        return "max_holding", _align_price(tick["ask"], symbol_config.tick_size, "buy")
+    if tick["timestamp"].time() >= flatten_time:
+        return "session_flatten", _align_price(tick["ask"], symbol_config.tick_size, "buy")
+    return None, None
+
+
 def _exit_value(exit_config: dict) -> float:
     if exit_config.get("type") == "points":
         return float(exit_config["value"])
@@ -253,6 +465,15 @@ def _close_position(
         net_pnl=net_pnl,
         exit_reason=exit_reason,
     )
+
+
+def _align_price(price: float, tick_size: float, side: str) -> float:
+    ticks = price / tick_size
+    if side == "buy":
+        return ceil(ticks) * tick_size
+    if side == "sell":
+        return floor(ticks) * tick_size
+    raise ValueError(f"Unsupported side for price alignment: {side}")
 
 
 def parse_session_range(value: str) -> tuple[time, time]:

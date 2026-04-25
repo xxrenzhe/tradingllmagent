@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 from .bars import build_minute_bars_from_parquet
-from .backtest import result_to_json, run_bar_backtest
+from .backtest import result_to_json, run_bar_backtest, run_tick_backtest
 from .cli_dates import iter_dates
 from .config import ConfigError, get_symbol, load_symbols
 from .dukascopy import download_hour, iter_hours, parse_bi5_file
@@ -155,6 +155,25 @@ def cmd_backtest_bar(args: argparse.Namespace) -> int:
     date_to = parse_date(args.date_to)
     files = bar_parquet_files(data_root, spec.symbol, spec.timeframe, date_from, date_to)
     result = run_bar_backtest(spec, symbol, files, starting_equity=args.starting_equity)
+    output = result_to_json(result)
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(output + "\n", encoding="utf-8")
+        print(output_path)
+    else:
+        print(output)
+    return 0
+
+
+def cmd_backtest_tick(args: argparse.Namespace) -> int:
+    spec = load_strategy_spec(Path(args.spec))
+    symbol = get_symbol(args.symbol or spec.symbol, Path(args.config_dir))
+    data_root = Path(args.data_root)
+    date_from = parse_date(args.date_from)
+    date_to = parse_date(args.date_to)
+    files = tick_parquet_files(data_root, spec.symbol, date_from, date_to)
+    result = run_tick_backtest(spec, symbol, files, starting_equity=args.starting_equity)
     output = result_to_json(result)
     if args.output:
         output_path = Path(args.output)
@@ -346,6 +365,15 @@ def build_parser() -> argparse.ArgumentParser:
     bar.add_argument("--starting-equity", type=float, default=100_000)
     bar.add_argument("--output")
     bar.set_defaults(func=cmd_backtest_bar)
+
+    tick = backtest_subparsers.add_parser("tick")
+    tick.add_argument("--spec", required=True)
+    tick.add_argument("--symbol")
+    tick.add_argument("--from", dest="date_from", required=True)
+    tick.add_argument("--to", dest="date_to", required=True)
+    tick.add_argument("--starting-equity", type=float, default=100_000)
+    tick.add_argument("--output")
+    tick.set_defaults(func=cmd_backtest_tick)
 
     research = subparsers.add_parser("research")
     research_subparsers = research.add_subparsers(dest="research_command", required=True)
