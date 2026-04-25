@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
+from tlm.api import build_nt_export_signal_response, build_paper_replay_response
 from tlm.tasks import (
     append_task_log,
     cancel_task,
@@ -13,6 +15,7 @@ from tlm.tasks import (
     list_tasks,
     update_task,
 )
+from test_paper_nt import sample_result
 
 
 class TaskStoreTests(unittest.TestCase):
@@ -59,6 +62,25 @@ class APIImportTests(unittest.TestCase):
 
         self.assertTrue(hasattr(api, "create_app"))
         self.assertTrue(hasattr(api, "app"))
+
+    def test_paper_api_helpers_replay_and_export_without_fastapi(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result_path = Path(temp_dir) / "backtest.json"
+            result_path.write_text(json.dumps(sample_result()), encoding="utf-8")
+            replay = build_paper_replay_response({"strategy_id": str(result_path)})
+            exported = build_nt_export_signal_response(
+                {
+                    "strategy_id": str(result_path),
+                    "format": "oif",
+                    "account": "Sim101",
+                    "instrument": "NQ 06-26",
+                }
+            )
+
+        self.assertEqual(replay["ending_equity"], 100_045.0)
+        self.assertEqual(exported["format"], "oif")
+        self.assertEqual(exported["line_count"], 2)
+        self.assertIn("PLACE;Sim101;NQ 06-26;BUY;1;MARKET", exported["content"])
 
 
 if __name__ == "__main__":

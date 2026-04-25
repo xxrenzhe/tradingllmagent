@@ -4,9 +4,48 @@ from pathlib import Path
 
 from .config import load_symbols
 from .experiments import load_experiment_summary
+from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import load_leaderboard
 from .strategy import StrategySpecError, load_strategy_spec
 from .tasks import cancel_task, create_task, get_task, get_task_logs, list_tasks
+
+
+def build_paper_replay_response(payload: dict) -> dict:
+    strategy_id = payload.get("strategy_id")
+    if not strategy_id:
+        raise ValueError("strategy_id is required")
+    starting_equity = float(payload.get("starting_equity", 100_000))
+    result = load_backtest_result(Path(strategy_id))
+    return replay_trades(result["trades"], starting_equity=starting_equity).to_dict()
+
+
+def build_nt_export_signal_response(payload: dict) -> dict:
+    strategy_id = payload.get("strategy_id")
+    export_format = payload.get("format")
+    account = payload.get("account")
+    instrument = payload.get("instrument")
+    if not strategy_id:
+        raise ValueError("strategy_id is required")
+    if export_format not in {"csv", "oif"}:
+        raise ValueError("format must be csv or oif")
+    if not account:
+        raise ValueError("account is required")
+    if not instrument:
+        raise ValueError("instrument is required")
+    result = load_backtest_result(Path(strategy_id))
+    content = export_ninjatrader_signals(
+        result["trades"],
+        export_format=export_format,
+        account=account,
+        instrument=instrument,
+    )
+    return {
+        "format": export_format,
+        "account": account,
+        "instrument": instrument,
+        "content": content,
+        "line_count": len([line for line in content.splitlines() if line.strip()]),
+    }
 
 
 def create_app():
@@ -120,6 +159,20 @@ def create_app():
     @app.get("/api/reports/leaderboard")
     def reports_leaderboard(experiments_root: str = "experiments") -> dict:
         return {"rows": load_leaderboard(Path(experiments_root))}
+
+    @app.post("/api/paper/replay")
+    def paper_replay(payload: dict = Body(...)) -> dict:
+        try:
+            return build_paper_replay_response(payload)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/paper/nt-export-signal")
+    def paper_nt_export_signal(payload: dict = Body(...)) -> dict:
+        try:
+            return build_nt_export_signal_response(payload)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return app
 
