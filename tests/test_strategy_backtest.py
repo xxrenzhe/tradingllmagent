@@ -138,6 +138,7 @@ class BarBacktestTests(unittest.TestCase):
         self.assertEqual(len(result.trades), 1)
         trade = result.trades[0]
         self.assertEqual(trade.side, "long")
+        self.assertEqual(trade.entry_reason, "close_above_opening_range_high")
         self.assertEqual(trade.exit_reason, "take_profit")
         self.assertAlmostEqual(trade.gross_pnl, 60.0)
         self.assertAlmostEqual(trade.net_pnl, 45.0)
@@ -145,6 +146,10 @@ class BarBacktestTests(unittest.TestCase):
         self.assertAlmostEqual(result.metrics.net_pnl, 45.0)
         self.assertTrue(result.data_version_hash)
         self.assertEqual(result.to_dict()["data_version_hash"], result.data_version_hash)
+        self.assertEqual(
+            result.to_dict()["trades"][0]["entry_reason"],
+            "close_above_opening_range_high",
+        )
 
 
 class TickReplayBacktestTests(unittest.TestCase):
@@ -169,6 +174,7 @@ class TickReplayBacktestTests(unittest.TestCase):
         self.assertEqual(len(result.trades), 1)
         trade = result.trades[0]
         self.assertEqual(trade.side, "long")
+        self.assertEqual(trade.entry_reason, "mid_above_opening_range_high")
         self.assertEqual(trade.exit_reason, "take_profit")
         self.assertEqual(trade.entry_time, start + timedelta(minutes=3, seconds=1))
         self.assertAlmostEqual(trade.entry_price, 104.5)
@@ -198,6 +204,7 @@ class TickReplayBacktestTests(unittest.TestCase):
         self.assertEqual(len(result.trades), 1)
         trade = result.trades[0]
         self.assertEqual(trade.side, "short")
+        self.assertEqual(trade.entry_reason, "mid_below_opening_range_low")
         self.assertEqual(trade.exit_reason, "stop_loss")
         self.assertAlmostEqual(trade.entry_price, 95.75)
         self.assertAlmostEqual(trade.exit_price, 98.5)

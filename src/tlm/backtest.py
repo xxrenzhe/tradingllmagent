@@ -28,6 +28,7 @@ class Trade:
     fees: float
     slippage_cost: float
     net_pnl: float
+    entry_reason: str
     exit_reason: str
 
     def to_dict(self) -> dict:
@@ -250,11 +251,23 @@ def run_opening_range_breakout(
                 continue
             if position is None and trades_today < max_trades_per_day:
                 if spec.direction in {"long", "long_short"} and bar["close"] > opening_high:
-                    position = _open_position("long", bar, contracts, index)
+                    position = _open_position(
+                        "long",
+                        bar,
+                        contracts,
+                        index,
+                        "close_above_opening_range_high",
+                    )
                     trades_today += 1
                     continue
                 if spec.direction in {"short", "long_short"} and bar["close"] < opening_low:
-                    position = _open_position("short", bar, contracts, index)
+                    position = _open_position(
+                        "short",
+                        bar,
+                        contracts,
+                        index,
+                        "close_below_opening_range_low",
+                    )
                     trades_today += 1
                     continue
 
@@ -346,6 +359,7 @@ def run_opening_range_breakout_tick_replay(
 
         position = None
         pending_side = None
+        pending_entry_reason = None
         trades_today = 0
         for tick in session_ticks:
             tick_time = tick["timestamp"].time()
@@ -358,8 +372,10 @@ def run_opening_range_breakout_tick_replay(
                     tick,
                     contracts,
                     cost_model,
+                    pending_entry_reason or "opening_range_breakout",
                 )
                 pending_side = None
+                pending_entry_reason = None
 
             if position is not None:
                 exit_reason, exit_price = _tick_exit_signal(
@@ -382,10 +398,12 @@ def run_opening_range_breakout_tick_replay(
                 continue
             if spec.direction in {"long", "long_short"} and tick["mid"] > opening_high:
                 pending_side = "long"
+                pending_entry_reason = "mid_above_opening_range_high"
                 trades_today += 1
                 continue
             if spec.direction in {"short", "long_short"} and tick["mid"] < opening_low:
                 pending_side = "short"
+                pending_entry_reason = "mid_below_opening_range_low"
                 trades_today += 1
 
         if position is not None:
@@ -406,6 +424,7 @@ def _open_tick_position(
     tick: dict,
     contracts: int,
     cost_model: CostModelConfig,
+    entry_reason: str,
 ) -> dict:
     entry_side = "buy" if side == "long" else "sell"
     entry_price = _align_price(
@@ -419,6 +438,7 @@ def _open_tick_position(
         "entry_price": entry_price,
         "entry_index": None,
         "contracts": contracts,
+        "entry_reason": entry_reason,
     }
 
 
@@ -464,7 +484,13 @@ def _exit_value(exit_config: dict) -> float:
     raise ValueError("Phase 2 backtester supports point-based exits only")
 
 
-def _open_position(side: str, bar: dict, contracts: int, entry_index: int) -> dict:
+def _open_position(
+    side: str,
+    bar: dict,
+    contracts: int,
+    entry_index: int,
+    entry_reason: str,
+) -> dict:
     entry_price = bar["ask_close"] if side == "long" else bar["bid_close"]
     return {
         "side": side,
@@ -472,6 +498,7 @@ def _open_position(side: str, bar: dict, contracts: int, entry_index: int) -> di
         "entry_price": entry_price,
         "entry_index": entry_index,
         "contracts": contracts,
+        "entry_reason": entry_reason,
     }
 
 
@@ -510,6 +537,7 @@ def _close_position(
         fees=fees,
         slippage_cost=slippage_cost,
         net_pnl=net_pnl,
+        entry_reason=position["entry_reason"],
         exit_reason=exit_reason,
     )
 
