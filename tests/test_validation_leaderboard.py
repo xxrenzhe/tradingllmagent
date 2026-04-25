@@ -162,8 +162,13 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["experiment_id"], "exp_test")
         self.assertEqual(rows[0]["execution_mode"], "bar")
+        self.assertTrue(rows[0]["data_version_hash"])
         self.assertEqual(rows[0]["cost_model"]["name"], "nq_conservative_v1")
         self.assertIn("passed", rows[0])
+        self.assertTrue(result.final_holdout_data_version_hash)
+        self.assertTrue(result.fold_results[0]["train_data_version_hash"])
+        self.assertTrue(result.fold_results[0]["validation_data_version_hash"])
+        self.assertTrue(result.fold_results[0]["test_data_version_hash"])
 
     def test_research_run_can_use_tick_replay_execution(self) -> None:
         spec = parse_strategy_spec(base_spec())
@@ -194,8 +199,10 @@ class RollingValidationTests(unittest.TestCase):
             rows = load_leaderboard(experiments_root)
 
         self.assertEqual(result.execution_mode, "tick")
+        self.assertTrue(result.data_version_hash)
         self.assertGreater(result.aggregate_test_metrics.trade_count, 0)
         self.assertEqual(rows[0]["execution_mode"], "tick")
+        self.assertTrue(rows[0]["data_version_hash"])
 
     def test_expand_strategy_variants_applies_supported_parameters(self) -> None:
         payload = base_spec()

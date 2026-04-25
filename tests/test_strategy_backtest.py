@@ -143,6 +143,8 @@ class BarBacktestTests(unittest.TestCase):
         self.assertAlmostEqual(trade.net_pnl, 45.0)
         self.assertEqual(result.metrics.trade_count, 1)
         self.assertAlmostEqual(result.metrics.net_pnl, 45.0)
+        self.assertTrue(result.data_version_hash)
+        self.assertEqual(result.to_dict()["data_version_hash"], result.data_version_hash)
 
 
 class TickReplayBacktestTests(unittest.TestCase):
@@ -173,6 +175,7 @@ class TickReplayBacktestTests(unittest.TestCase):
         self.assertAlmostEqual(trade.exit_price, 107.5)
         self.assertAlmostEqual(trade.gross_pnl, 60.0)
         self.assertAlmostEqual(trade.net_pnl, 45.0)
+        self.assertTrue(result.data_version_hash)
 
     def test_tick_replay_short_stop_uses_ask(self) -> None:
         start = datetime(2025, 3, 19, 13, 30)
@@ -238,6 +241,7 @@ class TickReplayBacktestTests(unittest.TestCase):
         self.assertAlmostEqual(trade.slippage_cost, 20.0)
         self.assertAlmostEqual(trade.net_pnl, 20.0)
         self.assertEqual(result.cost_model["name"], "expensive_test")
+        self.assertTrue(result.data_version_hash)
 
 
 if __name__ == "__main__":

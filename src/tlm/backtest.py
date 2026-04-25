@@ -11,6 +11,7 @@ import duckdb
 
 from .config import CostModelConfig, SymbolConfig
 from .metrics import BacktestMetrics, calculate_metrics
+from .storage import compute_data_version_hash
 from .strategy import StrategySpec
 
 
@@ -40,6 +41,7 @@ class Trade:
 class BacktestResult:
     strategy_name: str
     symbol: str
+    data_version_hash: str
     cost_model: dict
     trades: list[Trade]
     metrics: BacktestMetrics
@@ -48,6 +50,7 @@ class BacktestResult:
         return {
             "strategy_name": self.strategy_name,
             "symbol": self.symbol,
+            "data_version_hash": self.data_version_hash,
             "cost_model": self.cost_model,
             "trades": [trade.to_dict() for trade in self.trades],
             "metrics": self.metrics.to_dict(),
@@ -150,7 +153,21 @@ def run_bar_backtest(
         equity.append(equity[-1] + pnl)
     days = len({bar["timestamp"].date() for bar in bars}) or 1
     metrics = calculate_metrics(trade_pnls, equity, starting_equity, days)
-    return BacktestResult(spec.name, spec.symbol, cost_model.to_dict(), trades, metrics)
+    data_version_hash = backtest_data_version_hash(
+        bar_files,
+        spec,
+        symbol_config,
+        cost_model,
+        execution_mode="bar",
+    )
+    return BacktestResult(
+        spec.name,
+        spec.symbol,
+        data_version_hash,
+        cost_model.to_dict(),
+        trades,
+        metrics,
+    )
 
 
 def run_tick_backtest(
@@ -171,7 +188,21 @@ def run_tick_backtest(
         equity.append(equity[-1] + pnl)
     days = len({tick["timestamp"].date() for tick in ticks}) or 1
     metrics = calculate_metrics(trade_pnls, equity, starting_equity, days)
-    return BacktestResult(spec.name, spec.symbol, cost_model.to_dict(), trades, metrics)
+    data_version_hash = backtest_data_version_hash(
+        tick_files,
+        spec,
+        symbol_config,
+        cost_model,
+        execution_mode="tick",
+    )
+    return BacktestResult(
+        spec.name,
+        spec.symbol,
+        data_version_hash,
+        cost_model.to_dict(),
+        trades,
+        metrics,
+    )
 
 
 def run_opening_range_breakout(
@@ -500,6 +531,35 @@ def default_cost_model(symbol_config: SymbolConfig, name: str) -> CostModelConfi
         tick_value=symbol_config.tick_size * symbol_config.point_value,
         slippage_ticks_per_side=1,
         round_trip_fees_usd=5,
+    )
+
+
+def backtest_data_version_hash(
+    data_files: Sequence[Path],
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    cost_model: CostModelConfig,
+    execution_mode: str,
+) -> str:
+    return compute_data_version_hash(
+        data_files,
+        {
+            "requested_files": [str(path) for path in data_files],
+            "execution_mode": execution_mode,
+            "strategy_name": spec.name,
+            "strategy_family": spec.strategy_family,
+            "symbol": spec.symbol,
+            "timeframe": spec.timeframe,
+            "cost_model": cost_model.to_dict(),
+            "symbol_config": {
+                "alias": symbol_config.alias,
+                "provider": symbol_config.provider,
+                "instrument": symbol_config.instrument,
+                "price_scale": symbol_config.price_scale,
+                "tick_size": symbol_config.tick_size,
+                "point_value": symbol_config.point_value,
+            },
+        },
     )
 
 
