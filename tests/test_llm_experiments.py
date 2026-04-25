@@ -95,6 +95,16 @@ class LLMAndExperimentTests(unittest.TestCase):
         self.assertEqual(summary["experiment"]["status"], "completed")
         self.assertEqual(len(summary["trials"]), 1)
         self.assertEqual(summary["trials"][0]["trial_id"], "exp_db_trial_0000")
+        self.assertEqual(summary["trials"][0]["positive_year_ratio"], result.positive_year_ratio)
+        self.assertEqual(summary["trials"][0]["round_trip_cost"], result.round_trip_cost)
+        self.assertEqual(summary["trials"][0]["yearly_results"], result.yearly_results)
+        self.assertEqual(
+            summary["trials"][0]["non_overlap_test_fold_indexes"],
+            result.non_overlap_test_fold_indexes,
+        )
+        self.assertIn("validation_to_test_sharpe_decay", summary["trials"][0])
+        self.assertIn("test_to_holdout_sharpe_decay", summary["trials"][0])
+        self.assertIn("sharpe_non_overlap_test", summary["trials"][0])
 
 
 if __name__ == "__main__":

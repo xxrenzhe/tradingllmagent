@@ -196,4 +196,18 @@ def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
         "parameter_combination_count": result.get("parameter_combination_count", 1),
         "parameter_budget_exceeded": result.get("parameter_budget_exceeded", False),
         "parameter_grid_hash": result.get("parameter_grid_hash"),
+        "positive_year_ratio": result.get("positive_year_ratio"),
+        "round_trip_cost": result.get("round_trip_cost"),
+        "yearly_results": result.get("yearly_results", []),
+        "validation_to_test_sharpe_decay": result.get("validation_to_test_sharpe_decay"),
+        "test_to_holdout_sharpe_decay": result.get("test_to_holdout_sharpe_decay"),
+        "overlapping_test_folds": result.get("overlapping_test_folds", False),
+        "non_overlap_test_fold_indexes": result.get("non_overlap_test_fold_indexes", []),
+        "net_pnl_validation": result.get("aggregate_validation_metrics", {}).get("net_pnl"),
+        "sharpe_validation": result.get("aggregate_validation_metrics", {}).get("sharpe"),
+        "net_pnl_non_overlap_test": result.get("non_overlap_test_metrics", {}).get("net_pnl"),
+        "sharpe_non_overlap_test": result.get("non_overlap_test_metrics", {}).get("sharpe"),
+        "annual_trades_non_overlap_test": (
+            result.get("non_overlap_test_metrics", {}).get("annual_trades")
+        ),
     }
