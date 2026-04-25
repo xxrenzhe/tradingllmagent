@@ -241,12 +241,17 @@ export default function App() {
           {quality ? (
             <div className="quality-grid">
               <Metric label="Rows" value={formatCompact(quality.rows)} detail="normalized ticks" />
+              <Metric label="Files" value={quality.files ?? 0} detail="existing parquet partitions" />
               <Metric label="Start" value={quality.start_timestamp ? quality.start_timestamp.slice(0, 10) : "-"} detail={quality.start_timestamp || "no rows"} />
               <Metric label="End" value={quality.end_timestamp ? quality.end_timestamp.slice(0, 10) : "-"} detail={quality.end_timestamp || "no rows"} />
+              <Metric label="Missing" value={quality.missing_files?.length ?? 0} detail={(quality.missing_files ?? []).slice(0, 1).join(" | ") || "none"} />
+              <Metric label="Empty" value={quality.zero_row_files?.length ?? 0} detail={(quality.zero_row_files ?? []).slice(0, 1).join(" | ") || "none"} />
               <Metric label="Duplicates" value={quality.duplicate_timestamps} detail="same timestamp rows" />
               <Metric label="Avg Spread" value={formatNumber(quality.avg_spread)} detail="mean bid/ask gap" />
               <Metric label="Max Spread" value={formatNumber(quality.max_spread)} detail="proxy CFD spread" />
+              <Metric label="Large Spread" value={quality.large_spread_rows ?? 0} detail="above configured threshold" />
               <Metric label="Negative Spread" value={quality.negative_spread_rows} detail="invalid bid/ask rows" />
+              <Metric label="Price Jumps" value={quality.price_jump_rows ?? 0} detail="large adjacent mid moves" />
             </div>
           ) : (
             <EmptyState title="No quality report loaded" text="Run Refresh Quality after building local tick parquet." />

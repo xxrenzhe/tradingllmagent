@@ -100,6 +100,9 @@ class BarAndQualityTests(unittest.TestCase):
             tick_path = normalized_tick_path(data_root, "NQmain", hour.date())
             write_ticks_parquet(tick_path, "NQmain", ticks)
             self.assertTrue(tick_path.exists())
+            empty_path = normalized_tick_path(data_root, "NQmain", (hour + timedelta(days=1)).date())
+            missing_path = normalized_tick_path(data_root, "NQmain", (hour + timedelta(days=2)).date())
+            write_ticks_parquet(empty_path, "NQmain", [])
 
             bar_path = data_root / "bars" / "1m" / "NQmain" / "date=2025-03-19" / "part-000.parquet"
             bar_count = build_minute_bars_from_parquet([tick_path], bar_path)
@@ -112,10 +115,20 @@ class BarAndQualityTests(unittest.TestCase):
                 con.close()
             self.assertEqual(rows, 2)
 
-            report = build_quality_report("NQmain", [tick_path])
+            report = build_quality_report(
+                "NQmain",
+                [tick_path, empty_path, missing_path],
+                max_normal_spread=0.25,
+                max_normal_price_jump=0.2,
+            )
             self.assertEqual(report.rows, 4)
+            self.assertEqual(report.files, 2)
+            self.assertEqual(report.missing_files, [str(missing_path)])
+            self.assertEqual(report.zero_row_files, [str(empty_path)])
             self.assertEqual(report.duplicate_timestamps, 1)
             self.assertGreater(report.max_spread or 0, 0)
+            self.assertGreater(report.large_spread_rows, 0)
+            self.assertGreater(report.price_jump_rows, 0)
 
     def test_build_higher_timeframe_bars_from_1m_bars(self) -> None:
         hour = datetime(2025, 3, 19, 13, tzinfo=UTC)
