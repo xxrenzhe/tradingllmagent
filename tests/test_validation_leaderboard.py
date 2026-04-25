@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -160,6 +161,40 @@ class RollingValidationTests(unittest.TestCase):
         self.assertIn("positive_year_ratio", unstable_years.reasons)
         self.assertIsNone(robustness_score(strong, strong, fold_metrics, round_trip_cost=200))
 
+    def test_hard_gates_reject_sharpe_decay(self) -> None:
+        strong = calculate_metrics(
+            [300, -50, 250, 400, -40, 280],
+            [100_000, 100_300, 100_250, 100_500, 100_900, 100_860, 101_140],
+            100_000,
+            1,
+        )
+        validation = calculate_metrics(
+            [500, 480, 520, 510, 490, 500],
+            [100_000, 100_500, 100_980, 101_500, 102_010, 102_500, 103_000],
+            100_000,
+            1,
+        )
+        degraded_holdout = replace(strong, sharpe=(strong.sharpe or 0) * 0.4)
+        fold_metrics = [strong, strong, strong]
+
+        validation_decay = evaluate_hard_gates(
+            strong,
+            fold_metrics,
+            strong,
+            validation_metrics=validation,
+            max_drawdown_limit=10_000,
+        )
+        holdout_decay = evaluate_hard_gates(
+            strong,
+            fold_metrics,
+            degraded_holdout,
+            max_drawdown_limit=10_000,
+        )
+
+        self.assertIn("validation_to_test_sharpe_decay", validation_decay.reasons)
+        self.assertIn("test_to_holdout_sharpe_decay", holdout_decay.reasons)
+        self.assertIsNone(robustness_score(strong, strong, fold_metrics, validation_metrics=validation))
+
     def test_research_run_writes_leaderboard_row(self) -> None:
         spec = parse_strategy_spec(base_spec())
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -203,9 +238,13 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(rows[0]["positive_year_ratio"], 1.0)
         self.assertEqual(rows[0]["yearly_results"][0]["year"], 2025)
         self.assertGreater(rows[0]["yearly_results"][0]["trade_count"], 0)
+        self.assertIn("sharpe_validation", rows[0])
+        self.assertIn("validation_to_test_sharpe_decay", rows[0])
+        self.assertIn("test_to_holdout_sharpe_decay", rows[0])
         self.assertEqual(result.round_trip_cost, 15.0)
         self.assertEqual(result.positive_year_ratio, 1.0)
         self.assertEqual(result.yearly_results[0]["year"], 2025)
+        self.assertGreater(result.aggregate_validation_metrics.trade_count, 0)
         self.assertEqual(result.snapshot["random_seed"], 123)
         self.assertTrue(result.final_holdout_data_version_hash)
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])

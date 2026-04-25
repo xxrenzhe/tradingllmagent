@@ -16,7 +16,7 @@ from .backtest import (
 )
 from .cli_dates import iter_dates
 from .config import CostModelConfig, SymbolConfig
-from .leaderboard import evaluate_hard_gates, robustness_score
+from .leaderboard import calculate_sharpe_decay, evaluate_hard_gates, robustness_score
 from .metrics import BacktestMetrics, calculate_metrics
 from .snapshot import research_snapshot
 from .storage import bar_path, normalized_tick_path
@@ -53,7 +53,10 @@ class ResearchRunResult:
     yearly_results: list[dict]
     positive_year_ratio: float
     round_trip_cost: float
+    aggregate_validation_metrics: BacktestMetrics
     aggregate_test_metrics: BacktestMetrics
+    validation_to_test_sharpe_decay: float | None
+    test_to_holdout_sharpe_decay: float | None
     final_holdout_data_version_hash: str
     final_holdout_metrics: BacktestMetrics
     gates: dict
@@ -80,7 +83,10 @@ class ResearchRunResult:
             "yearly_results": self.yearly_results,
             "positive_year_ratio": self.positive_year_ratio,
             "round_trip_cost": self.round_trip_cost,
+            "aggregate_validation_metrics": self.aggregate_validation_metrics.to_dict(),
             "aggregate_test_metrics": self.aggregate_test_metrics.to_dict(),
+            "validation_to_test_sharpe_decay": self.validation_to_test_sharpe_decay,
+            "test_to_holdout_sharpe_decay": self.test_to_holdout_sharpe_decay,
             "final_holdout_data_version_hash": self.final_holdout_data_version_hash,
             "final_holdout_metrics": self.final_holdout_metrics.to_dict(),
             "gates": self.gates,
@@ -141,6 +147,8 @@ def run_research_bar_validation(
     )
     fold_results: list[dict] = []
     fold_test_metrics: list[BacktestMetrics] = []
+    all_validation_pnls: list[float] = []
+    all_validation_equity = [starting_equity]
     all_test_pnls: list[float] = []
     all_test_equity = [starting_equity]
     all_test_trades: list[Trade] = []
@@ -177,6 +185,9 @@ def run_research_bar_validation(
             active_cost_model,
         )
         fold_test_metrics.append(test.metrics)
+        for trade in validation.trades:
+            all_validation_pnls.append(trade.net_pnl)
+            all_validation_equity.append(all_validation_equity[-1] + trade.net_pnl)
         for trade in test.trades:
             all_test_trades.append(trade)
             all_test_pnls.append(trade.net_pnl)
@@ -193,9 +204,19 @@ def run_research_bar_validation(
             }
         )
 
+    aggregate_validation_days = sum(
+        (fold.validation.end - fold.validation.start).days + 1
+        for fold in plan.folds
+    )
     aggregate_days = sum(
         (fold.test.end - fold.test.start).days + 1
         for fold in plan.folds
+    )
+    aggregate_validation_metrics = calculate_metrics(
+        all_validation_pnls,
+        all_validation_equity,
+        starting_equity,
+        aggregate_validation_days,
     )
     aggregate_test_metrics = calculate_metrics(
         all_test_pnls,
@@ -216,10 +237,19 @@ def run_research_bar_validation(
         active_cost_model,
     )
     round_trip_cost = calculate_round_trip_cost(active_cost_model)
+    validation_to_test_decay = calculate_sharpe_decay(
+        aggregate_validation_metrics.sharpe,
+        aggregate_test_metrics.sharpe,
+    )
+    test_to_holdout_decay = calculate_sharpe_decay(
+        aggregate_test_metrics.sharpe,
+        holdout.metrics.sharpe,
+    )
     gates = evaluate_hard_gates(
         aggregate_test_metrics,
         fold_test_metrics,
         holdout.metrics,
+        validation_metrics=aggregate_validation_metrics,
         positive_year_ratio=positive_year_ratio,
         round_trip_cost=round_trip_cost,
     )
@@ -227,6 +257,7 @@ def run_research_bar_validation(
         aggregate_test_metrics,
         holdout.metrics,
         fold_test_metrics,
+        validation_metrics=aggregate_validation_metrics,
         parameter_budget_exceeded=grid_metadata.budget_exceeded,
         parameter_combination_count=grid_metadata.total_combinations,
         default_parameter_budget=grid_metadata.default_budget,
@@ -253,7 +284,10 @@ def run_research_bar_validation(
         yearly_results=yearly_results,
         positive_year_ratio=positive_year_ratio,
         round_trip_cost=round_trip_cost,
+        aggregate_validation_metrics=aggregate_validation_metrics,
         aggregate_test_metrics=aggregate_test_metrics,
+        validation_to_test_sharpe_decay=validation_to_test_decay,
+        test_to_holdout_sharpe_decay=test_to_holdout_decay,
         final_holdout_data_version_hash=holdout.data_version_hash,
         final_holdout_metrics=holdout.metrics,
         gates=gates.to_dict(),
@@ -410,8 +444,12 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "positive_year_ratio": payload.get("positive_year_ratio"),
                 "round_trip_cost": payload.get("round_trip_cost"),
                 "yearly_results": payload.get("yearly_results", []),
+                "validation_to_test_sharpe_decay": payload.get("validation_to_test_sharpe_decay"),
+                "test_to_holdout_sharpe_decay": payload.get("test_to_holdout_sharpe_decay"),
                 "passed": payload["gates"]["passed"],
                 "robustness_score": payload["robustness_score"],
+                "net_pnl_validation": payload.get("aggregate_validation_metrics", {}).get("net_pnl"),
+                "sharpe_validation": payload.get("aggregate_validation_metrics", {}).get("sharpe"),
                 "net_pnl_test": payload["aggregate_test_metrics"]["net_pnl"],
                 "sharpe_test": payload["aggregate_test_metrics"]["sharpe"],
                 "annual_trades_test": payload["aggregate_test_metrics"]["annual_trades"],
