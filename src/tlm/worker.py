@@ -4,11 +4,20 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from .bars import build_minute_bars_from_parquet
 from .backtest import run_bar_backtest, run_tick_backtest
-from .cli import bar_parquet_files, parse_date, tick_parquet_files
+from .cli import bar_parquet_files, day_bounds, parse_date, tick_parquet_files
+from .cli_dates import iter_dates
 from .config import get_cost_model, get_symbol
+from .dukascopy import download_hour, iter_hours, parse_bi5_file
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import run_budgeted_research, write_research_result
+from .storage import (
+    bar_path,
+    compute_data_version_hash,
+    normalized_tick_path,
+    write_ticks_parquet,
+)
 from .strategy import load_strategy_spec
 from .tasks import append_task_log, claim_queued_task, get_task, next_queued_task, update_task
 
@@ -52,6 +61,10 @@ async def worker_loop(task_db: Path, stop_event: asyncio.Event, poll_seconds: fl
 
 
 def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if task_type == "data.download":
+        return execute_data_download(payload)
+    if task_type == "data.build_bars":
+        return execute_data_build_bars(payload)
     if task_type == "strategy.validate":
         return execute_strategy_validate(payload)
     if task_type == "backtest.bar":
@@ -65,6 +78,100 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     if task_type == "research.run":
         return execute_research_run(payload)
     raise ValueError(f"Unsupported task_type: {task_type}")
+
+
+def execute_data_download(payload: dict[str, Any]) -> dict[str, Any]:
+    granularity = str(payload.get("granularity", "tick"))
+    if granularity != "tick":
+        raise ValueError("Only granularity=tick is supported")
+    config_dir = Path(payload.get("config_dir", "configs"))
+    data_root = Path(payload.get("data_root", "data"))
+    symbol_alias = _required(payload, "symbol")
+    symbol = get_symbol(symbol_alias, config_dir)
+    date_from = parse_date(_required(payload, "date_from", "from"))
+    date_to = parse_date(_required(payload, "date_to", "to"))
+
+    total_ticks = 0
+    status_counts: dict[str, int] = {}
+    outputs: list[dict[str, Any]] = []
+    for day in iter_dates(date_from, date_to):
+        start, end = day_bounds(day)
+        day_ticks = []
+        raw_paths: list[Path] = []
+        day_status_counts: dict[str, int] = {}
+        for hour in iter_hours(start, end):
+            result = download_hour(symbol, hour, data_root)
+            status_counts[result.status] = status_counts.get(result.status, 0) + 1
+            day_status_counts[result.status] = day_status_counts.get(result.status, 0) + 1
+            if result.status in {"downloaded", "cached"}:
+                raw_paths.append(result.path)
+                day_ticks.extend(parse_bi5_file(result.path, hour, symbol.price_scale))
+
+        output = normalized_tick_path(data_root, symbol_alias, day)
+        write_ticks_parquet(output, symbol_alias, day_ticks)
+        total_ticks += len(day_ticks)
+        metadata = {
+            "symbol": symbol_alias,
+            "instrument": symbol.instrument,
+            "price_scale": symbol.price_scale,
+            "day": day.isoformat(),
+        }
+        outputs.append(
+            {
+                "date": day.isoformat(),
+                "path": str(output),
+                "rows": len(day_ticks),
+                "raw_files": len(raw_paths),
+                "status_counts": day_status_counts,
+                "data_version_hash": compute_data_version_hash(raw_paths, metadata),
+            }
+        )
+
+    return {
+        "symbol": symbol_alias,
+        "instrument": symbol.instrument,
+        "granularity": granularity,
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "rows": total_ticks,
+        "status_counts": status_counts,
+        "outputs": outputs,
+    }
+
+
+def execute_data_build_bars(payload: dict[str, Any]) -> dict[str, Any]:
+    timeframe = str(payload.get("timeframe", "1m"))
+    if timeframe != "1m":
+        raise ValueError("Only timeframe=1m is supported")
+    data_root = Path(payload.get("data_root", "data"))
+    symbol = _required(payload, "symbol")
+    date_from = parse_date(_required(payload, "date_from", "from"))
+    date_to = parse_date(_required(payload, "date_to", "to"))
+
+    total_rows = 0
+    outputs = []
+    for day in iter_dates(date_from, date_to):
+        tick_file = normalized_tick_path(data_root, symbol, day)
+        output = bar_path(data_root, symbol, timeframe, day)
+        rows = build_minute_bars_from_parquet([tick_file], output)
+        total_rows += rows
+        outputs.append(
+            {
+                "date": day.isoformat(),
+                "path": str(output),
+                "rows": rows,
+                "source_tick_files": [str(tick_file)] if tick_file.exists() else [],
+            }
+        )
+
+    return {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "rows": total_rows,
+        "outputs": outputs,
+    }
 
 
 def execute_strategy_validate(payload: dict[str, Any]) -> dict[str, Any]:

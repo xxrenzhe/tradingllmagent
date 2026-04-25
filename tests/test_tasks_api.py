@@ -3,9 +3,14 @@ from __future__ import annotations
 import tempfile
 import unittest
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import duckdb
+
 from tlm.api import build_nt_export_signal_response, build_paper_replay_response
+from tlm.dukascopy import Tick
+from tlm.storage import normalized_tick_path, write_ticks_parquet
 from tlm.tasks import (
     append_task_log,
     claim_queued_task,
@@ -124,6 +129,70 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(failed["status"], "failed")
         self.assertIn("Unsupported task_type", failed["error"])
         self.assertTrue(any(log["level"] == "error" for log in logs))
+
+    def test_run_task_builds_bars_from_local_tick_parquet(self) -> None:
+        day = datetime(2025, 3, 19, 13, tzinfo=UTC)
+        ticks = [
+            Tick(day + timedelta(milliseconds=100), 100.00, 100.20, 2.0, 1.0),
+            Tick(day + timedelta(seconds=1), 100.10, 100.30, 4.0, 3.0),
+            Tick(day + timedelta(minutes=1, milliseconds=100), 100.50, 100.80, 8.0, 7.0),
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            db_path = root / "tasks.sqlite3"
+            tick_path = normalized_tick_path(data_root, "NQmain", day.date())
+            write_ticks_parquet(tick_path, "NQmain", ticks)
+            create_task(
+                db_path,
+                "data.build_bars",
+                {
+                    "symbol": "NQmain",
+                    "date_from": day.date().isoformat(),
+                    "date_to": day.date().isoformat(),
+                    "timeframe": "1m",
+                    "data_root": str(data_root),
+                },
+                task_id="task_build_bars",
+            )
+
+            completed = run_task(db_path, "task_build_bars")
+            output_path = Path(completed["result"]["outputs"][0]["path"])
+            con = duckdb.connect(":memory:")
+            try:
+                rows = con.execute(
+                    "SELECT count(*), min(open), max(close) FROM read_parquet(?)",
+                    [str(output_path)],
+                ).fetchone()
+            finally:
+                con.close()
+            output_exists = output_path.exists()
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["result"]["rows"], 2)
+        self.assertTrue(output_exists)
+        self.assertEqual(rows[0], 2)
+        self.assertAlmostEqual(rows[1], 100.1)
+        self.assertAlmostEqual(rows[2], 100.65)
+
+    def test_run_task_rejects_non_tick_data_download(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "tasks.sqlite3"
+            create_task(
+                db_path,
+                "data.download",
+                {
+                    "symbol": "NQmain",
+                    "from": "2025-03-19",
+                    "to": "2025-03-19",
+                    "granularity": "1m",
+                },
+                task_id="task_download_invalid",
+            )
+            failed = run_task(db_path, "task_download_invalid")
+
+        self.assertEqual(failed["status"], "failed")
+        self.assertIn("Only granularity=tick", failed["error"])
 
 
 class APIImportTests(unittest.TestCase):
