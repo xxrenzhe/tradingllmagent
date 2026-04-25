@@ -29,7 +29,12 @@ from .variants import (
     prompt_hash,
     strategy_spec_hash,
 )
-from .validation import ValidationPlan, generate_rolling_folds
+from .validation import (
+    ValidationPlan,
+    generate_rolling_folds,
+    has_overlapping_test_folds,
+    non_overlapping_test_fold_indexes,
+)
 
 
 @dataclass(frozen=True)
@@ -55,6 +60,9 @@ class ResearchRunResult:
     round_trip_cost: float
     aggregate_validation_metrics: BacktestMetrics
     aggregate_test_metrics: BacktestMetrics
+    overlapping_test_folds: bool
+    non_overlap_test_fold_indexes: list[int]
+    non_overlap_test_metrics: BacktestMetrics
     validation_to_test_sharpe_decay: float | None
     test_to_holdout_sharpe_decay: float | None
     final_holdout_data_version_hash: str
@@ -85,6 +93,9 @@ class ResearchRunResult:
             "round_trip_cost": self.round_trip_cost,
             "aggregate_validation_metrics": self.aggregate_validation_metrics.to_dict(),
             "aggregate_test_metrics": self.aggregate_test_metrics.to_dict(),
+            "overlapping_test_folds": self.overlapping_test_folds,
+            "non_overlap_test_fold_indexes": self.non_overlap_test_fold_indexes,
+            "non_overlap_test_metrics": self.non_overlap_test_metrics.to_dict(),
             "validation_to_test_sharpe_decay": self.validation_to_test_sharpe_decay,
             "test_to_holdout_sharpe_decay": self.test_to_holdout_sharpe_decay,
             "final_holdout_data_version_hash": self.final_holdout_data_version_hash,
@@ -152,6 +163,7 @@ def run_research_bar_validation(
     all_test_pnls: list[float] = []
     all_test_equity = [starting_equity]
     all_test_trades: list[Trade] = []
+    test_trades_by_fold: dict[int, list[Trade]] = {}
 
     for fold in plan.folds:
         train = _run_range(
@@ -185,6 +197,7 @@ def run_research_bar_validation(
             active_cost_model,
         )
         fold_test_metrics.append(test.metrics)
+        test_trades_by_fold[fold.index] = test.trades
         for trade in validation.trades:
             all_validation_pnls.append(trade.net_pnl)
             all_validation_equity.append(all_validation_equity[-1] + trade.net_pnl)
@@ -223,6 +236,21 @@ def run_research_bar_validation(
         all_test_equity,
         starting_equity,
         aggregate_days,
+    )
+    non_overlap_indexes = non_overlapping_test_fold_indexes(plan.folds)
+    non_overlap_days = sum(
+        (fold.test.end - fold.test.start).days + 1
+        for fold in plan.folds
+        if fold.index in non_overlap_indexes
+    )
+    non_overlap_test_metrics = calculate_trade_metrics(
+        [
+            trade
+            for index in non_overlap_indexes
+            for trade in test_trades_by_fold.get(index, [])
+        ],
+        starting_equity,
+        non_overlap_days,
     )
     yearly_results = summarize_yearly_trades(all_test_trades)
     positive_year_ratio = calculate_positive_year_ratio(yearly_results)
@@ -286,6 +314,9 @@ def run_research_bar_validation(
         round_trip_cost=round_trip_cost,
         aggregate_validation_metrics=aggregate_validation_metrics,
         aggregate_test_metrics=aggregate_test_metrics,
+        overlapping_test_folds=has_overlapping_test_folds(plan.folds),
+        non_overlap_test_fold_indexes=non_overlap_indexes,
+        non_overlap_test_metrics=non_overlap_test_metrics,
         validation_to_test_sharpe_decay=validation_to_test_decay,
         test_to_holdout_sharpe_decay=test_to_holdout_decay,
         final_holdout_data_version_hash=holdout.data_version_hash,
@@ -446,6 +477,8 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "yearly_results": payload.get("yearly_results", []),
                 "validation_to_test_sharpe_decay": payload.get("validation_to_test_sharpe_decay"),
                 "test_to_holdout_sharpe_decay": payload.get("test_to_holdout_sharpe_decay"),
+                "overlapping_test_folds": payload.get("overlapping_test_folds", False),
+                "non_overlap_test_fold_indexes": payload.get("non_overlap_test_fold_indexes", []),
                 "passed": payload["gates"]["passed"],
                 "robustness_score": payload["robustness_score"],
                 "net_pnl_validation": payload.get("aggregate_validation_metrics", {}).get("net_pnl"),
@@ -453,6 +486,11 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "net_pnl_test": payload["aggregate_test_metrics"]["net_pnl"],
                 "sharpe_test": payload["aggregate_test_metrics"]["sharpe"],
                 "annual_trades_test": payload["aggregate_test_metrics"]["annual_trades"],
+                "net_pnl_non_overlap_test": payload.get("non_overlap_test_metrics", {}).get("net_pnl"),
+                "sharpe_non_overlap_test": payload.get("non_overlap_test_metrics", {}).get("sharpe"),
+                "annual_trades_non_overlap_test": (
+                    payload.get("non_overlap_test_metrics", {}).get("annual_trades")
+                ),
                 "net_pnl_holdout": payload["final_holdout_metrics"]["net_pnl"],
                 "reasons": payload["gates"]["reasons"],
             }
@@ -482,6 +520,19 @@ def calculate_positive_year_ratio(yearly_results: Sequence[dict]) -> float:
         return 0.0
     positive = sum(1 for row in yearly_results if row["net_pnl"] > 0)
     return positive / len(yearly_results)
+
+
+def calculate_trade_metrics(
+    trades: Sequence[Trade],
+    starting_equity: float,
+    calendar_days: int,
+) -> BacktestMetrics:
+    equity = [starting_equity]
+    pnls = []
+    for trade in trades:
+        pnls.append(trade.net_pnl)
+        equity.append(equity[-1] + trade.net_pnl)
+    return calculate_metrics(pnls, equity, starting_equity, calendar_days)
 
 
 def calculate_round_trip_cost(cost_model: CostModelConfig) -> float:

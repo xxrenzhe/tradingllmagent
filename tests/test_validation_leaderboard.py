@@ -109,6 +109,29 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual((first.validation.start - first.train.end).days, 6)
         self.assertEqual((first.test.start - first.validation.end).days, 6)
         self.assertEqual(plan.final_holdout.end, date(2021, 12, 31))
+        self.assertFalse(plan.to_dict()["overlapping_test_folds"])
+        self.assertEqual(
+            plan.to_dict()["non_overlap_test_fold_indexes"],
+            [fold.index for fold in plan.folds],
+        )
+
+    def test_generate_rolling_folds_marks_overlapping_tests(self) -> None:
+        plan = generate_rolling_folds(
+            start=date(2020, 1, 1),
+            end=date(2020, 5, 31),
+            train_days=20,
+            validation_days=10,
+            test_days=20,
+            step_days=10,
+            embargo_days=0,
+            final_holdout_days=20,
+            min_folds=3,
+        )
+        payload = plan.to_dict()
+
+        self.assertTrue(payload["overlapping_test_folds"])
+        self.assertLess(len(payload["non_overlap_test_fold_indexes"]), len(payload["folds"]))
+        self.assertEqual(payload["non_overlap_test_fold_indexes"][:2], [0, 2])
 
     def test_hard_gates_and_score(self) -> None:
         strong = calculate_metrics(
@@ -241,10 +264,25 @@ class RollingValidationTests(unittest.TestCase):
         self.assertIn("sharpe_validation", rows[0])
         self.assertIn("validation_to_test_sharpe_decay", rows[0])
         self.assertIn("test_to_holdout_sharpe_decay", rows[0])
+        self.assertFalse(rows[0]["overlapping_test_folds"])
+        self.assertEqual(
+            rows[0]["non_overlap_test_fold_indexes"],
+            [fold.index for fold in result.validation_plan.folds],
+        )
+        self.assertIn("sharpe_non_overlap_test", rows[0])
         self.assertEqual(result.round_trip_cost, 15.0)
         self.assertEqual(result.positive_year_ratio, 1.0)
         self.assertEqual(result.yearly_results[0]["year"], 2025)
         self.assertGreater(result.aggregate_validation_metrics.trade_count, 0)
+        self.assertFalse(result.overlapping_test_folds)
+        self.assertEqual(
+            result.non_overlap_test_fold_indexes,
+            [fold.index for fold in result.validation_plan.folds],
+        )
+        self.assertEqual(
+            result.non_overlap_test_metrics.trade_count,
+            result.aggregate_test_metrics.trade_count,
+        )
         self.assertEqual(result.snapshot["random_seed"], 123)
         self.assertTrue(result.final_holdout_data_version_hash)
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])

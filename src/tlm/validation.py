@@ -40,6 +40,8 @@ class ValidationPlan:
             "folds": [fold.to_dict() for fold in self.folds],
             "final_holdout": self.final_holdout.to_dict(),
             "embargo_days": self.embargo_days,
+            "overlapping_test_folds": has_overlapping_test_folds(self.folds),
+            "non_overlap_test_fold_indexes": non_overlapping_test_fold_indexes(self.folds),
         }
 
 
@@ -91,3 +93,23 @@ def generate_rolling_folds(
         final_holdout=DateRange(holdout_start, end),
         embargo_days=embargo_days,
     )
+
+
+def has_overlapping_test_folds(folds: list[ValidationFold]) -> bool:
+    ordered = sorted(folds, key=lambda fold: fold.test.start)
+    previous_end: date | None = None
+    for fold in ordered:
+        if previous_end is not None and fold.test.start <= previous_end:
+            return True
+        previous_end = max(previous_end, fold.test.end) if previous_end else fold.test.end
+    return False
+
+
+def non_overlapping_test_fold_indexes(folds: list[ValidationFold]) -> list[int]:
+    selected: list[int] = []
+    last_end: date | None = None
+    for fold in sorted(folds, key=lambda item: (item.test.start, item.index)):
+        if last_end is None or fold.test.start > last_end:
+            selected.append(fold.index)
+            last_end = fold.test.end
+    return selected
