@@ -17,6 +17,7 @@ from .experiments import (
     record_trial,
 )
 from .llm import DeterministicLocalLLM, append_audit_log
+from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_quality_report
 from .research import load_leaderboard, run_budgeted_research, write_research_result
 from .storage import (
@@ -335,6 +336,38 @@ def cmd_report_experiment(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_paper_replay(args: argparse.Namespace) -> int:
+    result = load_backtest_result(Path(args.strategy_id))
+    replay = replay_trades(result["trades"], starting_equity=args.starting_equity)
+    output = json.dumps(replay.to_dict(), indent=2, sort_keys=True)
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(output + "\n", encoding="utf-8")
+        print(output_path)
+    else:
+        print(output)
+    return 0
+
+
+def cmd_nt_export_signal(args: argparse.Namespace) -> int:
+    result = load_backtest_result(Path(args.strategy_id))
+    output = export_ninjatrader_signals(
+        result["trades"],
+        export_format=args.format,
+        account=args.account,
+        instrument=args.instrument,
+    )
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(output, encoding="utf-8")
+        print(output_path)
+    else:
+        print(output, end="")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tlm")
     parser.add_argument("--config-dir", default="configs")
@@ -444,6 +477,24 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument("--experiment-id", required=True)
     experiment.add_argument("--experiment-db", default="experiments/research.sqlite3")
     experiment.set_defaults(func=cmd_report_experiment)
+
+    paper = subparsers.add_parser("paper")
+    paper_subparsers = paper.add_subparsers(dest="paper_command", required=True)
+    paper_replay = paper_subparsers.add_parser("replay")
+    paper_replay.add_argument("--strategy-id", required=True)
+    paper_replay.add_argument("--starting-equity", type=float, default=100_000)
+    paper_replay.add_argument("--output")
+    paper_replay.set_defaults(func=cmd_paper_replay)
+
+    nt = subparsers.add_parser("nt")
+    nt_subparsers = nt.add_subparsers(dest="nt_command", required=True)
+    export_signal = nt_subparsers.add_parser("export-signal")
+    export_signal.add_argument("--strategy-id", required=True)
+    export_signal.add_argument("--format", choices=["csv", "oif"], required=True)
+    export_signal.add_argument("--account", required=True)
+    export_signal.add_argument("--instrument", required=True)
+    export_signal.add_argument("--output")
+    export_signal.set_defaults(func=cmd_nt_export_signal)
 
     return parser
 
