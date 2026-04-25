@@ -108,6 +108,23 @@ def family_spec(strategy_family: str, indicators: dict, parameters: dict, direct
     return payload
 
 
+def controlled_grid_spec() -> dict:
+    payload = family_spec(
+        "controlled_grid",
+        {"z_close": {"type": "z_score", "window": 20, "entry_z": 1.5}},
+        {"mean_reversion_entry_z": {"values": [1.5]}},
+        direction="long_short",
+    )
+    payload["market_hypothesis"] = (
+        "A tightly bounded grid can only be tested in range-regime NQ conditions with "
+        "finite inventory, hard stops, and daily loss limits."
+    )
+    payload["anti_martingale_constraints"]["max_grid_levels"] = 1
+    payload["risk"]["max_position_contracts"] = 2
+    payload["risk"]["max_daily_loss_r"] = 2
+    return payload
+
+
 def symbol_config() -> SymbolConfig:
     return SymbolConfig(
         alias="NQmain",
@@ -230,6 +247,26 @@ class StrategyValidationTests(unittest.TestCase):
         payload = base_spec()
         payload["risk"]["position_sizing"] = {"type": "martingale", "contracts": 1}
         with self.assertRaises(StrategySpecError):
+            parse_strategy_spec(payload)
+
+    def test_controlled_grid_requires_range_regime_and_bounded_inventory(self) -> None:
+        valid = parse_strategy_spec(controlled_grid_spec())
+        self.assertEqual(valid.strategy_family, "controlled_grid")
+
+        payload = controlled_grid_spec()
+        payload["indicators"] = {"ema_fast": {"type": "ema", "window": 9}}
+        with self.assertRaisesRegex(StrategySpecError, "range-regime"):
+            parse_strategy_spec(payload)
+
+        payload = controlled_grid_spec()
+        payload["anti_martingale_constraints"]["max_grid_levels"] = 3
+        payload["risk"]["max_position_contracts"] = 2
+        with self.assertRaisesRegex(StrategySpecError, "cannot exceed"):
+            parse_strategy_spec(payload)
+
+        payload = controlled_grid_spec()
+        payload["exit"]["stop_loss"]["value"] = 0
+        with self.assertRaisesRegex(StrategySpecError, "hard stop"):
             parse_strategy_spec(payload)
 
 

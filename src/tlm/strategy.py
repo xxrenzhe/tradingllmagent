@@ -172,6 +172,7 @@ def parse_strategy_spec(payload: dict[str, Any]) -> StrategySpec:
     _validate_parameters(parameters)
     _validate_exit(exit_spec)
     _validate_risk(risk)
+    _validate_controlled_grid(family, indicators, exit_spec, risk, anti_martingale)
 
     return StrategySpec(
         schema_version=int(payload["schema_version"]),
@@ -305,6 +306,35 @@ def _validate_risk(risk: dict[str, Any]) -> None:
     sizing_type = sizing.get("type")
     if sizing_type not in ALLOWED_POSITION_SIZING_TYPES:
         raise StrategySpecError(f"risk.position_sizing uses unsupported type: {sizing_type}")
+
+
+def _validate_controlled_grid(
+    family: str,
+    indicators: dict[str, Any],
+    exit_spec: dict[str, Any],
+    risk: dict[str, Any],
+    anti_martingale: dict[str, Any],
+) -> None:
+    if family != "controlled_grid":
+        return
+    range_indicators = {
+        name: config
+        for name, config in indicators.items()
+        if config.get("type") in {"z_score", "bollinger_bands"}
+    }
+    if not range_indicators:
+        raise StrategySpecError("controlled_grid requires a range-regime indicator")
+    max_grid_levels = int(anti_martingale.get("max_grid_levels", 0))
+    max_position_contracts = int(risk.get("max_position_contracts", 0))
+    if max_position_contracts <= 0:
+        raise StrategySpecError("controlled_grid requires positive risk.max_position_contracts")
+    if max_grid_levels > max_position_contracts:
+        raise StrategySpecError("controlled_grid max_grid_levels cannot exceed max_position_contracts")
+    if float(risk.get("max_daily_loss_r", 0)) <= 0:
+        raise StrategySpecError("controlled_grid requires positive risk.max_daily_loss_r")
+    stop_loss = _require_object(exit_spec.get("stop_loss"), "exit.stop_loss")
+    if float(stop_loss.get("value", 0)) <= 0:
+        raise StrategySpecError("controlled_grid requires positive hard stop loss")
 
 
 def _reject_codelike_values(value: Any, path: str = "strategy_spec") -> None:
