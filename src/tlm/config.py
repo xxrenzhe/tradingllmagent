@@ -28,6 +28,26 @@ class SymbolConfig:
     default_flatten_time: str
 
 
+@dataclass(frozen=True)
+class CostModelConfig:
+    name: str
+    tick_size: float
+    point_value: float
+    tick_value: float
+    slippage_ticks_per_side: float
+    round_trip_fees_usd: float
+
+    def to_dict(self) -> dict[str, float | str]:
+        return {
+            "name": self.name,
+            "tick_size": self.tick_size,
+            "point_value": self.point_value,
+            "tick_value": self.tick_value,
+            "slippage_ticks_per_side": self.slippage_ticks_per_side,
+            "round_trip_fees_usd": self.round_trip_fees_usd,
+        }
+
+
 def _load_json_yaml(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -77,3 +97,36 @@ def get_symbol(alias: str, config_dir: Path = DEFAULT_CONFIG_DIR) -> SymbolConfi
     except KeyError as exc:
         known = ", ".join(sorted(symbols)) or "<none>"
         raise ConfigError(f"Unknown symbol {alias!r}. Known symbols: {known}") from exc
+
+
+def load_cost_models(config_dir: Path = DEFAULT_CONFIG_DIR) -> dict[str, CostModelConfig]:
+    payload = _load_json_yaml(config_dir / "costs.yaml")
+    cost_models = payload.get("cost_models")
+    if not isinstance(cost_models, dict):
+        raise ConfigError("costs.yaml must contain a 'cost_models' object")
+
+    parsed: dict[str, CostModelConfig] = {}
+    for name, data in cost_models.items():
+        if not isinstance(data, dict):
+            raise ConfigError(f"Cost model {name} must be an object")
+        try:
+            parsed[name] = CostModelConfig(
+                name=name,
+                tick_size=float(data["tick_size"]),
+                point_value=float(data["point_value"]),
+                tick_value=float(data["tick_value"]),
+                slippage_ticks_per_side=float(data["slippage_ticks_per_side"]),
+                round_trip_fees_usd=float(data["round_trip_fees_usd"]),
+            )
+        except KeyError as exc:
+            raise ConfigError(f"Cost model {name} missing required key: {exc.args[0]}") from exc
+    return parsed
+
+
+def get_cost_model(name: str, config_dir: Path = DEFAULT_CONFIG_DIR) -> CostModelConfig:
+    cost_models = load_cost_models(config_dir)
+    try:
+        return cost_models[name]
+    except KeyError as exc:
+        known = ", ".join(sorted(cost_models)) or "<none>"
+        raise ConfigError(f"Unknown cost model {name!r}. Known cost models: {known}") from exc

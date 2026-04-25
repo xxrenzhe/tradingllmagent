@@ -162,6 +162,7 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["experiment_id"], "exp_test")
         self.assertEqual(rows[0]["execution_mode"], "bar")
+        self.assertEqual(rows[0]["cost_model"]["name"], "nq_conservative_v1")
         self.assertIn("passed", rows[0])
 
     def test_research_run_can_use_tick_replay_execution(self) -> None:

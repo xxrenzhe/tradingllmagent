@@ -8,7 +8,7 @@ from pathlib import Path
 from .bars import build_minute_bars_from_parquet
 from .backtest import result_to_json, run_bar_backtest, run_tick_backtest
 from .cli_dates import iter_dates
-from .config import ConfigError, get_symbol, load_symbols
+from .config import ConfigError, get_cost_model, get_symbol, load_symbols
 from .dukascopy import download_hour, iter_hours, parse_bi5_file
 from .experiments import (
     load_experiment_summary,
@@ -150,11 +150,18 @@ def cmd_strategy_validate(args: argparse.Namespace) -> int:
 def cmd_backtest_bar(args: argparse.Namespace) -> int:
     spec = load_strategy_spec(Path(args.spec))
     symbol = get_symbol(args.symbol or spec.symbol, Path(args.config_dir))
+    cost_model = get_cost_model(spec.cost_model, Path(args.config_dir))
     data_root = Path(args.data_root)
     date_from = parse_date(args.date_from)
     date_to = parse_date(args.date_to)
     files = bar_parquet_files(data_root, spec.symbol, spec.timeframe, date_from, date_to)
-    result = run_bar_backtest(spec, symbol, files, starting_equity=args.starting_equity)
+    result = run_bar_backtest(
+        spec,
+        symbol,
+        files,
+        starting_equity=args.starting_equity,
+        cost_model=cost_model,
+    )
     output = result_to_json(result)
     if args.output:
         output_path = Path(args.output)
@@ -169,11 +176,18 @@ def cmd_backtest_bar(args: argparse.Namespace) -> int:
 def cmd_backtest_tick(args: argparse.Namespace) -> int:
     spec = load_strategy_spec(Path(args.spec))
     symbol = get_symbol(args.symbol or spec.symbol, Path(args.config_dir))
+    cost_model = get_cost_model(spec.cost_model, Path(args.config_dir))
     data_root = Path(args.data_root)
     date_from = parse_date(args.date_from)
     date_to = parse_date(args.date_to)
     files = tick_parquet_files(data_root, spec.symbol, date_from, date_to)
-    result = run_tick_backtest(spec, symbol, files, starting_equity=args.starting_equity)
+    result = run_tick_backtest(
+        spec,
+        symbol,
+        files,
+        starting_equity=args.starting_equity,
+        cost_model=cost_model,
+    )
     output = result_to_json(result)
     if args.output:
         output_path = Path(args.output)
@@ -188,6 +202,7 @@ def cmd_backtest_tick(args: argparse.Namespace) -> int:
 def cmd_research_run(args: argparse.Namespace) -> int:
     spec = load_strategy_spec(Path(args.spec))
     symbol = get_symbol(args.symbol or spec.symbol, Path(args.config_dir))
+    cost_model = get_cost_model(spec.cost_model, Path(args.config_dir))
     data_root = Path(args.data_root)
     date_from = parse_date(args.date_from)
     date_to = parse_date(args.date_to)
@@ -225,6 +240,7 @@ def cmd_research_run(args: argparse.Namespace) -> int:
         max_parameter_combinations=args.max_parameter_combinations,
         allow_high_parameter_budget=args.allow_high_parameter_budget,
         execution_mode=args.execution_mode,
+        cost_model=cost_model,
     )
     for result in results:
         output_path = Path(args.experiments_root) / result.experiment_id / "leaderboard.json"

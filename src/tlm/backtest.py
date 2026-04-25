@@ -9,7 +9,7 @@ from typing import Sequence
 
 import duckdb
 
-from .config import SymbolConfig
+from .config import CostModelConfig, SymbolConfig
 from .metrics import BacktestMetrics, calculate_metrics
 from .strategy import StrategySpec
 
@@ -40,6 +40,7 @@ class Trade:
 class BacktestResult:
     strategy_name: str
     symbol: str
+    cost_model: dict
     trades: list[Trade]
     metrics: BacktestMetrics
 
@@ -47,6 +48,7 @@ class BacktestResult:
         return {
             "strategy_name": self.strategy_name,
             "symbol": self.symbol,
+            "cost_model": self.cost_model,
             "trades": [trade.to_dict() for trade in self.trades],
             "metrics": self.metrics.to_dict(),
         }
@@ -135,18 +137,20 @@ def run_bar_backtest(
     symbol_config: SymbolConfig,
     bar_files: Sequence[Path],
     starting_equity: float = 100_000,
+    cost_model: CostModelConfig | None = None,
 ) -> BacktestResult:
     if spec.strategy_family != "opening_range_breakout":
         raise ValueError("Phase 2 bar backtester supports opening_range_breakout only")
+    cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     bars = load_bar_rows(bar_files)
-    trades = run_opening_range_breakout(spec, symbol_config, bars)
+    trades = run_opening_range_breakout(spec, symbol_config, bars, cost_model)
     trade_pnls = [trade.net_pnl for trade in trades]
     equity = [starting_equity]
     for pnl in trade_pnls:
         equity.append(equity[-1] + pnl)
     days = len({bar["timestamp"].date() for bar in bars}) or 1
     metrics = calculate_metrics(trade_pnls, equity, starting_equity, days)
-    return BacktestResult(spec.name, spec.symbol, trades, metrics)
+    return BacktestResult(spec.name, spec.symbol, cost_model.to_dict(), trades, metrics)
 
 
 def run_tick_backtest(
@@ -154,27 +158,31 @@ def run_tick_backtest(
     symbol_config: SymbolConfig,
     tick_files: Sequence[Path],
     starting_equity: float = 100_000,
+    cost_model: CostModelConfig | None = None,
 ) -> BacktestResult:
     if spec.strategy_family != "opening_range_breakout":
         raise ValueError("Phase 3 tick replay supports opening_range_breakout only")
+    cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     ticks = load_tick_rows(tick_files)
-    trades = run_opening_range_breakout_tick_replay(spec, symbol_config, ticks)
+    trades = run_opening_range_breakout_tick_replay(spec, symbol_config, ticks, cost_model)
     trade_pnls = [trade.net_pnl for trade in trades]
     equity = [starting_equity]
     for pnl in trade_pnls:
         equity.append(equity[-1] + pnl)
     days = len({tick["timestamp"].date() for tick in ticks}) or 1
     metrics = calculate_metrics(trade_pnls, equity, starting_equity, days)
-    return BacktestResult(spec.name, spec.symbol, trades, metrics)
+    return BacktestResult(spec.name, spec.symbol, cost_model.to_dict(), trades, metrics)
 
 
 def run_opening_range_breakout(
     spec: StrategySpec,
     symbol_config: SymbolConfig,
     bars: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
 ) -> list[Trade]:
     if not bars:
         return []
+    cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     opening_range_minutes = int(
         spec.indicators.get("opening_range", {}).get(
             "minutes",
@@ -248,14 +256,14 @@ def run_opening_range_breakout(
 
                 if exit_reason and exit_price is not None:
                     trades.append(
-                        _close_position(position, bar, exit_price, exit_reason, symbol_config)
+                        _close_position(position, bar, exit_price, exit_reason, cost_model)
                     )
                     position = None
 
         if position is not None:
             last_bar = session_bars[-1]
             exit_price = last_bar["bid_close"] if position["side"] == "long" else last_bar["ask_close"]
-            trades.append(_close_position(position, last_bar, exit_price, "end_of_data", symbol_config))
+            trades.append(_close_position(position, last_bar, exit_price, "end_of_data", cost_model))
 
     return trades
 
@@ -264,9 +272,11 @@ def run_opening_range_breakout_tick_replay(
     spec: StrategySpec,
     symbol_config: SymbolConfig,
     ticks: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
 ) -> list[Trade]:
     if not ticks:
         return []
+    cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     opening_range_minutes = int(
         spec.indicators.get("opening_range", {}).get(
             "minutes",
@@ -316,7 +326,7 @@ def run_opening_range_breakout_tick_replay(
                     pending_side,
                     tick,
                     contracts,
-                    symbol_config,
+                    cost_model,
                 )
                 pending_side = None
 
@@ -328,11 +338,11 @@ def run_opening_range_breakout_tick_replay(
                     take_profit_points,
                     max_holding_minutes,
                     flatten_time,
-                    symbol_config,
+                    cost_model,
                 )
                 if exit_reason and exit_price is not None:
                     trades.append(
-                        _close_position(position, tick, exit_price, exit_reason, symbol_config)
+                        _close_position(position, tick, exit_price, exit_reason, cost_model)
                     )
                     position = None
                 continue
@@ -352,10 +362,10 @@ def run_opening_range_breakout_tick_replay(
             side = "sell" if position["side"] == "long" else "buy"
             exit_price = _align_price(
                 last_tick["bid"] if position["side"] == "long" else last_tick["ask"],
-                symbol_config.tick_size,
+                cost_model.tick_size,
                 side,
             )
-            trades.append(_close_position(position, last_tick, exit_price, "end_of_data", symbol_config))
+            trades.append(_close_position(position, last_tick, exit_price, "end_of_data", cost_model))
 
     return trades
 
@@ -364,12 +374,12 @@ def _open_tick_position(
     side: str,
     tick: dict,
     contracts: int,
-    symbol_config: SymbolConfig,
+    cost_model: CostModelConfig,
 ) -> dict:
     entry_side = "buy" if side == "long" else "sell"
     entry_price = _align_price(
         tick["ask"] if side == "long" else tick["bid"],
-        symbol_config.tick_size,
+        cost_model.tick_size,
         entry_side,
     )
     return {
@@ -388,32 +398,32 @@ def _tick_exit_signal(
     take_profit_points: float,
     max_holding_minutes: int,
     flatten_time: time,
-    symbol_config: SymbolConfig,
+    cost_model: CostModelConfig,
 ) -> tuple[str | None, float | None]:
     holding_minutes = (tick["timestamp"] - position["entry_time"]).total_seconds() / 60
     if position["side"] == "long":
         stop_price = position["entry_price"] - stop_points
         take_price = position["entry_price"] + take_profit_points
         if tick["bid"] <= stop_price:
-            return "stop_loss", _align_price(tick["bid"], symbol_config.tick_size, "sell")
+            return "stop_loss", _align_price(tick["bid"], cost_model.tick_size, "sell")
         if tick["bid"] >= take_price:
-            return "take_profit", _align_price(tick["bid"], symbol_config.tick_size, "sell")
+            return "take_profit", _align_price(tick["bid"], cost_model.tick_size, "sell")
         if holding_minutes >= max_holding_minutes:
-            return "max_holding", _align_price(tick["bid"], symbol_config.tick_size, "sell")
+            return "max_holding", _align_price(tick["bid"], cost_model.tick_size, "sell")
         if tick["timestamp"].time() >= flatten_time:
-            return "session_flatten", _align_price(tick["bid"], symbol_config.tick_size, "sell")
+            return "session_flatten", _align_price(tick["bid"], cost_model.tick_size, "sell")
         return None, None
 
     stop_price = position["entry_price"] + stop_points
     take_price = position["entry_price"] - take_profit_points
     if tick["ask"] >= stop_price:
-        return "stop_loss", _align_price(tick["ask"], symbol_config.tick_size, "buy")
+        return "stop_loss", _align_price(tick["ask"], cost_model.tick_size, "buy")
     if tick["ask"] <= take_price:
-        return "take_profit", _align_price(tick["ask"], symbol_config.tick_size, "buy")
+        return "take_profit", _align_price(tick["ask"], cost_model.tick_size, "buy")
     if holding_minutes >= max_holding_minutes:
-        return "max_holding", _align_price(tick["ask"], symbol_config.tick_size, "buy")
+        return "max_holding", _align_price(tick["ask"], cost_model.tick_size, "buy")
     if tick["timestamp"].time() >= flatten_time:
-        return "session_flatten", _align_price(tick["ask"], symbol_config.tick_size, "buy")
+        return "session_flatten", _align_price(tick["ask"], cost_model.tick_size, "buy")
     return None, None
 
 
@@ -439,17 +449,23 @@ def _close_position(
     bar: dict,
     exit_price: float,
     exit_reason: str,
-    symbol_config: SymbolConfig,
+    cost_model: CostModelConfig,
 ) -> Trade:
     direction = 1 if position["side"] == "long" else -1
     gross_pnl = (
         (exit_price - position["entry_price"])
         * direction
-        * symbol_config.point_value
+        * cost_model.point_value
         * position["contracts"]
     )
-    fees = 5.0 * position["contracts"]
-    slippage_cost = 2 * symbol_config.tick_size * symbol_config.point_value * position["contracts"]
+    fees = cost_model.round_trip_fees_usd * position["contracts"]
+    slippage_cost = (
+        2
+        * cost_model.slippage_ticks_per_side
+        * cost_model.tick_size
+        * cost_model.point_value
+        * position["contracts"]
+    )
     net_pnl = gross_pnl - fees - slippage_cost
     return Trade(
         symbol=bar["symbol"],
@@ -474,6 +490,17 @@ def _align_price(price: float, tick_size: float, side: str) -> float:
     if side == "sell":
         return floor(ticks) * tick_size
     raise ValueError(f"Unsupported side for price alignment: {side}")
+
+
+def default_cost_model(symbol_config: SymbolConfig, name: str) -> CostModelConfig:
+    return CostModelConfig(
+        name=name,
+        tick_size=symbol_config.tick_size,
+        point_value=symbol_config.point_value,
+        tick_value=symbol_config.tick_size * symbol_config.point_value,
+        slippage_ticks_per_side=1,
+        round_trip_fees_usd=5,
+    )
 
 
 def parse_session_range(value: str) -> tuple[time, time]:

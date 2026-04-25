@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from tlm.backtest import run_bar_backtest, run_tick_backtest
-from tlm.config import SymbolConfig
+from tlm.config import CostModelConfig, SymbolConfig, get_cost_model
 from tlm.dukascopy import Tick
 from tlm.storage import bar_path, normalized_tick_path, write_bars_parquet, write_ticks_parquet
 from tlm.strategy import StrategySpecError, load_strategy_spec, parse_strategy_spec
@@ -71,6 +71,13 @@ class StrategyValidationTests(unittest.TestCase):
         spec = load_strategy_spec(Path("strategies/example_opening_range_breakout.yaml"))
         self.assertEqual(spec.strategy_family, "opening_range_breakout")
         self.assertEqual(spec.symbol, "NQmain")
+
+    def test_cost_model_loads_from_config(self) -> None:
+        cost_model = get_cost_model("nq_conservative_v1", Path("configs"))
+
+        self.assertEqual(cost_model.name, "nq_conservative_v1")
+        self.assertAlmostEqual(cost_model.tick_size, 0.25)
+        self.assertAlmostEqual(cost_model.point_value, 20)
 
     def test_banned_family_rejected(self) -> None:
         payload = base_spec()
@@ -193,6 +200,44 @@ class TickReplayBacktestTests(unittest.TestCase):
         self.assertAlmostEqual(trade.exit_price, 98.5)
         self.assertAlmostEqual(trade.gross_pnl, -55.0)
         self.assertAlmostEqual(trade.net_pnl, -70.0)
+
+    def test_tick_replay_uses_configurable_cost_model(self) -> None:
+        start = datetime(2025, 3, 19, 13, 30)
+        ticks = [
+            Tick(start + timedelta(seconds=0), bid=99.9, ask=100.1, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=1), bid=100.0, ask=100.2, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=2), bid=100.1, ask=100.3, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=3), bid=104.0, ask=104.2, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=3, seconds=1), bid=104.1, ask=104.3, bid_size=1, ask_size=1),
+            Tick(start + timedelta(minutes=4), bid=107.6, ask=107.8, bid_size=1, ask_size=1),
+        ]
+        expensive_costs = CostModelConfig(
+            name="expensive_test",
+            tick_size=0.25,
+            point_value=20,
+            tick_value=5,
+            slippage_ticks_per_side=2,
+            round_trip_fees_usd=20,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            tick_path = normalized_tick_path(data_root, "NQmain", start.date())
+            write_ticks_parquet(tick_path, "NQmain", ticks)
+
+            result = run_tick_backtest(
+                parse_strategy_spec(base_spec()),
+                symbol_config(),
+                [tick_path],
+                cost_model=expensive_costs,
+            )
+
+        trade = result.trades[0]
+        self.assertAlmostEqual(trade.gross_pnl, 60.0)
+        self.assertAlmostEqual(trade.fees, 20.0)
+        self.assertAlmostEqual(trade.slippage_cost, 20.0)
+        self.assertAlmostEqual(trade.net_pnl, 20.0)
+        self.assertEqual(result.cost_model["name"], "expensive_test")
 
 
 if __name__ == "__main__":
