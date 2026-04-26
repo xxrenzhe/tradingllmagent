@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from .nt8_protocol import build_order_update, detect_external_intervention
+
 
 SUPPORTED_COMMANDS = {
     "marketOrder",
@@ -48,6 +50,7 @@ class Nt8SimGateway:
     brackets: list[dict[str, Any]] = field(default_factory=list)
     command_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
     incident_events: list[dict[str, Any]] = field(default_factory=list)
+    order_update_events: list[dict[str, Any]] = field(default_factory=list)
     sequence: int = 0
     read_only: bool = False
     safe_mode: bool = False
@@ -64,6 +67,13 @@ class Nt8SimGateway:
             "position_count": len([qty for qty in self.positions.values() if qty]),
             "sequence": self.sequence,
             "checked_at": datetime.now(UTC).isoformat(),
+        }
+
+    def order_updates(self) -> dict[str, Any]:
+        return {
+            "mode": "nt8_sim",
+            "event_count": len(self.order_update_events),
+            "events": list(self.order_update_events),
         }
 
     def execute(self, command: dict[str, Any]) -> dict[str, Any]:
@@ -134,6 +144,29 @@ class Nt8SimGateway:
             "safe_mode": self.safe_mode,
             "checked_at": datetime.now(UTC).isoformat(),
         }
+
+    def record_external_intervention(
+        self,
+        *,
+        account: str,
+        instrument: str,
+        order_id: str,
+        status: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        self.sequence += 1
+        event = build_order_update(
+            sequence=self.sequence,
+            order_id=order_id,
+            status=status,
+            account=account,
+            instrument=instrument,
+            source="manual",
+            details={"reason": reason},
+        )
+        self.order_update_events.append(event)
+        self.enter_safe_mode("external_intervention")
+        return event
 
     def _handle_marketOrder(self, command: dict[str, Any]) -> dict[str, Any]:
         account = self._required_account(command)
@@ -282,7 +315,7 @@ class Nt8SimGateway:
         brackets: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         self.sequence += 1
-        return {
+        payload = {
             "command_id": command.get("command_id") or f"cmd_{uuid4().hex}",
             "correlation_id": command.get("correlation_id"),
             "idempotency_key": command.get("idempotency_key"),
@@ -299,6 +332,20 @@ class Nt8SimGateway:
             ],
             "acknowledged_at": datetime.now(UTC).isoformat(),
         }
+        for order in payload["orders"]:
+            update = build_order_update(
+                sequence=self.sequence,
+                order_id=order["order_id"],
+                status=order["status"],
+                account=order["account"],
+                instrument=order["instrument"],
+                command_id=payload["command_id"],
+                source="gateway",
+            )
+            if detect_external_intervention(update, [payload["command_id"]]):
+                self.enter_safe_mode("external_intervention")
+            self.order_update_events.append(update)
+        return payload
 
     def _incident(self, event_type: str, reason: str) -> dict[str, Any]:
         event = {

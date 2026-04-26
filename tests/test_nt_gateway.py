@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 from tlm.nt_gateway import Nt8SimGateway
+from tlm.nt8_protocol import (
+    append_gateway_event,
+    build_heartbeat,
+    build_order_update,
+    detect_external_intervention,
+    gateway_protocol_manifest,
+    validate_gateway_command,
+)
 
 
 class Nt8SimGatewayTests(unittest.TestCase):
@@ -166,6 +175,93 @@ class Nt8SimGatewayTests(unittest.TestCase):
         self.assertEqual(incident["event_type"], "read_only_enabled")
         self.assertEqual(ack["status"], "rejected")
         self.assertIn("gateway_read_only", ack["errors"])
+
+    def test_protocol_manifest_and_command_validation_enforce_sim_boundary(self) -> None:
+        manifest = gateway_protocol_manifest()
+        valid = validate_gateway_command(
+            {
+                "type": "marketOrder",
+                "correlation_id": "corr",
+                "idempotency_key": "idem",
+                "account": "Sim101",
+            }
+        )
+        live = validate_gateway_command(
+            {
+                "type": "marketOrder",
+                "correlation_id": "corr",
+                "idempotency_key": "idem",
+                "account": "Live101",
+            }
+        )
+
+        self.assertEqual(manifest["protocol_version"], "nt8-gateway.v1")
+        self.assertIn("marketBatch", manifest["commands"])
+        self.assertTrue(valid["valid"])
+        self.assertFalse(live["valid"])
+        self.assertIn("non_sim_account_blocked", live["errors"])
+
+    def test_gateway_events_are_append_only_and_detect_external_intervention(self) -> None:
+        heartbeat = build_heartbeat(sequence=1, accounts=["Sim101"], instruments=["NQ 06-26"])
+        update = build_order_update(
+            sequence=2,
+            order_id="order_1",
+            status="filled",
+            account="Sim101",
+            instrument="NQ 06-26",
+            command_id="cmd_1",
+        )
+        manual = build_order_update(
+            sequence=3,
+            order_id="manual_1",
+            status="cancelled",
+            account="Sim101",
+            instrument="NQ 06-26",
+            source="manual",
+        )
+        log = append_gateway_event([], heartbeat)
+        log = append_gateway_event(log, update)
+
+        self.assertEqual([event["sequence"] for event in log], [1, 2])
+        self.assertFalse(detect_external_intervention(update, ["cmd_1"]))
+        self.assertTrue(detect_external_intervention(manual, ["cmd_1"]))
+        with self.assertRaisesRegex(ValueError, "sequence_must_increase"):
+            append_gateway_event(log, update)
+
+    def test_sim_gateway_records_order_updates_and_external_interventions(self) -> None:
+        gateway = Nt8SimGateway()
+        ack = gateway.execute(
+            {
+                "type": "marketOrder",
+                "command_id": "cmd_order",
+                "idempotency_key": "order-1",
+                "correlation_id": "corr-1",
+                "account": "Sim101",
+                "instrument": "NQ 06-26",
+                "action": "buy",
+                "qty": 1,
+            }
+        )
+        external = gateway.record_external_intervention(
+            account="Sim101",
+            instrument="NQ 06-26",
+            order_id="manual_cancel",
+            status="cancelled",
+            reason="operator_changed_order_in_nt8",
+        )
+
+        self.assertEqual(ack["status"], "filled")
+        self.assertEqual(gateway.order_updates()["event_count"], 2)
+        self.assertEqual(gateway.order_updates()["events"][0]["payload"]["command_id"], "cmd_order")
+        self.assertEqual(external["event_type"], "external_intervention")
+        self.assertTrue(gateway.safe_mode)
+
+    def test_nt8_gateway_scaffold_files_exist(self) -> None:
+        root = Path("tools/nt8-gateway")
+
+        self.assertTrue((root / "TradingLlmAgentGateway.csproj").exists())
+        self.assertTrue((root / "GatewayProtocol.cs").exists())
+        self.assertIn("nt8-gateway.v1", (root / "GatewayProtocol.cs").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
