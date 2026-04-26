@@ -9,6 +9,8 @@ from contextlib import redirect_stdout
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import duckdb
+
 from tlm.backtest import BacktestResult, Trade
 from tlm.cli import main
 from tlm.config import SymbolConfig
@@ -261,8 +263,48 @@ class RollingValidationTests(unittest.TestCase):
             output = experiments_root / "exp_test" / "leaderboard.json"
             write_research_result(output, result)
             rows = load_leaderboard(experiments_root)
+            manifest = json.loads((output.parent / "manifest.json").read_text(encoding="utf-8"))
+            con = duckdb.connect(":memory:")
+            try:
+                trade_rows = con.execute(
+                    "SELECT COUNT(*) FROM read_parquet(?)",
+                    [str(output.parent / "trades.parquet")],
+                ).fetchone()[0]
+                equity_rows = con.execute(
+                    "SELECT COUNT(*) FROM read_parquet(?)",
+                    [str(output.parent / "equity.parquet")],
+                ).fetchone()[0]
+                metric_rows = con.execute(
+                    "SELECT COUNT(*) FROM read_parquet(?)",
+                    [str(output.parent / "fold_metrics.parquet")],
+                ).fetchone()[0]
+                metric_splits = {
+                    row[0]
+                    for row in con.execute(
+                        "SELECT DISTINCT split FROM read_parquet(?)",
+                        [str(output.parent / "fold_metrics.parquet")],
+                    ).fetchall()
+                }
+                trade_splits = {
+                    row[0]
+                    for row in con.execute(
+                        "SELECT DISTINCT split FROM read_parquet(?)",
+                        [str(output.parent / "trades.parquet")],
+                    ).fetchall()
+                }
+            finally:
+                con.close()
 
         self.assertEqual(len(rows), 1)
+        self.assertEqual(manifest["experiment_id"], "exp_test")
+        self.assertEqual(manifest["leaderboard_path"], "leaderboard.json")
+        self.assertEqual(manifest["artifacts"]["fold_metrics"]["row_count"], len(result.split_artifacts))
+        self.assertEqual(manifest["artifacts"]["trades"]["row_count"], trade_rows)
+        self.assertEqual(manifest["artifacts"]["equity"]["row_count"], equity_rows)
+        self.assertEqual(metric_rows, len(result.split_artifacts))
+        self.assertEqual(equity_rows, trade_rows + len(result.split_artifacts))
+        self.assertEqual(metric_splits, {"train", "validation", "test", "final_holdout"})
+        self.assertIn("final_holdout", trade_splits)
         self.assertEqual(rows[0]["experiment_id"], "exp_test")
         self.assertEqual(rows[0]["execution_mode"], "bar")
         self.assertTrue(rows[0]["data_version_hash"])

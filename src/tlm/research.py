@@ -7,6 +7,8 @@ from pathlib import Path
 from statistics import median
 from typing import Sequence
 
+import duckdb
+
 from .backtest import (
     BacktestResult,
     Trade,
@@ -36,6 +38,18 @@ from .validation import (
     has_overlapping_test_folds,
     non_overlapping_test_fold_indexes,
 )
+
+
+@dataclass(frozen=True)
+class ResearchSplitArtifact:
+    split: str
+    fold_index: int | None
+    start: date
+    end: date
+    data_version_hash: str
+    metrics: BacktestMetrics
+    trades: list[Trade]
+    starting_equity: float
 
 
 @dataclass(frozen=True)
@@ -73,6 +87,7 @@ class ResearchRunResult:
     final_holdout_metrics: BacktestMetrics
     gates: dict
     robustness_score: float | None
+    split_artifacts: list[ResearchSplitArtifact]
 
     def to_dict(self) -> dict:
         return {
@@ -188,6 +203,7 @@ def run_research_bar_validation(
     all_test_equity = [starting_equity]
     all_test_trades: list[Trade] = []
     test_trades_by_fold: dict[int, list[Trade]] = {}
+    split_artifacts: list[ResearchSplitArtifact] = []
 
     for fold in plan.folds:
         train = _run_range(
@@ -232,6 +248,40 @@ def run_research_bar_validation(
             all_test_trades.append(trade)
             all_test_pnls.append(trade.net_pnl)
             all_test_equity.append(all_test_equity[-1] + trade.net_pnl)
+        split_artifacts.extend(
+            [
+                ResearchSplitArtifact(
+                    split="train",
+                    fold_index=fold.index,
+                    start=fold.train.start,
+                    end=fold.train.end,
+                    data_version_hash=train.data_version_hash,
+                    metrics=train.metrics,
+                    trades=train.trades,
+                    starting_equity=starting_equity,
+                ),
+                ResearchSplitArtifact(
+                    split="validation",
+                    fold_index=fold.index,
+                    start=fold.validation.start,
+                    end=fold.validation.end,
+                    data_version_hash=validation.data_version_hash,
+                    metrics=validation.metrics,
+                    trades=validation.trades,
+                    starting_equity=starting_equity,
+                ),
+                ResearchSplitArtifact(
+                    split="test",
+                    fold_index=fold.index,
+                    start=fold.test.start,
+                    end=fold.test.end,
+                    data_version_hash=test.data_version_hash,
+                    metrics=test.metrics,
+                    trades=test.trades,
+                    starting_equity=starting_equity,
+                ),
+            ]
+        )
         fold_results.append(
             {
                 "fold": fold.to_dict(),
@@ -291,6 +341,18 @@ def run_research_bar_validation(
         starting_equity,
         execution_mode,
         active_cost_model,
+    )
+    split_artifacts.append(
+        ResearchSplitArtifact(
+            split="final_holdout",
+            fold_index=None,
+            start=plan.final_holdout.start,
+            end=plan.final_holdout.end,
+            data_version_hash=holdout.data_version_hash,
+            metrics=holdout.metrics,
+            trades=holdout.trades,
+            starting_equity=starting_equity,
+        )
     )
     round_trip_cost = calculate_round_trip_cost(active_cost_model)
     validation_to_test_decay = calculate_sharpe_decay(
@@ -373,6 +435,7 @@ def run_research_bar_validation(
         final_holdout_metrics=holdout.metrics,
         gates=gates.to_dict(),
         robustness_score=score,
+        split_artifacts=split_artifacts,
     )
 
 
@@ -548,6 +611,200 @@ def _data_files_for_range(
 def write_research_result(path: Path, result: ResearchRunResult) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_research_artifacts(path.parent, result, leaderboard_path=path)
+
+
+def write_research_artifacts(
+    experiment_dir: Path,
+    result: ResearchRunResult,
+    leaderboard_path: Path | None = None,
+) -> None:
+    experiment_dir.mkdir(parents=True, exist_ok=True)
+    artifact_paths = {
+        "trades": experiment_dir / "trades.parquet",
+        "equity": experiment_dir / "equity.parquet",
+        "fold_metrics": experiment_dir / "fold_metrics.parquet",
+    }
+    row_counts = {
+        "trades": _write_research_trades(artifact_paths["trades"], result),
+        "equity": _write_research_equity(artifact_paths["equity"], result),
+        "fold_metrics": _write_research_fold_metrics(artifact_paths["fold_metrics"], result),
+    }
+    manifest = {
+        "schema_version": 1,
+        "experiment_id": result.experiment_id,
+        "execution_mode": result.execution_mode,
+        "data_version_hash": result.data_version_hash,
+        "strategy_name": result.strategy_name,
+        "strategy_spec_hash": result.strategy_spec_hash,
+        "prompt_hash": result.prompt_hash,
+        "leaderboard_path": (
+            leaderboard_path.name
+            if leaderboard_path and leaderboard_path.parent == experiment_dir
+            else str(leaderboard_path) if leaderboard_path else None
+        ),
+        "artifacts": {
+            name: {"path": path.name, "row_count": row_counts[name]}
+            for name, path in artifact_paths.items()
+        },
+    }
+    (experiment_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_research_trades(path: Path, result: ResearchRunResult) -> int:
+    rows = []
+    for artifact in result.split_artifacts:
+        for trade_index, trade in enumerate(artifact.trades):
+            rows.append(
+                (
+                    result.experiment_id,
+                    result.execution_mode,
+                    artifact.split,
+                    artifact.fold_index,
+                    trade_index,
+                    artifact.start,
+                    artifact.end,
+                    artifact.data_version_hash,
+                    trade.symbol,
+                    trade.side,
+                    trade.entry_time,
+                    trade.exit_time,
+                    trade.entry_price,
+                    trade.exit_price,
+                    trade.contracts,
+                    trade.gross_pnl,
+                    trade.fees,
+                    trade.slippage_cost,
+                    trade.net_pnl,
+                    trade.entry_reason,
+                    trade.exit_reason,
+                )
+            )
+    _write_parquet_rows(
+        path,
+        "research_trades",
+        (
+            "experiment_id VARCHAR, execution_mode VARCHAR, split VARCHAR, fold_index INTEGER, "
+            "trade_index INTEGER, start_date DATE, end_date DATE, data_version_hash VARCHAR, "
+            "symbol VARCHAR, side VARCHAR, entry_time TIMESTAMP, exit_time TIMESTAMP, "
+            "entry_price DOUBLE, exit_price DOUBLE, contracts INTEGER, gross_pnl DOUBLE, "
+            "fees DOUBLE, slippage_cost DOUBLE, net_pnl DOUBLE, entry_reason VARCHAR, "
+            "exit_reason VARCHAR"
+        ),
+        "INSERT INTO research_trades VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    return len(rows)
+
+
+def _write_research_equity(path: Path, result: ResearchRunResult) -> int:
+    rows = []
+    for artifact in result.split_artifacts:
+        equity = artifact.starting_equity
+        rows.append(
+            (
+                result.experiment_id,
+                result.execution_mode,
+                artifact.split,
+                artifact.fold_index,
+                0,
+                artifact.start,
+                artifact.end,
+                artifact.data_version_hash,
+                None,
+                equity,
+                0.0,
+            )
+        )
+        for sequence, trade in enumerate(artifact.trades, start=1):
+            equity += trade.net_pnl
+            rows.append(
+                (
+                    result.experiment_id,
+                    result.execution_mode,
+                    artifact.split,
+                    artifact.fold_index,
+                    sequence,
+                    artifact.start,
+                    artifact.end,
+                    artifact.data_version_hash,
+                    trade.exit_time,
+                    equity,
+                    trade.net_pnl,
+                )
+            )
+    _write_parquet_rows(
+        path,
+        "research_equity",
+        (
+            "experiment_id VARCHAR, execution_mode VARCHAR, split VARCHAR, fold_index INTEGER, "
+            "sequence INTEGER, start_date DATE, end_date DATE, data_version_hash VARCHAR, "
+            "timestamp TIMESTAMP, equity DOUBLE, net_pnl DOUBLE"
+        ),
+        "INSERT INTO research_equity VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    return len(rows)
+
+
+def _write_research_fold_metrics(path: Path, result: ResearchRunResult) -> int:
+    rows = []
+    for artifact in result.split_artifacts:
+        metrics = artifact.metrics
+        rows.append(
+            (
+                result.experiment_id,
+                result.execution_mode,
+                artifact.split,
+                artifact.fold_index,
+                artifact.start,
+                artifact.end,
+                artifact.data_version_hash,
+                metrics.trade_count,
+                metrics.net_pnl,
+                metrics.gross_profit,
+                metrics.gross_loss,
+                metrics.profit_factor,
+                metrics.sharpe,
+                metrics.max_drawdown,
+                metrics.annual_trades,
+                metrics.avg_trade_net_pnl,
+            )
+        )
+    _write_parquet_rows(
+        path,
+        "research_fold_metrics",
+        (
+            "experiment_id VARCHAR, execution_mode VARCHAR, split VARCHAR, fold_index INTEGER, "
+            "start_date DATE, end_date DATE, data_version_hash VARCHAR, trade_count INTEGER, "
+            "net_pnl DOUBLE, gross_profit DOUBLE, gross_loss DOUBLE, profit_factor DOUBLE, "
+            "sharpe DOUBLE, max_drawdown DOUBLE, annual_trades DOUBLE, avg_trade_net_pnl DOUBLE"
+        ),
+        "INSERT INTO research_fold_metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    return len(rows)
+
+
+def _write_parquet_rows(
+    path: Path,
+    table_name: str,
+    schema_sql: str,
+    insert_sql: str,
+    rows: Sequence[tuple],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    con = duckdb.connect(":memory:")
+    try:
+        con.execute(f"CREATE TABLE {table_name} ({schema_sql})")
+        if rows:
+            con.executemany(insert_sql, rows)
+        con.execute(f"COPY {table_name} TO ? (FORMAT PARQUET)", [str(path)])
+    finally:
+        con.close()
 
 
 def load_leaderboard(experiments_root: Path) -> list[dict]:
