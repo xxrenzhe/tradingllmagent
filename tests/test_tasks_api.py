@@ -9,6 +9,7 @@ from pathlib import Path
 import duckdb
 
 from tlm.api import (
+    build_cost_calibration_response,
     build_experiment_artifacts_response,
     build_nt_export_signal_response,
     build_paper_replay_response,
@@ -487,7 +488,35 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/events/context", paths)
         self.assertIn("/api/monitor/report", paths)
         self.assertIn("/api/execution/readiness", paths)
+        self.assertIn("/api/execution/approval-queue", paths)
+        self.assertIn("/api/readiness/external-validation", paths)
+        self.assertIn("/api/calibration/costs", paths)
         self.assertIn("/api/modules/memory", paths)
+        self.assertIn("/api/gateways/nt8/order-updates", paths)
+        self.assertIn("/api/gateways/nt8/incidents", paths)
+
+    def test_cost_calibration_api_helper_builds_artifact_without_fastapi(self) -> None:
+        artifact = build_cost_calibration_response(
+            {
+                "cost_model": "nq_conservative_v1",
+                "samples": [
+                    {
+                        "source": "paper_shadow",
+                        "timestamp": "2026-04-27T13:30:00Z",
+                        "instrument": "NQ 06-26",
+                        "observed_spread_ticks": 2,
+                        "observed_slippage_ticks": 1,
+                    }
+                ],
+                "data_quality_report": {"status": "ok"},
+                "proxy_instrument": "USATECHIDXUSD",
+                "executable_instrument": "CME_NQ",
+            }
+        )
+
+        self.assertEqual(artifact["artifact"], "cost_calibration")
+        self.assertTrue(artifact["proxy_warning"])
+        self.assertEqual(artifact["summary"]["sample_count"], 1)
 
     def test_openapi_contract_covers_webui_and_runtime_paths(self) -> None:
         contract = Path("docs/openapi/tradingllmagent.openapi.yaml").read_text(encoding="utf-8")
@@ -503,7 +532,12 @@ class APIImportTests(unittest.TestCase):
             "/api/execution/intents",
             "/api/execution/paper-shadow",
             "/api/execution/readiness",
+            "/api/execution/approval-queue",
+            "/api/readiness/external-validation",
+            "/api/calibration/costs",
             "/api/gateways/nt8/commands",
+            "/api/gateways/nt8/order-updates",
+            "/api/gateways/nt8/incidents",
         ]
 
         for path in required_paths:

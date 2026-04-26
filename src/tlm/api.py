@@ -7,14 +7,21 @@ from datetime import timedelta
 from pathlib import Path
 from time import sleep
 
+from .calibration import build_cost_calibration_artifact
 from .config import load_symbols
+from .config import get_cost_model
 from .events import (
     build_event_context_rows,
     load_event_calendar,
     validate_event_calendar,
 )
 from .experiments import load_experiment_audit_logs, load_experiment_summary
-from .execution import build_execution_intent_response, evaluate_live_readiness, submit_paper_shadow
+from .execution import (
+    build_execution_intent_response,
+    evaluate_live_readiness,
+    list_approval_queue,
+    submit_paper_shadow,
+)
 from .modules import (
     discover_module_memory_files,
     load_module_performance_memory,
@@ -24,6 +31,7 @@ from .modules import (
 from .monitor import build_monitor_report
 from .nt_gateway import Nt8SimGateway
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
+from .readiness import build_external_validation_artifact
 from .research import load_leaderboard_report, load_research_artifacts
 from .storage import bar_path
 from .strategy import StrategySpecError, load_strategy_spec
@@ -203,6 +211,19 @@ def build_monitor_report_response(payload: dict) -> dict:
         bar_files=files,
         events=events,
         proximity_points=float(payload.get("proximity_points", 2.0)),
+    )
+
+
+def build_cost_calibration_response(payload: dict) -> dict:
+    cost_model_name = str(payload.get("cost_model", "nq_conservative_v1"))
+    config_dir = Path(payload.get("config_dir", "configs"))
+    baseline = get_cost_model(cost_model_name, config_dir)
+    return build_cost_calibration_artifact(
+        baseline=baseline,
+        samples=payload.get("samples", []),
+        data_quality_report=dict(payload.get("data_quality_report") or {}),
+        proxy_instrument=str(payload.get("proxy_instrument", "USATECHIDXUSD")),
+        executable_instrument=str(payload.get("executable_instrument", "CME_NQ")),
     )
 
 
@@ -457,6 +478,30 @@ def create_app():
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.get("/api/execution/approval-queue")
+    def execution_approval_queue(
+        execution_db: str = "experiments/execution.sqlite3",
+        limit: int = 100,
+    ) -> dict:
+        return list_approval_queue(Path(execution_db), limit=limit)
+
+    @app.post("/api/readiness/external-validation")
+    def readiness_external_validation(payload: dict = Body(...)) -> dict:
+        try:
+            return build_external_validation_artifact(
+                str(payload.get("stage", "")),
+                dict(payload.get("evidence") or {}),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/calibration/costs")
+    def calibration_costs(payload: dict = Body(...)) -> dict:
+        try:
+            return build_cost_calibration_response(payload)
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/modules")
     def modules_list() -> dict:
         return {"modules": strategy_module_catalog()}
@@ -488,6 +533,14 @@ def create_app():
     @app.post("/api/gateways/nt8/reconciliation")
     def nt8_reconciliation_post(payload: dict = Body(default={})) -> dict:
         return nt8_gateway.reconciliation_report(payload.get("expected_positions", []))
+
+    @app.get("/api/gateways/nt8/order-updates")
+    def nt8_order_updates() -> dict:
+        return nt8_gateway.order_updates()
+
+    @app.get("/api/gateways/nt8/incidents")
+    def nt8_incidents() -> dict:
+        return {"incidents": nt8_gateway.incident_events, "count": len(nt8_gateway.incident_events)}
 
     @app.post("/api/incidents")
     def nt8_incident(payload: dict = Body(...)) -> dict:

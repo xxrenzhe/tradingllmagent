@@ -579,6 +579,31 @@ def load_execution_state(path: Path, intent_id: str) -> dict[str, Any]:
     }
 
 
+def list_approval_queue(path: Path, limit: int = 100) -> dict[str, Any]:
+    with connect_execution_store(path) as connection:
+        rows = connection.execute(
+            """
+            SELECT intent_id, status, payload_json, created_at, updated_at
+            FROM execution_intents
+            WHERE status = 'pending_human_approval'
+            ORDER BY updated_at ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    intents = [
+        {
+            "intent_id": row[0],
+            "status": row[1],
+            "intent": json.loads(row[2]),
+            "created_at": row[3],
+            "updated_at": row[4],
+        }
+        for row in rows
+    ]
+    return {"status": "ok", "pending_count": len(intents), "intents": intents}
+
+
 def transition_execution_state(
     path: Path,
     intent_id: str,

@@ -258,6 +258,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessDecision"
+  /api/execution/approval-queue:
+    get:
+      summary: List execution intents pending human approval.
+      responses:
+        "200":
+          description: Approval queue.
+  /api/readiness/external-validation:
+    post:
+      summary: Build an external validation evidence artifact.
+      responses:
+        "200":
+          description: External validation artifact.
+  /api/calibration/costs:
+    post:
+      summary: Build a cost model calibration artifact from runtime samples.
+      responses:
+        "200":
+          description: Cost calibration artifact.
   /api/modules:
     get:
       summary: List strategy modules in the local catalog.
@@ -324,6 +342,18 @@ paths:
       responses:
         "200":
           description: Reconciliation report.
+  /api/gateways/nt8/order-updates:
+    get:
+      summary: List append-only NT8 gateway order update events.
+      responses:
+        "200":
+          description: Order update event stream.
+  /api/gateways/nt8/incidents:
+    get:
+      summary: List NT8 gateway incidents and external interventions.
+      responses:
+        "200":
+          description: Incident timeline.
   /api/incidents:
     post:
       summary: Record an incident or force gateway safety mode.

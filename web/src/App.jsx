@@ -53,6 +53,11 @@ export default function App() {
     evidence: "{\"trading_days\":0,\"replay_consistent\":false,\"max_allowed_drift\":1}"
   });
   const [readinessDecision, setReadinessDecision] = useState(null);
+  const [externalValidation, setExternalValidation] = useState(null);
+  const [gatewayOverview, setGatewayOverview] = useState(null);
+  const [approvalQueue, setApprovalQueue] = useState(null);
+  const [costCalibration, setCostCalibration] = useState(null);
+  const [costSampleJson, setCostSampleJson] = useState("[]");
   const [moduleMemory, setModuleMemory] = useState(null);
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
@@ -221,6 +226,47 @@ export default function App() {
     });
     setReadinessDecision(payload);
     return { task_id: `readiness ${payload.decision}` };
+  }
+
+  async function evaluateExternalValidation() {
+    const payload = await apiRequest(apiBase, "/api/readiness/external-validation", {
+      method: "POST",
+      body: JSON.stringify({
+        stage: readinessForm.stage,
+        evidence: parseJsonObject(readinessForm.evidence, "Readiness Evidence")
+      })
+    });
+    setExternalValidation(payload);
+    return { task_id: `external validation ${payload.decision?.decision ?? "checked"}` };
+  }
+
+  async function refreshGatewayOverview() {
+    const [health, approval, reconciliation, incidents, orderUpdates] = await Promise.all([
+      apiRequest(apiBase, "/api/gateways/nt8/health"),
+      apiRequest(apiBase, "/api/execution/approval-queue"),
+      apiRequest(apiBase, "/api/gateways/nt8/reconciliation"),
+      apiRequest(apiBase, "/api/gateways/nt8/incidents"),
+      apiRequest(apiBase, "/api/gateways/nt8/order-updates")
+    ]);
+    setGatewayOverview({ health, reconciliation, incidents, orderUpdates });
+    setApprovalQueue(approval);
+    return { task_id: "gateway overview refreshed" };
+  }
+
+  async function buildCostCalibration() {
+    const samples = parseJsonArray(costSampleJson, "Cost Samples");
+    const payload = await apiRequest(apiBase, "/api/calibration/costs", {
+      method: "POST",
+      body: JSON.stringify({
+        cost_model: "nq_conservative_v1",
+        samples,
+        data_quality_report: quality ?? {},
+        proxy_instrument: "USATECHIDXUSD",
+        executable_instrument: "CME_NQ"
+      })
+    });
+    setCostCalibration(payload);
+    return { task_id: "cost calibration built" };
   }
 
   async function refreshModuleMemory() {
@@ -553,10 +599,35 @@ export default function App() {
             <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Readiness", evaluateReadiness)}>
               Evaluate Readiness
             </ActionButton>
+            <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("External validation", evaluateExternalValidation)}>
+              Build Validation Artifact
+            </ActionButton>
+            <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Gateway", refreshGatewayOverview)}>
+              Refresh Gateway State
+            </ActionButton>
           </div>
           {readinessDecision ? <ReadinessSummary decision={readinessDecision} /> : <EmptyState title="No readiness decision" text="Evaluate evidence before enabling any execution stage." />}
+          {externalValidation ? <JsonBlock payload={externalValidation} /> : null}
+          {gatewayOverview ? <GatewayReadinessSummary overview={gatewayOverview} approvalQueue={approvalQueue} /> : null}
         </Panel>
       </section>
+
+      <Panel title="Cost Calibration" kicker="Proxy data and runtime drift">
+        <div className="form-grid compact-form">
+          <TextField
+            label="Calibration Samples JSON"
+            className="wide"
+            value={costSampleJson}
+            onChange={setCostSampleJson}
+          />
+        </div>
+        <div className="button-row">
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Cost calibration", buildCostCalibration)}>
+            Build Cost Calibration
+          </ActionButton>
+        </div>
+        {costCalibration ? <JsonBlock payload={costCalibration} /> : <EmptyState title="No cost calibration artifact" text="Paste spread/slippage samples from paper shadow, NT8 sim, or micro-live." />}
+      </Panel>
 
       <Panel title="Module Memory" kicker="Promotion, retirement, retest">
         <div className="button-row">
@@ -639,6 +710,14 @@ function parseJsonObject(value, label) {
   const payload = JSON.parse(trimmed);
   if (!payload || Array.isArray(payload) || typeof payload !== "object") {
     throw new Error(`${label} must be a JSON object`);
+  }
+  return payload;
+}
+
+function parseJsonArray(value, label) {
+  const payload = JSON.parse(value.trim() || "[]");
+  if (!Array.isArray(payload)) {
+    throw new Error(`${label} must be a JSON array`);
   }
   return payload;
 }
@@ -863,6 +942,26 @@ function ReadinessSummary({ decision }) {
         <small>{(decision.reasons ?? []).join(", ") || "all gates passed"}</small>
       </div>
       <JsonBlock payload={decision} />
+    </div>
+  );
+}
+
+function GatewayReadinessSummary({ overview, approvalQueue }) {
+  const health = overview.health ?? {};
+  const reconciliation = overview.reconciliation ?? {};
+  const incidents = overview.incidents ?? {};
+  const orderUpdates = overview.orderUpdates ?? {};
+  return (
+    <div className="readiness-grid">
+      <div className="strict-validation-grid">
+        <Metric label="Gateway Mode" value={health.mode ?? "-"} detail={health.safe_mode ? "safe mode active" : "normal"} />
+        <Metric label="Read Only" value={health.read_only ? "yes" : "no"} detail={`${health.order_count ?? 0} orders tracked`} />
+        <Metric label="Approval Queue" value={approvalQueue?.pending_count ?? 0} detail="pending human approval" />
+        <Metric label="Reconciliation" value={reconciliation.status ?? "-"} detail={`${(reconciliation.drift ?? []).length} drift rows`} />
+        <Metric label="Incidents" value={incidents.count ?? 0} detail="gateway incident timeline" />
+        <Metric label="Order Updates" value={orderUpdates.event_count ?? 0} detail="append-only gateway stream" />
+      </div>
+      <JsonBlock payload={{ overview, approvalQueue }} />
     </div>
   );
 }
