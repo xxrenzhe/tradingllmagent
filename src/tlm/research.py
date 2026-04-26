@@ -61,6 +61,7 @@ class ResearchRunResult:
     cost_model: dict
     strategy_name: str
     strategy_spec_hash: str
+    strategy_spec: dict
     prompt_hash: str
     variant_parameters: dict
     parameter_grid: dict
@@ -102,6 +103,7 @@ class ResearchRunResult:
             "cost_model": self.cost_model,
             "strategy_name": self.strategy_name,
             "strategy_spec_hash": self.strategy_spec_hash,
+            "strategy_spec": self.strategy_spec,
             "prompt_hash": self.prompt_hash,
             "variant_parameters": self.variant_parameters,
             "parameter_grid": self.parameter_grid,
@@ -439,6 +441,7 @@ def run_research_bar_validation(
         cost_model=active_cost_model.to_dict(),
         strategy_name=spec.name,
         strategy_spec_hash=current_strategy_spec_hash,
+        strategy_spec=spec.raw,
         prompt_hash=current_prompt_hash,
         variant_parameters=spec.raw.get("variant_parameters", {}),
         parameter_grid=grid_metadata.to_dict(),
@@ -953,20 +956,40 @@ def write_research_artifacts(
         "trades": experiment_dir / "trades.parquet",
         "equity": experiment_dir / "equity.parquet",
         "fold_metrics": experiment_dir / "fold_metrics.parquet",
+        "strategy_spec": experiment_dir / "strategy_spec.json",
+        "run_manifest": experiment_dir / "run_manifest.json",
     }
     row_counts = {
         "trades": _write_research_trades(artifact_paths["trades"], result),
         "equity": _write_research_equity(artifact_paths["equity"], result),
         "fold_metrics": _write_research_fold_metrics(artifact_paths["fold_metrics"], result),
+        "strategy_spec": 1,
+        "run_manifest": 1,
     }
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment_id": result.experiment_id,
         "execution_mode": result.execution_mode,
         "data_version_hash": result.data_version_hash,
         "strategy_name": result.strategy_name,
         "strategy_spec_hash": result.strategy_spec_hash,
         "prompt_hash": result.prompt_hash,
+        "snapshot": result.snapshot,
+        "cost_model": result.cost_model,
+        "validation_plan": result.validation_plan.to_dict(),
+        "reproducibility": {
+            "code_version": result.snapshot.get("code_version"),
+            "config_snapshot_hash": result.snapshot.get("config_snapshot_hash"),
+            "cost_model_hash": result.snapshot.get("cost_model_hash"),
+            "fold_definition_hash": result.snapshot.get("fold_definition_hash"),
+            "random_seed": result.snapshot.get("random_seed"),
+        },
+        "data_disclaimer": {
+            "data_source": "Dukascopy USATECHIDXUSD CFD proxy",
+            "system_symbol": result.strategy_spec.get("symbol"),
+            "not_cme_futures": True,
+            "note": "NQmain research uses a CFD proxy and must not be interpreted as executable CME NQ futures performance.",
+        },
         "leaderboard_path": (
             leaderboard_path.name
             if leaderboard_path and leaderboard_path.parent == experiment_dir
@@ -977,7 +1000,15 @@ def write_research_artifacts(
             for name, path in artifact_paths.items()
         },
     }
+    artifact_paths["strategy_spec"].write_text(
+        json.dumps(result.strategy_spec, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     (experiment_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    artifact_paths["run_manifest"].write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )

@@ -266,6 +266,8 @@ class RollingValidationTests(unittest.TestCase):
             rows = load_leaderboard(experiments_root)
             artifact_payload = load_research_artifacts(experiments_root, "exp_test")
             manifest = json.loads((output.parent / "manifest.json").read_text(encoding="utf-8"))
+            run_manifest = json.loads((output.parent / "run_manifest.json").read_text(encoding="utf-8"))
+            persisted_spec = json.loads((output.parent / "strategy_spec.json").read_text(encoding="utf-8"))
             con = duckdb.connect(":memory:")
             try:
                 trade_rows = con.execute(
@@ -299,7 +301,7 @@ class RollingValidationTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(artifact_payload["experiment_id"], "exp_test")
-        self.assertEqual(artifact_payload["manifest"]["schema_version"], 1)
+        self.assertEqual(artifact_payload["manifest"]["schema_version"], 2)
         self.assertEqual(len(artifact_payload["fold_metrics"]), len(result.split_artifacts))
         self.assertTrue(artifact_payload["trades"])
         self.assertTrue(artifact_payload["equity"])
@@ -308,6 +310,13 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(artifact_payload["distributions"]["by_direction"])
         self.assertTrue(artifact_payload["distributions"]["by_holding_minutes"])
         self.assertEqual(manifest["experiment_id"], "exp_test")
+        self.assertEqual(run_manifest, manifest)
+        self.assertEqual(persisted_spec["name"], result.strategy_name)
+        self.assertEqual(manifest["artifacts"]["strategy_spec"]["path"], "strategy_spec.json")
+        self.assertEqual(manifest["artifacts"]["run_manifest"]["path"], "run_manifest.json")
+        self.assertTrue(manifest["data_disclaimer"]["not_cme_futures"])
+        self.assertIn("CFD proxy", manifest["data_disclaimer"]["data_source"])
+        self.assertEqual(manifest["reproducibility"]["random_seed"], 123)
         self.assertEqual(manifest["leaderboard_path"], "leaderboard.json")
         self.assertEqual(manifest["artifacts"]["fold_metrics"]["row_count"], len(result.split_artifacts))
         self.assertEqual(manifest["artifacts"]["trades"]["row_count"], trade_rows)
