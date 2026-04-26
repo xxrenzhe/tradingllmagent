@@ -10,7 +10,13 @@ from pathlib import Path
 
 from tlm.cli import main
 from tlm.events import MacroEvent
-from tlm.monitor import build_market_snapshot, build_monitor_report, scan_key_levels
+from tlm.monitor import (
+    build_market_snapshot,
+    build_monitor_report,
+    build_structured_monitor_review,
+    scan_key_levels,
+    validate_monitor_review_result,
+)
 from tlm.storage import bar_path, write_bars_parquet
 from tlm.tasks import create_task
 from tlm.worker import run_task
@@ -125,6 +131,67 @@ class RuntimeMonitorTests(unittest.TestCase):
         self.assertEqual(report["event_context"]["event_state"], "release_window")
         self.assertEqual(report["signal"]["bucket"], "blocked")
         self.assertIn("blocked_by_high_impact_release_window", report["signal"]["reasons"])
+
+    def test_structured_monitor_review_routes_strong_signal_to_research_candidate(self) -> None:
+        bars = [
+            {"symbol": "NQmain", "timestamp": datetime(2026, 4, 27, 13, 30), "open": 100, "high": 101, "low": 99, "close": 100, "bid_close": 99.9, "ask_close": 100.1, "tick_count": 10, "avg_spread": 0.2},
+            {"symbol": "NQmain", "timestamp": datetime(2026, 4, 27, 13, 35), "open": 100, "high": 104, "low": 100, "close": 103.8, "bid_close": 103.7, "ask_close": 103.9, "tick_count": 10, "avg_spread": 0.2},
+        ]
+        snapshot = build_market_snapshot("NQmain", "5m", bars, opening_range_bars=1)
+        levels = scan_key_levels(snapshot, proximity_points=0.5)
+        report = {
+            "monitor_run_id": "review_test",
+            "snapshot": snapshot.to_dict(),
+            "key_levels": levels,
+            "event_context": {"event_state": "normal", "max_importance": None, "active_event_ids": []},
+            "signal": {"bucket": "strong_review", "strength": 0.8, "reasons": ["near_session_high"]},
+        }
+
+        review = build_structured_monitor_review(report, model="test-reviewer", temperature=0)
+
+        self.assertEqual(review["action"], "research_candidate")
+        self.assertEqual(review["decision_summarizer"]["direct_execution_allowed"], False)
+        self.assertTrue(review["decision_summarizer"]["research_candidate_requires_phase_1"])
+        self.assertTrue(review["prompt_hash"])
+        self.assertTrue(review["response_hash"])
+        self.assertIn("bull_case", review)
+        self.assertIn("bear_case", review)
+        self.assertIn("risk_review", review)
+        self.assertIn("invalidation", review)
+
+    def test_structured_monitor_review_blocks_high_impact_release_window(self) -> None:
+        day = datetime(2026, 4, 27, 13, 30)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            write_monitor_bars(data_root, day)
+            event = MacroEvent(
+                event_id="cpi_release",
+                name="CPI",
+                timestamp_utc=day + timedelta(minutes=15),
+                importance="high",
+                affected_symbols=["NQmain"],
+                pre_event_minutes=30,
+                release_window_minutes=5,
+                post_event_minutes=30,
+                policy_ref="high_impact_macro_v1",
+            )
+            report = build_monitor_report(
+                symbol="NQmain",
+                timeframe="5m",
+                bar_files=[bar_path(data_root, "NQmain", "5m", day.date())],
+                events=[event],
+            )
+
+        review = build_structured_monitor_review(report)
+
+        self.assertEqual(review["action"], "paper_block")
+        self.assertEqual(review["risk_review"]["event_state"], "release_window")
+        with self.assertRaisesRegex(ValueError, "paper_allow is forbidden"):
+            validate_monitor_review_result(
+                {**review, "action": "paper_allow"},
+                report["event_context"],
+            )
 
     def test_worker_executes_monitor_once_task(self) -> None:
         day = datetime(2026, 4, 27, 13, 30)

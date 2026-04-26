@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Sequence
 
 from .backtest import load_bar_rows
 from .events import MacroEvent, context_for_timestamp
+
+
+MONITOR_REVIEW_ACTIONS = {
+    "no_action",
+    "observe",
+    "paper_allow",
+    "paper_block",
+    "research_candidate",
+}
 
 
 @dataclass(frozen=True)
@@ -215,3 +225,143 @@ def write_monitor_outputs(output_dir: Path, payload: dict[str, Any]) -> dict[str
     json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     report_path.write_text(render_monitor_report(payload), encoding="utf-8")
     return {"json": str(json_path), "report": str(report_path)}
+
+
+def build_monitor_review_request(
+    monitor_report: dict[str, Any],
+    *,
+    model: str = "local-deterministic-reviewer",
+    temperature: float = 0.0,
+) -> dict[str, Any]:
+    snapshot_hash = stable_hash(monitor_report.get("snapshot", {}))
+    prompt_payload = {
+        "monitor_run_id": monitor_report.get("monitor_run_id"),
+        "snapshot_hash": snapshot_hash,
+        "signal": monitor_report.get("signal", {}),
+        "event_context": monitor_report.get("event_context", {}),
+        "key_levels": monitor_report.get("key_levels", []),
+    }
+    return {
+        "schema_version": 1,
+        "monitor_run_id": monitor_report.get("monitor_run_id"),
+        "snapshot_hash": snapshot_hash,
+        "model": model,
+        "temperature": temperature,
+        "prompt_hash": stable_hash(prompt_payload),
+        "prompt_payload": prompt_payload,
+    }
+
+
+def build_structured_monitor_review(
+    monitor_report: dict[str, Any],
+    *,
+    model: str = "local-deterministic-reviewer",
+    temperature: float = 0.0,
+) -> dict[str, Any]:
+    request = build_monitor_review_request(
+        monitor_report,
+        model=model,
+        temperature=temperature,
+    )
+    signal = monitor_report.get("signal", {})
+    event_context = monitor_report.get("event_context", {})
+    action = monitor_review_action(signal, event_context)
+    result = {
+        "schema_version": 1,
+        "monitor_run_id": monitor_report.get("monitor_run_id"),
+        "snapshot_hash": request["snapshot_hash"],
+        "model": model,
+        "temperature": temperature,
+        "prompt_hash": request["prompt_hash"],
+        "response_hash": "",
+        "action": action,
+        "bull_case": review_case("bull", monitor_report),
+        "bear_case": review_case("bear", monitor_report),
+        "risk_review": risk_review(monitor_report),
+        "decision_summarizer": decision_summary(action, monitor_report),
+        "invalidation": invalidation_plan(monitor_report),
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    validate_monitor_review_result(result, event_context)
+    result["response_hash"] = stable_hash({key: value for key, value in result.items() if key != "response_hash"})
+    return result
+
+
+def monitor_review_action(signal: dict[str, Any], event_context: dict[str, Any]) -> str:
+    if event_context.get("event_state") in {"release_window", "event_release"} and event_context.get("max_importance") == "high":
+        return "paper_block"
+    bucket = signal.get("bucket")
+    if bucket == "strong_review":
+        return "research_candidate"
+    if bucket == "medium_watch":
+        return "observe"
+    if bucket == "blocked":
+        return "paper_block"
+    return "no_action"
+
+
+def validate_monitor_review_result(result: dict[str, Any], event_context: dict[str, Any] | None = None) -> None:
+    missing = [
+        key
+        for key in ["bull_case", "bear_case", "risk_review", "decision_summarizer", "invalidation"]
+        if not result.get(key)
+    ]
+    if missing:
+        raise ValueError(f"Monitor review missing required sections: {', '.join(missing)}")
+    action = result.get("action")
+    if action not in MONITOR_REVIEW_ACTIONS:
+        raise ValueError(f"Unsupported monitor review action: {action}")
+    event_context = event_context or {}
+    if (
+        action == "paper_allow"
+        and event_context.get("event_state") in {"release_window", "event_release"}
+        and event_context.get("max_importance") == "high"
+    ):
+        raise ValueError("paper_allow is forbidden during high-impact release windows")
+
+
+def review_case(side: str, monitor_report: dict[str, Any]) -> dict[str, Any]:
+    levels = monitor_report.get("key_levels", [])
+    signal = monitor_report.get("signal", {})
+    prefix = "Continuation" if side == "bull" else "Failure"
+    return {
+        "summary": f"{prefix} case from {signal.get('bucket', 'none')} signal.",
+        "evidence": [f"near_{level['level']}" for level in levels[:3]],
+        "confidence": min(1.0, float(signal.get("strength", 0.0))),
+    }
+
+
+def risk_review(monitor_report: dict[str, Any]) -> dict[str, Any]:
+    event_context = monitor_report.get("event_context", {})
+    reasons = list(monitor_report.get("signal", {}).get("reasons", []))
+    if event_context.get("event_state") != "normal":
+        reasons.append(f"event_state_{event_context.get('event_state')}")
+    return {
+        "allowed_modes": ["research", "paper_shadow"],
+        "forbidden_outputs": ["live_gateway_command", "freeform_order"],
+        "risk_flags": reasons,
+        "event_state": event_context.get("event_state", "normal"),
+    }
+
+
+def decision_summary(action: str, monitor_report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "action": action,
+        "direct_execution_allowed": False,
+        "research_candidate_requires_phase_1": action == "research_candidate",
+        "signal_bucket": monitor_report.get("signal", {}).get("bucket"),
+    }
+
+
+def invalidation_plan(monitor_report: dict[str, Any]) -> dict[str, Any]:
+    snapshot = monitor_report.get("snapshot", {})
+    return {
+        "last_price": snapshot.get("last_price"),
+        "invalid_if_signal_bucket_changes": True,
+        "invalid_if_event_state_worsens": True,
+    }
+
+
+def stable_hash(payload: Any) -> str:
+    encoded = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
