@@ -360,6 +360,13 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(rows[0]["cost_sensitivity_report"]["baseline_round_trip_cost"], 15.0)
         self.assertEqual(rows[0]["promotion_report"]["stage"], "direct_bar")
         self.assertEqual(rows[0]["strategy_card"]["name"], result.strategy_name)
+        self.assertTrue(rows[0]["hard_gate_report"])
+        self.assertEqual(rows[0]["hard_gate_report"][0]["name"], "annual_trades_test")
+        self.assertIn("threshold", rows[0]["hard_gate_report"][0])
+        self.assertEqual(
+            rows[0]["strategy_card"]["hard_gate_report"],
+            rows[0]["hard_gate_report"],
+        )
         self.assertFalse(rows[0]["final_holdout_policy"]["llm_feedback_includes_final_holdout"])
         self.assertTrue(rows[0]["next_round_suggestions"])
         self.assertEqual(
@@ -392,6 +399,8 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(len(result.cost_sensitivity_report["stress_scenarios"]), 4)
         self.assertEqual(result.promotion_report["stage"], "direct_bar")
         self.assertEqual(result.strategy_card["promotion_stage"], "direct_bar")
+        self.assertTrue(result.hard_gate_report)
+        self.assertTrue(any(not gate["passed"] for gate in result.hard_gate_report))
         self.assertEqual(result.final_holdout_policy["status"], "frozen_once_after_candidate_selection")
         self.assertTrue(result.next_round_suggestions)
         self.assertTrue(result.final_holdout_data_version_hash)

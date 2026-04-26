@@ -87,6 +87,7 @@ class ResearchRunResult:
     final_holdout_data_version_hash: str
     final_holdout_metrics: BacktestMetrics
     gates: dict
+    hard_gate_report: list[dict]
     robustness_score: float | None
     split_artifacts: list[ResearchSplitArtifact]
     promotion_report: dict
@@ -129,6 +130,7 @@ class ResearchRunResult:
             "final_holdout_data_version_hash": self.final_holdout_data_version_hash,
             "final_holdout_metrics": self.final_holdout_metrics.to_dict(),
             "gates": self.gates,
+            "hard_gate_report": self.hard_gate_report,
             "robustness_score": self.robustness_score,
             "promotion_report": self.promotion_report,
             "strategy_card": self.strategy_card,
@@ -412,6 +414,15 @@ def run_research_bar_validation(
         round_trip_cost=round_trip_cost,
     )
     gates_payload = gates.to_dict()
+    hard_gate_report = build_hard_gate_report(
+        aggregate_test_metrics=aggregate_test_metrics,
+        fold_test_metrics=fold_test_metrics,
+        final_holdout_metrics=holdout.metrics,
+        validation_metrics=aggregate_validation_metrics,
+        positive_year_ratio=positive_year_ratio,
+        round_trip_cost=round_trip_cost,
+        gate_reasons=gates_payload["reasons"],
+    )
     final_holdout_policy = build_final_holdout_policy(plan)
     promotion_report = build_direct_promotion_report(execution_mode)
     next_round_suggestions = build_next_round_suggestions(
@@ -428,6 +439,7 @@ def run_research_bar_validation(
         aggregate_test_metrics=aggregate_test_metrics,
         final_holdout_metrics=holdout.metrics,
         gates=gates_payload,
+        hard_gate_report=hard_gate_report,
         robustness_score=score,
         promotion_report=promotion_report,
         next_round_suggestions=next_round_suggestions,
@@ -467,6 +479,7 @@ def run_research_bar_validation(
         final_holdout_data_version_hash=holdout.data_version_hash,
         final_holdout_metrics=holdout.metrics,
         gates=gates_payload,
+        hard_gate_report=hard_gate_report,
         robustness_score=score,
         split_artifacts=split_artifacts,
         promotion_report=promotion_report,
@@ -681,6 +694,7 @@ def with_promotion_outputs(result: ResearchRunResult, promotion_report: dict) ->
         aggregate_test_metrics=result.aggregate_test_metrics,
         final_holdout_metrics=result.final_holdout_metrics,
         gates=result.gates,
+        hard_gate_report=result.hard_gate_report,
         robustness_score=result.robustness_score,
         promotion_report=promotion_report,
         next_round_suggestions=next_round_suggestions,
@@ -768,6 +782,7 @@ def build_strategy_card(
     aggregate_test_metrics: BacktestMetrics,
     final_holdout_metrics: BacktestMetrics,
     gates: dict,
+    hard_gate_report: list[dict],
     robustness_score: float | None,
     promotion_report: dict,
     next_round_suggestions: list[str],
@@ -794,6 +809,7 @@ def build_strategy_card(
             "final_holdout": compact_metrics(final_holdout_metrics),
         },
         "risk_flags": gates["reasons"],
+        "hard_gate_report": hard_gate_report,
         "next_round_suggestions": next_round_suggestions,
         "final_holdout_policy": final_holdout_policy,
     }
@@ -807,6 +823,59 @@ def compact_metrics(metrics: BacktestMetrics) -> dict:
         "max_drawdown": metrics.max_drawdown,
         "annual_trades": metrics.annual_trades,
         "avg_trade_net_pnl": metrics.avg_trade_net_pnl,
+    }
+
+
+def build_hard_gate_report(
+    aggregate_test_metrics: BacktestMetrics,
+    fold_test_metrics: Sequence[BacktestMetrics],
+    final_holdout_metrics: BacktestMetrics,
+    validation_metrics: BacktestMetrics,
+    positive_year_ratio: float,
+    round_trip_cost: float,
+    gate_reasons: Sequence[str],
+    max_drawdown_limit: float = 10_000,
+    min_annual_trades: float = 1000,
+    min_sharpe: float = 2,
+    min_median_fold_sharpe: float = 1.5,
+    min_positive_year_ratio: float = 0.6,
+    min_profit_factor: float = 1.1,
+    min_positive_test_fold_ratio: float = 0.6,
+    min_avg_trade_cost_multiple: float = 1.5,
+    max_sharpe_decay: float = 0.5,
+) -> list[dict]:
+    fold_sharpes = [metric.sharpe for metric in fold_test_metrics if metric.sharpe is not None]
+    median_fold_sharpe = median(fold_sharpes) if fold_sharpes else None
+    positive_folds = sum(1 for metric in fold_test_metrics if metric.net_pnl > 0)
+    positive_fold_ratio = positive_folds / len(fold_test_metrics) if fold_test_metrics else None
+    validation_to_test_decay = calculate_sharpe_decay(validation_metrics.sharpe, aggregate_test_metrics.sharpe)
+    test_to_holdout_decay = calculate_sharpe_decay(aggregate_test_metrics.sharpe, final_holdout_metrics.sharpe)
+    min_avg_trade_net_pnl = round_trip_cost * min_avg_trade_cost_multiple
+    reason_set = set(gate_reasons)
+    return [
+        hard_gate_row("annual_trades_test", aggregate_test_metrics.annual_trades, f"> {min_annual_trades}", "annual_trades_test" not in reason_set),
+        hard_gate_row("sharpe_test_aggregate", aggregate_test_metrics.sharpe, f"> {min_sharpe}", "sharpe_test_aggregate" not in reason_set),
+        hard_gate_row("median_sharpe_test_fold", median_fold_sharpe, f"> {min_median_fold_sharpe}", "median_sharpe_test_fold" not in reason_set),
+        hard_gate_row("net_pnl_test", aggregate_test_metrics.net_pnl, "> 0", "net_pnl_test" not in reason_set),
+        hard_gate_row("net_pnl_final_holdout", final_holdout_metrics.net_pnl, "> 0", "net_pnl_final_holdout" not in reason_set),
+        hard_gate_row("max_drawdown_test", aggregate_test_metrics.max_drawdown, f"<= {max_drawdown_limit}", "max_drawdown_test" not in reason_set),
+        hard_gate_row("profit_factor_test", aggregate_test_metrics.profit_factor, f"> {min_profit_factor}", "profit_factor_test" not in reason_set),
+        hard_gate_row("avg_trade_net_pnl", aggregate_test_metrics.avg_trade_net_pnl, f"> {min_avg_trade_net_pnl}", "avg_trade_net_pnl" not in reason_set),
+        hard_gate_row("positive_test_fold_ratio", positive_fold_ratio, f">= {min_positive_test_fold_ratio}", "positive_test_fold_ratio" not in reason_set),
+        hard_gate_row("positive_year_ratio", positive_year_ratio, f">= {min_positive_year_ratio}", "positive_year_ratio" not in reason_set),
+        hard_gate_row("validation_sharpe", validation_metrics.sharpe, "> 0", "validation_sharpe" not in reason_set),
+        hard_gate_row("validation_to_test_sharpe_decay", validation_to_test_decay, f"<= {max_sharpe_decay}", "validation_to_test_sharpe_decay" not in reason_set),
+        hard_gate_row("final_holdout_sharpe_decay", final_holdout_metrics.sharpe, ">= 0.7 * test sharpe", "final_holdout_sharpe_decay" not in reason_set),
+        hard_gate_row("test_to_holdout_sharpe_decay", test_to_holdout_decay, f"<= {max_sharpe_decay}", "test_to_holdout_sharpe_decay" not in reason_set),
+    ]
+
+
+def hard_gate_row(name: str, actual: object, threshold: str, passed: bool) -> dict:
+    return {
+        "name": name,
+        "actual": actual,
+        "threshold": threshold,
+        "passed": passed,
     }
 
 
@@ -1321,6 +1390,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "parameter_stability_report": payload.get("parameter_stability_report", {}),
                 "promotion_report": payload.get("promotion_report", {}),
                 "strategy_card": payload.get("strategy_card", {}),
+                "hard_gate_report": payload.get("hard_gate_report", []),
                 "next_round_suggestions": payload.get("next_round_suggestions", []),
                 "final_holdout_policy": payload.get("final_holdout_policy", {}),
                 "overlapping_test_folds": payload.get("overlapping_test_folds", False),

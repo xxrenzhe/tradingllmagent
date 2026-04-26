@@ -683,6 +683,13 @@ function StrategyCards({ rows, selectedExperimentId, onInspect }) {
                 <span key={item}>{item}</span>
               ))}
             </div>
+            <div className="gate-list" aria-label="Hard gate report">
+              {(row.hard_gate_report ?? card.hard_gate_report ?? []).slice(0, 5).map((gate) => (
+                <span key={gate.name} className={gate.passed ? "passed" : "failed"}>
+                  {gate.name}: {gate.passed ? "pass" : "fail"}
+                </span>
+              ))}
+            </div>
             <ActionButton variant="secondary" onClick={() => onInspect(row.experiment_id)}>
               Inspect Replay
             </ActionButton>
