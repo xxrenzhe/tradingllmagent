@@ -6,10 +6,13 @@ from typing import Sequence
 
 import duckdb
 
+from .storage import compute_data_version_hash
+
 
 @dataclass(frozen=True)
 class QualityReport:
     symbol: str
+    data_version_hash: str
     expected_files: int
     files: int
     coverage_ratio: float
@@ -40,6 +43,14 @@ def build_quality_report(
     missing_files = [str(path) for path in tick_files if not path.exists()]
     existing_paths = [path for path in tick_files if path.exists()]
     expected_files = len(tick_files)
+    metadata = {
+        "artifact": "quality_report",
+        "symbol": symbol,
+        "expected_files": [str(path) for path in tick_files],
+        "max_normal_spread": max_normal_spread,
+        "max_normal_price_jump": max_normal_price_jump,
+    }
+    data_version_hash = compute_data_version_hash(existing_paths, metadata)
     files = [str(path) for path in existing_paths]
     zero_row_files = [
         str(path)
@@ -57,6 +68,7 @@ def build_quality_report(
         )
         return QualityReport(
             symbol=symbol,
+            data_version_hash=data_version_hash,
             expected_files=expected_files,
             files=0,
             coverage_ratio=coverage_ratio,
@@ -133,6 +145,7 @@ def build_quality_report(
     )
     return QualityReport(
         symbol=symbol,
+        data_version_hash=data_version_hash,
         expected_files=expected_files,
         files=len(files),
         coverage_ratio=coverage_ratio,

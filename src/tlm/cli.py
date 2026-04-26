@@ -124,11 +124,23 @@ def cmd_data_build_bars(args: argparse.Namespace) -> int:
         if minutes == 1:
             tick_file = normalized_tick_path(data_root, args.symbol, day)
             count = build_minute_bars_from_parquet([tick_file], output)
+            source_files = [tick_file]
         else:
             one_minute_file = bar_path(data_root, args.symbol, "1m", day)
             count = build_timeframe_bars_from_1m_parquet([one_minute_file], output, args.timeframe)
+            source_files = [one_minute_file]
         total += count
-        print(f"wrote\t{output}\trows={count}")
+        data_version_hash = compute_data_version_hash(
+            [*source_files, output],
+            {
+                "artifact": "bars",
+                "symbol": args.symbol,
+                "timeframe": args.timeframe,
+                "day": day.isoformat(),
+                "source_files": [str(path) for path in source_files],
+            },
+        )
+        print(f"wrote\t{output}\trows={count}\tdata_version_hash={data_version_hash}")
     print(f"bar build complete: rows={total}")
     return 0
 

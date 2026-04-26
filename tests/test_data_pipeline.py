@@ -125,6 +125,8 @@ class BarAndQualityTests(unittest.TestCase):
                 max_normal_price_jump=0.2,
             )
             self.assertEqual(report.rows, 4)
+            self.assertTrue(report.data_version_hash)
+            self.assertIn("data_version_hash", report.to_dict())
             self.assertEqual(report.expected_files, 3)
             self.assertEqual(report.files, 2)
             self.assertAlmostEqual(report.coverage_ratio, 2 / 3)
@@ -197,6 +199,45 @@ class BarAndQualityTests(unittest.TestCase):
         self.assertAlmostEqual(rows[0][3], 100.65)
         self.assertEqual(rows[0][4], 2)
         self.assertAlmostEqual(rows[1][3], 101.2)
+
+    def test_cli_build_bars_reports_data_version_hash(self) -> None:
+        hour = datetime(2025, 3, 19, 13, tzinfo=UTC)
+        ticks = parse_bi5_ticks(
+            make_bi5(
+                [
+                    (100, 100_200, 100_000, 1.0, 2.0),
+                    (60_100, 100_800, 100_500, 3.0, 4.0),
+                ]
+            ),
+            hour,
+            price_scale=1000,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            tick_path = normalized_tick_path(data_root, "NQmain", hour.date())
+            write_ticks_parquet(tick_path, "NQmain", ticks)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "data",
+                        "build-bars",
+                        "--symbol",
+                        "NQmain",
+                        "--from",
+                        "2025-03-19",
+                        "--to",
+                        "2025-03-19",
+                        "--timeframe",
+                        "1m",
+                    ]
+                )
+
+        self.assertEqual(code, 0)
+        self.assertIn("data_version_hash=", output.getvalue())
 
 
 if __name__ == "__main__":
