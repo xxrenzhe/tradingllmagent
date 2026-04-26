@@ -185,6 +185,35 @@ def run_bar_result_for_rows(spec_payload: dict, rows: list[dict]):
         return run_bar_backtest(parse_strategy_spec(spec_payload), symbol_config(), [output])
 
 
+def run_bar_result_for_rows_with_events(spec_payload: dict, rows: list[dict], contexts: list[dict]):
+    parquet_rows = [
+        (
+            row["symbol"],
+            row["timestamp"],
+            row["open"],
+            row["high"],
+            row["low"],
+            row["close"],
+            row["bid_close"],
+            row["ask_close"],
+            row["tick_count"],
+            1.0,
+            1.0,
+            row["avg_spread"],
+        )
+        for row in rows
+    ]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output = bar_path(Path(temp_dir), "NQmain", "1m", rows[0]["timestamp"].date())
+        write_bars_parquet(output, parquet_rows)
+        return run_bar_backtest(
+            parse_strategy_spec(spec_payload),
+            symbol_config(),
+            [output],
+            event_contexts=contexts,
+        )
+
+
 class StrategyValidationTests(unittest.TestCase):
     def test_valid_example_spec_loads(self) -> None:
         expected = {
@@ -456,6 +485,40 @@ class BarBacktestTests(unittest.TestCase):
         self.assertEqual(result.trades[0].side, "short")
         self.assertEqual(result.trades[0].entry_reason, "gap_fade_up")
         self.assertEqual(result.trades[0].exit_reason, "take_profit")
+
+    def test_event_policy_blocks_release_window_entries(self) -> None:
+        start = datetime(2025, 1, 1, 13, 30)
+        rows = build_bar_rows(
+            start,
+            [
+                (100, 100.5, 99.5, 100),
+                (100, 100.5, 99.5, 100.1),
+                (100.1, 100.5, 99.5, 100.2),
+                (100.2, 104.5, 100.2, 104.0),
+                (104.0, 108.0, 104.0, 107.5),
+            ],
+        )
+        contexts = [
+            {
+                "timestamp": rows[3]["timestamp"],
+                "event_state": "release_window",
+                "active_event_ids": ["cpi_test"],
+                "max_importance": "high",
+                "policy_ref": "high_impact_macro_v1",
+            }
+        ]
+
+        result = run_bar_result_for_rows_with_events(base_spec(), rows, contexts)
+
+        self.assertEqual(result.trades, [])
+        self.assertEqual(result.metrics.trade_count, 0)
+        self.assertTrue(result.event_attribution["event_context_applied"])
+        self.assertEqual(result.event_attribution["blocked_trade_count"], 1)
+        blocked = result.event_attribution["blocked_trades"][0]
+        self.assertEqual(blocked["event_state_at_entry"], "release_window")
+        self.assertEqual(blocked["active_event_ids_at_entry"], ["cpi_test"])
+        self.assertEqual(blocked["event_policy_action"], "block")
+        self.assertEqual(blocked["blocked_or_delayed_reason"], "high_impact_release_window")
 
 
 class TickReplayBacktestTests(unittest.TestCase):

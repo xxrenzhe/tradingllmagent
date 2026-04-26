@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta, time
 from math import ceil, floor
 from pathlib import Path
@@ -41,6 +41,12 @@ class Trade:
     net_pnl: float
     entry_reason: str
     exit_reason: str
+    event_state_at_entry: str = "normal"
+    event_state_at_exit: str = "normal"
+    active_event_ids_at_entry: list[str] = field(default_factory=list)
+    active_event_ids_at_exit: list[str] = field(default_factory=list)
+    event_policy_action: str = "allow"
+    blocked_or_delayed_reason: str | None = None
 
     def to_dict(self) -> dict:
         payload = asdict(self)
@@ -57,6 +63,7 @@ class BacktestResult:
     cost_model: dict
     trades: list[Trade]
     metrics: BacktestMetrics
+    event_attribution: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -66,6 +73,7 @@ class BacktestResult:
             "cost_model": self.cost_model,
             "trades": [trade.to_dict() for trade in self.trades],
             "metrics": self.metrics.to_dict(),
+            "event_attribution": self.event_attribution,
         }
 
 
@@ -153,12 +161,14 @@ def run_bar_backtest(
     bar_files: Sequence[Path],
     starting_equity: float = 100_000,
     cost_model: CostModelConfig | None = None,
+    event_contexts: Sequence[dict] | None = None,
 ) -> BacktestResult:
     if spec.strategy_family not in EXECUTABLE_STRATEGY_FAMILIES:
         raise ValueError(f"Bar backtester does not support strategy_family: {spec.strategy_family}")
     cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     bars = load_bar_rows(bar_files)
-    trades = run_bar_strategy(spec, symbol_config, bars, cost_model)
+    raw_trades = run_bar_strategy(spec, symbol_config, bars, cost_model)
+    trades, event_attribution = apply_event_policy_to_trades(spec, raw_trades, event_contexts)
     trade_pnls = [trade.net_pnl for trade in trades]
     equity = [starting_equity]
     for pnl in trade_pnls:
@@ -179,6 +189,7 @@ def run_bar_backtest(
         cost_model.to_dict(),
         trades,
         metrics,
+        event_attribution,
     )
 
 
@@ -188,12 +199,14 @@ def run_tick_backtest(
     tick_files: Sequence[Path],
     starting_equity: float = 100_000,
     cost_model: CostModelConfig | None = None,
+    event_contexts: Sequence[dict] | None = None,
 ) -> BacktestResult:
     if spec.strategy_family not in EXECUTABLE_STRATEGY_FAMILIES:
         raise ValueError(f"Tick replay does not support strategy_family: {spec.strategy_family}")
     cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     ticks = load_tick_rows(tick_files)
-    trades = run_tick_strategy(spec, symbol_config, ticks, cost_model)
+    raw_trades = run_tick_strategy(spec, symbol_config, ticks, cost_model)
+    trades, event_attribution = apply_event_policy_to_trades(spec, raw_trades, event_contexts)
     trade_pnls = [trade.net_pnl for trade in trades]
     equity = [starting_equity]
     for pnl in trade_pnls:
@@ -214,7 +227,101 @@ def run_tick_backtest(
         cost_model.to_dict(),
         trades,
         metrics,
+        event_attribution,
     )
+
+
+def apply_event_policy_to_trades(
+    spec: StrategySpec,
+    trades: Sequence[Trade],
+    event_contexts: Sequence[dict] | None,
+) -> tuple[list[Trade], dict]:
+    context_by_timestamp = normalize_event_contexts(event_contexts or [])
+    if not context_by_timestamp:
+        return list(trades), empty_event_attribution()
+    kept: list[Trade] = []
+    blocked = []
+    event_window_trade_count = 0
+    non_event_trade_count = 0
+    for trade in trades:
+        entry_context = context_by_timestamp.get(trade.entry_time) or normal_event_context()
+        exit_context = context_by_timestamp.get(trade.exit_time) or normal_event_context()
+        policy_action, reason = event_policy_action(spec, entry_context)
+        annotated = replace(
+            trade,
+            event_state_at_entry=entry_context["event_state"],
+            event_state_at_exit=exit_context["event_state"],
+            active_event_ids_at_entry=list(entry_context["active_event_ids"]),
+            active_event_ids_at_exit=list(exit_context["active_event_ids"]),
+            event_policy_action=policy_action,
+            blocked_or_delayed_reason=reason,
+        )
+        if entry_context["event_state"] == "normal":
+            non_event_trade_count += 1
+        else:
+            event_window_trade_count += 1
+        if policy_action == "block":
+            blocked.append(annotated.to_dict())
+            continue
+        kept.append(annotated)
+    return kept, {
+        "schema_version": 1,
+        "event_context_applied": True,
+        "event_window_trade_count": event_window_trade_count,
+        "non_event_trade_count": non_event_trade_count,
+        "blocked_trade_count": len(blocked),
+        "blocked_trades": blocked,
+    }
+
+
+def normalize_event_contexts(contexts: Sequence[dict]) -> dict[datetime, dict]:
+    normalized = {}
+    for context in contexts:
+        timestamp = context.get("timestamp")
+        if isinstance(timestamp, str):
+            timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).replace(tzinfo=None)
+        if timestamp is None:
+            continue
+        normalized[timestamp] = {
+            "event_state": context.get("event_state", "normal"),
+            "active_event_ids": context.get("active_event_ids", []),
+            "max_importance": context.get("max_importance"),
+            "policy_ref": context.get("policy_ref"),
+        }
+    return normalized
+
+
+def event_policy_action(spec: StrategySpec, context: dict) -> tuple[str, str | None]:
+    event_state = context.get("event_state", "normal")
+    if event_state == "normal":
+        return "allow", None
+    policy = spec.event_policy or {}
+    if context.get("max_importance") == "high" and event_state == "release_window":
+        return "block", "high_impact_release_window"
+    if policy.get("new_entries") == "block":
+        return "block", "event_policy_new_entries_block"
+    if event_state == "pre_event" and int(policy.get("pre_event_blackout_minutes", 0)) > 0:
+        return "block", "pre_event_blackout"
+    if event_state == "post_event" and int(policy.get("post_event_blackout_minutes", 0)) > 0:
+        return "block", "post_event_blackout"
+    if policy.get("new_entries") == "require_extra_confirmation":
+        return "delay", "event_policy_requires_extra_confirmation"
+    return "allow", None
+
+
+def normal_event_context() -> dict:
+    return {"event_state": "normal", "active_event_ids": [], "max_importance": None, "policy_ref": None}
+
+
+def empty_event_attribution() -> dict:
+    return {
+        "schema_version": 1,
+        "event_context_applied": False,
+        "event_window_trade_count": 0,
+        "non_event_trade_count": 0,
+        "blocked_trade_count": 0,
+        "blocked_trades": [],
+    }
 
 
 def run_bar_strategy(
