@@ -365,3 +365,26 @@ ExecutionIntent 目前有基础状态和 risk gate，但还没有持久化状态
 4. 实现 paper shadow run artifact 和 replay consistency check。
 
 这四项完成后，系统会从“本地研究骨架”进一步变成“能持续观察、复盘、阻断和迭代的 paper-only 交易系统”。在此之前，不应推进真实 NT8 live。
+
+## 17. 本轮 repo-local 落地状态
+
+本轮已完成本文第一至第七优先级的本地代码落地，并补齐对应测试与 UI/API hook。这里的“落地”指当前仓库内可验证的 contract、artifact、状态机、测试和前端入口已经实现；第八至第十优先级涉及 Windows、真实 NT8、broker、交易日样本和人工验收，仍必须按外部验收流程执行，不能用本地 sim/mock 冒充 live readiness。
+
+| 阶段 | 本轮状态 | 落地内容 |
+| --- | --- | --- |
+| 事件 policy 接入回测和归因 | 已落地 | bar/tick backtest 支持 `event_contexts`，trade 增加事件字段，release window 阻断信号进入 `event_attribution.blocked_trades`，指标只统计未阻断交易。 |
+| OpenAPI 全系统契约 | 已落地 | `docs/openapi/tradingllmagent.openapi.yaml` 覆盖 data、tasks、research、leaderboard、artifacts、events、monitor、paper、execution、readiness、module memory 和 NT8 sim gateway。 |
+| 完整 paper shadow 链路 | 已落地 | `paper_shadow_run` artifact 记录 strategy hash、module、snapshot hash、risk decision、hypothetical fill、drift report、replay key，并显式保证不生成 live gateway command。 |
+| 模块版本治理 | 已落地 | module registry 支持 `module_version`、生命周期状态、promotion gates、retirement reasons、retest schedule、audit events 和 runtime 准入判断。 |
+| 运行期 structured review | 已落地 | monitor review 固定输出 bull/bear/risk/decision/invalidation，action 限定在 paper/research 范围，高影响 release window 禁止 `paper_allow`。 |
+| Execution state machine | 已落地 | SQLite 表、risk/approval/gateway/order/audit 记录和状态迁移约束已实现，`risk_rejected` 终态、`approved` 必须绑定 approval 或 automation profile。 |
+| WebUI readiness 控制台 | 已落地 | 前端新增 Runtime Monitor、Execution Readiness、Module Memory 三个运行期视图；仍不提供任意 Buy/Sell 自由下单入口。 |
+| NT8 独立 gateway 与真实验收 | 外部待验收 | 当前仓库仍只有 sim/mock gateway；真实 NT8 AddOn、连续 sim command、micro-live、controlled-live 必须在外部环境按 runbook 验证。 |
+
+本轮验证命令：
+
+```bash
+PYTHONPATH=src:tests python3 -m unittest discover -s tests
+npm run build
+git diff --check
+```
