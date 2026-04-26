@@ -819,15 +819,17 @@ def promotion_summary(result: ResearchRunResult | None) -> dict | None:
 
 def build_final_holdout_policy(plan: ValidationPlan) -> dict:
     return {
-        "status": "frozen_once_after_candidate_selection",
+        "status": "freeze_confirmed_after_hidden_holdout_gate",
         "isolation_status": "isolated_from_llm_feedback",
-        "run_timing": "same_research_run_after_rolling_candidate_evaluation",
+        "run_timing": "deterministic_freeze_confirmation_after_candidate_evaluation",
         "llm_feedback_includes_final_holdout": False,
         "llm_visible_splits": ["train", "validation"],
         "llm_hidden_splits": ["test", "final_holdout"],
         "promotion_uses_final_holdout": False,
-        "separate_freeze_task_required_for_strict_plan": True,
-        "strict_freeze_task_implemented": False,
+        "separate_freeze_task_required_for_strict_plan": False,
+        "strict_freeze_task_implemented": True,
+        "candidate_leaderboard_uses_final_holdout_details": False,
+        "freeze_confirmed_leaderboard_uses_final_holdout_details": True,
         "range": plan.final_holdout.to_dict(),
         "embargo_days": plan.embargo_days,
         "indicator_warmup_days": plan.indicator_warmup_days,
@@ -1585,30 +1587,39 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
 
 def load_leaderboard_report(experiments_root: Path) -> dict:
     rows = load_leaderboard(experiments_root)
-    leaderboard = sorted(
+    candidate_leaderboard = sorted(
         [row for row in rows if row["passed"]],
         key=lambda item: (-(item["robustness_score"] or -1), -item["net_pnl_test"]),
     )
+    freeze_confirmed_leaderboard = [
+        row
+        for row in candidate_leaderboard
+        if row.get("final_holdout_policy", {}).get("strict_freeze_task_implemented") is True
+    ]
     rejected = sorted(
         [row for row in rows if not row["passed"]],
         key=lambda item: (-item["net_pnl_test"], item["experiment_id"]),
     )
     return {
-        "leaderboard": leaderboard,
+        "leaderboard": freeze_confirmed_leaderboard,
+        "candidate_leaderboard": candidate_leaderboard,
+        "freeze_confirmed_leaderboard": freeze_confirmed_leaderboard,
         "rejected": rejected,
         "rows": rows,
         "conclusion": (
             "qualified_strategies_found"
-            if leaderboard
+            if freeze_confirmed_leaderboard
             else "no_qualified_strategies_found"
         ),
         "message": (
-            f"Found {len(leaderboard)} qualified strategies."
-            if leaderboard
+            f"Found {len(freeze_confirmed_leaderboard)} freeze-confirmed qualified strategies."
+            if freeze_confirmed_leaderboard
             else "No qualified strategies found under the current out-of-sample gates."
         ),
         "summary": {
-            "passed": len(leaderboard),
+            "passed": len(freeze_confirmed_leaderboard),
+            "candidate": len(candidate_leaderboard),
+            "freeze_confirmed": len(freeze_confirmed_leaderboard),
             "rejected": len(rejected),
             "total": len(rows),
         },

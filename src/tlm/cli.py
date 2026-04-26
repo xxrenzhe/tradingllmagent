@@ -378,7 +378,13 @@ def cmd_research_propose(args: argparse.Namespace) -> int:
 def cmd_report_leaderboard(args: argparse.Namespace) -> int:
     report = load_leaderboard_report(Path(args.experiments_root))
     if args.experiment_id:
-        for key in ["leaderboard", "rejected", "rows"]:
+        for key in [
+            "leaderboard",
+            "candidate_leaderboard",
+            "freeze_confirmed_leaderboard",
+            "rejected",
+            "rows",
+        ]:
             report[key] = [
                 row
                 for row in report[key]
@@ -387,6 +393,8 @@ def cmd_report_leaderboard(args: argparse.Namespace) -> int:
             ]
         report["summary"] = {
             "passed": len(report["leaderboard"]),
+            "candidate": len(report["candidate_leaderboard"]),
+            "freeze_confirmed": len(report["freeze_confirmed_leaderboard"]),
             "rejected": len(report["rejected"]),
             "total": len(report["rows"]),
         }
@@ -396,7 +404,7 @@ def cmd_report_leaderboard(args: argparse.Namespace) -> int:
             else "no_qualified_strategies_found"
         )
         report["message"] = (
-            f"Found {len(report['leaderboard'])} qualified strategies."
+            f"Found {len(report['leaderboard'])} freeze-confirmed qualified strategies."
             if report["leaderboard"]
             else "No qualified strategies found under the current out-of-sample gates."
         )

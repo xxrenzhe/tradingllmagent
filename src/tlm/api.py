@@ -66,7 +66,13 @@ def build_nt_export_signal_response(payload: dict) -> dict:
 def build_leaderboard_response(experiments_root: Path, experiment_id: str | None = None) -> dict:
     report = load_leaderboard_report(experiments_root)
     if experiment_id:
-        for key in ["leaderboard", "rejected", "rows"]:
+        for key in [
+            "leaderboard",
+            "candidate_leaderboard",
+            "freeze_confirmed_leaderboard",
+            "rejected",
+            "rows",
+        ]:
             report[key] = [
                 row
                 for row in report[key]
@@ -75,6 +81,8 @@ def build_leaderboard_response(experiments_root: Path, experiment_id: str | None
             ]
         report["summary"] = {
             "passed": len(report["leaderboard"]),
+            "candidate": len(report["candidate_leaderboard"]),
+            "freeze_confirmed": len(report["freeze_confirmed_leaderboard"]),
             "rejected": len(report["rejected"]),
             "total": len(report["rows"]),
         }
@@ -84,7 +92,7 @@ def build_leaderboard_response(experiments_root: Path, experiment_id: str | None
             else "no_qualified_strategies_found"
         )
         report["message"] = (
-            f"Found {len(report['leaderboard'])} qualified strategies."
+            f"Found {len(report['leaderboard'])} freeze-confirmed qualified strategies."
             if report["leaderboard"]
             else "No qualified strategies found under the current out-of-sample gates."
         )

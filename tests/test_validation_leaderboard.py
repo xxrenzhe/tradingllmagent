@@ -441,13 +441,15 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(result.strategy_card["promotion_stage"], "direct_bar")
         self.assertTrue(result.hard_gate_report)
         self.assertTrue(any(not gate["passed"] for gate in result.hard_gate_report))
-        self.assertEqual(result.final_holdout_policy["status"], "frozen_once_after_candidate_selection")
+        self.assertEqual(result.final_holdout_policy["status"], "freeze_confirmed_after_hidden_holdout_gate")
         self.assertEqual(
             result.final_holdout_policy["run_timing"],
-            "same_research_run_after_rolling_candidate_evaluation",
+            "deterministic_freeze_confirmation_after_candidate_evaluation",
         )
-        self.assertTrue(result.final_holdout_policy["separate_freeze_task_required_for_strict_plan"])
-        self.assertFalse(result.final_holdout_policy["strict_freeze_task_implemented"])
+        self.assertFalse(result.final_holdout_policy["separate_freeze_task_required_for_strict_plan"])
+        self.assertTrue(result.final_holdout_policy["strict_freeze_task_implemented"])
+        self.assertFalse(result.final_holdout_policy["candidate_leaderboard_uses_final_holdout_details"])
+        self.assertTrue(result.final_holdout_policy["freeze_confirmed_leaderboard_uses_final_holdout_details"])
         self.assertTrue(result.next_round_suggestions)
         self.assertTrue(result.final_holdout_data_version_hash)
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])
@@ -633,12 +635,23 @@ class RollingValidationTests(unittest.TestCase):
                 )
             filtered = json.loads(stdout.getvalue())
 
-        self.assertEqual(report["summary"], {"passed": 1, "rejected": 1, "total": 2})
+        self.assertEqual(
+            report["summary"],
+            {"passed": 1, "candidate": 1, "freeze_confirmed": 1, "rejected": 1, "total": 2},
+        )
         self.assertEqual(report["conclusion"], "qualified_strategies_found")
         self.assertEqual(report["leaderboard"][0]["experiment_id"], "split_trial_0000")
+        self.assertEqual(report["candidate_leaderboard"][0]["experiment_id"], "split_trial_0000")
+        self.assertEqual(
+            report["freeze_confirmed_leaderboard"][0]["experiment_id"],
+            "split_trial_0000",
+        )
         self.assertEqual(report["rejected"][0]["experiment_id"], "split_trial_0001")
         self.assertEqual(exit_code, 0)
-        self.assertEqual(filtered["summary"], {"passed": 0, "rejected": 1, "total": 1})
+        self.assertEqual(
+            filtered["summary"],
+            {"passed": 0, "candidate": 0, "freeze_confirmed": 0, "rejected": 1, "total": 1},
+        )
         self.assertEqual(filtered["conclusion"], "no_qualified_strategies_found")
         self.assertIn("No qualified strategies found", filtered["message"])
         self.assertEqual(filtered["rejected"][0]["reasons"], ["test_rejection"])
