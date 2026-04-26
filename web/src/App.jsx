@@ -517,6 +517,7 @@ function LeaderboardTable({ rows }) {
             <th>Test PnL</th>
             <th>Holdout PnL</th>
             <th>Cost Stress</th>
+            <th>Param Stability</th>
             <th>Snapshot</th>
             <th>Reject Reasons</th>
           </tr>
@@ -525,6 +526,7 @@ function LeaderboardTable({ rows }) {
           {rows.map((row) => {
             const overfitting = row.overfitting_report ?? {};
             const costSensitivity = row.cost_sensitivity_report ?? {};
+            const parameterStability = row.parameter_stability_report ?? {};
             const costStressKnown = typeof costSensitivity.worst_case_survives === "boolean";
             return (
               <tr key={row.experiment_id}>
@@ -553,6 +555,14 @@ function LeaderboardTable({ rows }) {
                   <div className="table-detail">base rt {formatNumber(costSensitivity.baseline_round_trip_cost)}</div>
                 </td>
                 <td>
+                  <span className={`status-pill ${parameterStabilityStatusClass(parameterStability.status)}`}>
+                    {parameterStability.status ?? "unknown"}
+                  </span>
+                  <div className="table-detail">
+                    {formatNumber(parameterStability.positive_neighbor_ratio, 2)} stable neighbors
+                  </div>
+                </td>
+                <td>
                   {shortHash(row.data_version_hash)}
                   <div className="table-detail">{row.snapshot?.llm_model ?? "no llm model"}</div>
                 </td>
@@ -574,6 +584,16 @@ function riskStatusClass(level) {
     return "running";
   }
   return "failed";
+}
+
+function parameterStabilityStatusClass(status) {
+  if (status === "stable" || status === "insufficient_variants") {
+    return "completed";
+  }
+  if (status === "fragile") {
+    return "failed";
+  }
+  return "running";
 }
 
 function shortHash(value) {

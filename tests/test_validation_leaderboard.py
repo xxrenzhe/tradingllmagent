@@ -653,6 +653,9 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(all(row["parameter_grid_hash"] for row in rows))
         self.assertTrue(all(row["parameter_combination_count"] == 2 for row in rows))
         self.assertTrue(all(row["overfitting_report"]["trial_count"] == 2 for row in rows))
+        self.assertTrue(all(row["parameter_stability_report"]["evaluated_trials"] == 2 for row in rows))
+        self.assertTrue(all(row["parameter_stability_report"]["adjacent_pair_count"] >= 1 for row in rows))
+        self.assertTrue(all("positive_neighbor_ratio" in row["parameter_stability_report"] for row in rows))
         self.assertFalse(any(row["parameter_budget_exceeded"] for row in rows))
 
 

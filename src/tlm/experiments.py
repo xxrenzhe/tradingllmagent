@@ -236,6 +236,7 @@ def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
         "test_to_holdout_sharpe_decay": result.get("test_to_holdout_sharpe_decay"),
         "overfitting_report": result.get("overfitting_report", {}),
         "cost_sensitivity_report": result.get("cost_sensitivity_report", {}),
+        "parameter_stability_report": result.get("parameter_stability_report", {}),
         "overlapping_test_folds": result.get("overlapping_test_folds", False),
         "non_overlap_test_fold_indexes": result.get("non_overlap_test_fold_indexes", []),
         "net_pnl_validation": result.get("aggregate_validation_metrics", {}).get("net_pnl"),

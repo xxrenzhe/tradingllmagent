@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
 from statistics import median
@@ -68,6 +68,7 @@ class ResearchRunResult:
     test_to_holdout_sharpe_decay: float | None
     overfitting_report: dict
     cost_sensitivity_report: dict
+    parameter_stability_report: dict
     final_holdout_data_version_hash: str
     final_holdout_metrics: BacktestMetrics
     gates: dict
@@ -103,6 +104,7 @@ class ResearchRunResult:
             "test_to_holdout_sharpe_decay": self.test_to_holdout_sharpe_decay,
             "overfitting_report": self.overfitting_report,
             "cost_sensitivity_report": self.cost_sensitivity_report,
+            "parameter_stability_report": self.parameter_stability_report,
             "final_holdout_data_version_hash": self.final_holdout_data_version_hash,
             "final_holdout_metrics": self.final_holdout_metrics.to_dict(),
             "gates": self.gates,
@@ -366,6 +368,7 @@ def run_research_bar_validation(
         test_to_holdout_sharpe_decay=test_to_holdout_decay,
         overfitting_report=overfitting_report,
         cost_sensitivity_report=cost_sensitivity_report,
+        parameter_stability_report=single_trial_parameter_stability_report(grid_metadata),
         final_holdout_data_version_hash=holdout.data_version_hash,
         final_holdout_metrics=holdout.metrics,
         gates=gates.to_dict(),
@@ -441,7 +444,11 @@ def run_budgeted_research(
                 llm_parameters=llm_parameters,
             )
         )
-    return results
+    stability_report = build_parameter_stability_report(results, grid_metadata)
+    return [
+        replace(result, parameter_stability_report=stability_report)
+        for result in results
+    ]
 
 
 def _run_range(
@@ -568,6 +575,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "test_to_holdout_sharpe_decay": payload.get("test_to_holdout_sharpe_decay"),
                 "overfitting_report": payload.get("overfitting_report", {}),
                 "cost_sensitivity_report": payload.get("cost_sensitivity_report", {}),
+                "parameter_stability_report": payload.get("parameter_stability_report", {}),
                 "overlapping_test_folds": payload.get("overlapping_test_folds", False),
                 "non_overlap_test_fold_indexes": payload.get("non_overlap_test_fold_indexes", []),
                 "passed": payload["gates"]["passed"],
@@ -680,6 +688,130 @@ def estimate_indicator_warmup_days(spec: StrategySpec, bars_per_day: int = 390) 
     if max_lookback <= 1:
         return 0
     return max(1, (max_lookback + bars_per_day - 1) // bars_per_day)
+
+
+def single_trial_parameter_stability_report(grid_metadata: ParameterGridMetadata) -> dict:
+    return {
+        "status": "insufficient_variants",
+        "parameter_names": grid_metadata.parameter_names,
+        "evaluated_trials": 1,
+        "adjacent_pair_count": 0,
+        "stable_adjacent_pair_count": 0,
+        "positive_neighbor_ratio": None,
+        "narrow_single_point_risk": False,
+        "adjacent_pairs": [],
+    }
+
+
+def build_parameter_stability_report(
+    results: Sequence[ResearchRunResult],
+    grid_metadata: ParameterGridMetadata,
+) -> dict:
+    parameter_names = grid_metadata.parameter_names
+    adjacent_pairs = []
+    if len(results) < 2 or not parameter_names:
+        return {
+            "status": "insufficient_variants",
+            "parameter_names": parameter_names,
+            "evaluated_trials": len(results),
+            "adjacent_pair_count": 0,
+            "stable_adjacent_pair_count": 0,
+            "positive_neighbor_ratio": None,
+            "narrow_single_point_risk": False,
+            "adjacent_pairs": [],
+        }
+
+    for parameter_name in parameter_names:
+        groups: dict[tuple[tuple[str, str], ...], list[ResearchRunResult]] = {}
+        for result in results:
+            if parameter_name not in result.variant_parameters:
+                continue
+            group_key = tuple(
+                sorted(
+                    (name, stable_json_value(value))
+                    for name, value in result.variant_parameters.items()
+                    if name != parameter_name
+                )
+            )
+            groups.setdefault(group_key, []).append(result)
+        for group in groups.values():
+            ordered = sorted(
+                group,
+                key=lambda item: sortable_parameter_value(item.variant_parameters[parameter_name]),
+            )
+            for left, right in zip(ordered, ordered[1:], strict=False):
+                left_sharpe = left.aggregate_test_metrics.sharpe
+                right_sharpe = right.aggregate_test_metrics.sharpe
+                stable = is_stable_adjacent_pair(left, right)
+                adjacent_pairs.append(
+                    {
+                        "parameter": parameter_name,
+                        "left_trial": left.experiment_id,
+                        "right_trial": right.experiment_id,
+                        "left_value": left.variant_parameters.get(parameter_name),
+                        "right_value": right.variant_parameters.get(parameter_name),
+                        "left_test_sharpe": left_sharpe,
+                        "right_test_sharpe": right_sharpe,
+                        "left_test_net_pnl": left.aggregate_test_metrics.net_pnl,
+                        "right_test_net_pnl": right.aggregate_test_metrics.net_pnl,
+                        "sharpe_degradation": adjacent_sharpe_degradation(left_sharpe, right_sharpe),
+                        "stable": stable,
+                    }
+                )
+
+    stable_count = sum(1 for pair in adjacent_pairs if pair["stable"])
+    ratio = stable_count / len(adjacent_pairs) if adjacent_pairs else None
+    narrow_single_point_risk = bool(adjacent_pairs and ratio is not None and ratio < 0.5)
+    if not adjacent_pairs:
+        status = "insufficient_adjacent_pairs"
+    elif narrow_single_point_risk:
+        status = "fragile"
+    else:
+        status = "stable"
+    return {
+        "status": status,
+        "parameter_names": parameter_names,
+        "evaluated_trials": len(results),
+        "adjacent_pair_count": len(adjacent_pairs),
+        "stable_adjacent_pair_count": stable_count,
+        "positive_neighbor_ratio": ratio,
+        "narrow_single_point_risk": narrow_single_point_risk,
+        "adjacent_pairs": adjacent_pairs,
+    }
+
+
+def is_stable_adjacent_pair(left: ResearchRunResult, right: ResearchRunResult) -> bool:
+    left_sharpe = left.aggregate_test_metrics.sharpe
+    right_sharpe = right.aggregate_test_metrics.sharpe
+    if left.aggregate_test_metrics.net_pnl <= 0 or right.aggregate_test_metrics.net_pnl <= 0:
+        return False
+    if left_sharpe is None or right_sharpe is None:
+        return False
+    stronger = max(left_sharpe, right_sharpe)
+    weaker = min(left_sharpe, right_sharpe)
+    if stronger <= 0:
+        return False
+    return weaker >= 0.5 * stronger
+
+
+def adjacent_sharpe_degradation(left_sharpe: float | None, right_sharpe: float | None) -> float | None:
+    if left_sharpe is None or right_sharpe is None:
+        return None
+    stronger = max(left_sharpe, right_sharpe)
+    weaker = min(left_sharpe, right_sharpe)
+    if stronger <= 0:
+        return None
+    return 1 - weaker / stronger
+
+
+def sortable_parameter_value(value: object) -> tuple[int, object]:
+    if isinstance(value, int | float):
+        return (0, float(value))
+    return (1, str(value))
+
+
+def stable_json_value(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def build_overfitting_report(
