@@ -483,6 +483,47 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/experiments/iterations", paths)
         self.assertIn("/api/experiments/{experiment_id}/audit-logs", paths)
         self.assertIn("/api/experiments/{experiment_id}/artifacts", paths)
+        self.assertIn("/api/events", paths)
+        self.assertIn("/api/events/context", paths)
+        self.assertIn("/api/monitor/report", paths)
+        self.assertIn("/api/execution/readiness", paths)
+        self.assertIn("/api/modules/memory", paths)
+
+    def test_openapi_contract_covers_webui_and_runtime_paths(self) -> None:
+        contract = Path("docs/openapi/tradingllmagent.openapi.yaml").read_text(encoding="utf-8")
+        required_paths = [
+            "/api/data/symbols",
+            "/api/data/quality",
+            "/api/tasks/{task_id}/events",
+            "/api/experiments/research-runs",
+            "/api/experiments/{experiment_id}/artifacts",
+            "/api/reports/leaderboard",
+            "/api/events/context",
+            "/api/monitor/report",
+            "/api/execution/intents",
+            "/api/execution/paper-shadow",
+            "/api/execution/readiness",
+            "/api/gateways/nt8/commands",
+        ]
+
+        for path in required_paths:
+            self.assertIn(path, contract)
+        for schema_name in [
+            "Task:",
+            "ResearchRunRequest:",
+            "LeaderboardReport:",
+            "EventCalendar:",
+            "MonitorReport:",
+            "ReadinessDecision:",
+        ]:
+            self.assertIn(schema_name, contract)
+        for execution_field in [
+            "schema_version:",
+            "protocol_version:",
+            "correlation_id:",
+            "idempotency_key:",
+        ]:
+            self.assertIn(execution_field, contract)
 
 
 if __name__ == "__main__":

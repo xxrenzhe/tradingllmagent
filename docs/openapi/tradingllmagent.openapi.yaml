@@ -1,8 +1,231 @@
 openapi: 3.1.0
 info:
-  title: Trading LLM Agent Execution Gateway
-  version: 0.1.0
+  title: Trading LLM Agent System API
+  version: 0.2.0
+  description: Local research, monitor, paper-shadow, execution readiness, and NT8 sim gateway contract.
 paths:
+  /api/health:
+    get:
+      summary: API health check.
+      responses:
+        "200":
+          description: Health status.
+  /api/data/symbols:
+    get:
+      summary: List configured symbols.
+      responses:
+        "200":
+          description: Symbol configuration map.
+  /api/data/download:
+    post:
+      summary: Queue a data download task.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+  /api/data/build-bars:
+    post:
+      summary: Queue bar aggregation from normalized tick data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/quality:
+    get:
+      summary: Build a local data quality report.
+      parameters:
+        - $ref: "#/components/parameters/Symbol"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+      responses:
+        "200":
+          description: Data quality report.
+  /api/tasks:
+    get:
+      summary: List queued, running, and completed tasks.
+      responses:
+        "200":
+          description: Task list.
+  /api/tasks/{task_id}:
+    get:
+      summary: Get a task by id.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Task.
+  /api/tasks/{task_id}/cancel:
+    post:
+      summary: Cancel a non-terminal task.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Updated task.
+  /api/tasks/{task_id}/run:
+    post:
+      summary: Run a queued task synchronously.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Updated task.
+  /api/tasks/{task_id}/logs:
+    get:
+      summary: List task logs.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Task logs.
+  /api/tasks/{task_id}/events:
+    get:
+      summary: Stream task and log updates using SSE.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: SSE stream.
+  /api/strategies/validate:
+    post:
+      summary: Validate a local Strategy Spec.
+      responses:
+        "200":
+          description: Strategy validation result.
+  /api/backtests/bar:
+    post:
+      summary: Queue a bar backtest task.
+      responses:
+        "200":
+          description: Queued task.
+  /api/backtests/tick:
+    post:
+      summary: Queue a tick replay backtest task.
+      responses:
+        "200":
+          description: Queued task.
+  /api/experiments/research-runs:
+    post:
+      summary: Queue a research run.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResearchRunRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/experiments/proposals:
+    post:
+      summary: Queue an LLM strategy proposal task.
+      responses:
+        "200":
+          description: Queued task.
+  /api/experiments/iterations:
+    post:
+      summary: Queue proposal plus research iteration.
+      responses:
+        "200":
+          description: Queued task.
+  /api/experiments/{experiment_id}:
+    get:
+      summary: Load experiment summary from SQLite.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: Experiment summary.
+  /api/experiments/{experiment_id}/audit-logs:
+    get:
+      summary: Load experiment audit logs.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: Audit log list.
+  /api/experiments/{experiment_id}/artifacts:
+    get:
+      summary: Load trades, equity, metrics, and artifacts for a research trial.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: Research artifact bundle.
+  /api/reports/leaderboard:
+    get:
+      summary: Load the hard-gated leaderboard report.
+      responses:
+        "200":
+          description: Leaderboard report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardReport"
+  /api/events/validate:
+    post:
+      summary: Validate an event calendar.
+      responses:
+        "200":
+          description: Event calendar validation.
+  /api/events:
+    get:
+      summary: List event calendar rows with optional symbol/date filters.
+      responses:
+        "200":
+          description: Event calendar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventCalendar"
+  /api/events/context:
+    post:
+      summary: Build point-in-time event contexts for bar data.
+      responses:
+        "200":
+          description: Event context rows.
+  /api/monitor/once:
+    post:
+      summary: Queue one runtime monitor scan.
+      responses:
+        "200":
+          description: Queued task.
+  /api/monitor/run:
+    post:
+      summary: Queue a continuous or scheduled monitor run.
+      responses:
+        "200":
+          description: Queued task.
+  /api/monitor/replay:
+    post:
+      summary: Queue monitor replay against historical snapshots.
+      responses:
+        "200":
+          description: Queued task.
+  /api/monitor/report:
+    post:
+      summary: Build a runtime monitor report immediately.
+      responses:
+        "200":
+          description: Monitor report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitorReport"
   /api/execution/intents:
     post:
       summary: Build an execution intent and deterministic risk decision.
@@ -25,6 +248,40 @@ paths:
       responses:
         "200":
           description: Paper shadow audit result.
+  /api/execution/readiness:
+    post:
+      summary: Evaluate paper, sim, micro-live, or controlled-live readiness evidence.
+      responses:
+        "200":
+          description: Readiness decision.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessDecision"
+  /api/modules:
+    get:
+      summary: List strategy modules in the local catalog.
+      responses:
+        "200":
+          description: Module catalog.
+  /api/modules/memory:
+    get:
+      summary: Summarize module performance memory.
+      responses:
+        "200":
+          description: Module memory summary.
+  /api/paper/replay:
+    post:
+      summary: Replay backtest trades into a paper equity curve.
+      responses:
+        "200":
+          description: Paper replay result.
+  /api/paper/nt-export-signal:
+    post:
+      summary: Export offline NinjaTrader CSV or OIF signals.
+      responses:
+        "200":
+          description: Offline export payload.
   /api/gateways/nt8/health:
     get:
       summary: Check NT8 sim gateway health.
@@ -56,16 +313,172 @@ paths:
       responses:
         "200":
           description: Gateway ACK/NACK.
+  /api/gateways/nt8/reconciliation:
+    get:
+      summary: Get reconciliation status.
+      responses:
+        "200":
+          description: Reconciliation report.
+    post:
+      summary: Reconcile expected positions against gateway state.
+      responses:
+        "200":
+          description: Reconciliation report.
+  /api/incidents:
+    post:
+      summary: Record an incident or force gateway safety mode.
+      responses:
+        "200":
+          description: Incident response.
 components:
+  parameters:
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ExperimentId:
+      name: experiment_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Symbol:
+      name: symbol
+      in: query
+      required: true
+      schema:
+        type: string
+    DateFrom:
+      name: date_from
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date
+    DateTo:
+      name: date_to
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date
   schemas:
+    Task:
+      type: object
+      required: [task_id, task_type, status, payload, created_at, updated_at]
+      properties:
+        task_id:
+          type: string
+        task_type:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed, cancelled]
+        payload:
+          type: object
+        result:
+          type: object
+        error:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    DataTaskRequest:
+      type: object
+      required: [symbol, date_from, date_to]
+      properties:
+        symbol:
+          type: string
+        date_from:
+          type: string
+          format: date
+        date_to:
+          type: string
+          format: date
+        timeframe:
+          type: string
+        granularity:
+          type: string
+    ResearchRunRequest:
+      type: object
+      required: [date_from, date_to]
+      properties:
+        spec:
+          type: string
+        specs:
+          type: array
+          items:
+            type: string
+        experiment_id:
+          type: string
+        execution_mode:
+          type: string
+          enum: [bar, tick, bar_then_tick]
+        max_trials:
+          type: integer
+        max_trials_per_family:
+          type: integer
+    LeaderboardReport:
+      type: object
+      properties:
+        summary:
+          type: object
+        leaderboard:
+          type: array
+          items:
+            type: object
+        candidate_leaderboard:
+          type: array
+          items:
+            type: object
+        freeze_confirmed_leaderboard:
+          type: array
+          items:
+            type: object
+        rejected:
+          type: array
+          items:
+            type: object
+        rows:
+          type: array
+          items:
+            type: object
+    EventCalendar:
+      type: object
+      required: [calendar_id, event_calendar_hash, events, event_count]
+      properties:
+        calendar_id:
+          type: string
+        event_calendar_hash:
+          type: string
+        event_count:
+          type: integer
+        events:
+          type: array
+          items:
+            type: object
+    MonitorReport:
+      type: object
+      required: [monitor_run_id, snapshot, key_levels, event_context, signal]
+      properties:
+        monitor_run_id:
+          type: string
+        snapshot:
+          type: object
+        key_levels:
+          type: array
+          items:
+            type: object
+        event_context:
+          type: object
+        signal:
+          type: object
     ExecutionIntentRequest:
       type: object
-      required:
-        - account
-        - instrument
-        - action
-        - quantity
-        - source_strategy
+      required: [account, instrument, action, quantity, source_strategy]
       properties:
         mode:
           type: string
@@ -111,14 +524,15 @@ components:
           $ref: "#/components/schemas/RiskProfile"
     SourceStrategy:
       type: object
-      required:
-        - strategy_spec_hash
+      required: [strategy_spec_hash]
       properties:
         strategy_spec_hash:
           type: string
         strategy_freeze_id:
           type: string
         module_id:
+          type: string
+        module_version:
           type: string
     RiskProfile:
       type: object
@@ -154,19 +568,34 @@ components:
           type: integer
     ExecutionIntentResponse:
       type: object
+      required: [intent, risk]
       properties:
         intent:
           type: object
         risk:
           type: object
+    ReadinessDecision:
+      type: object
+      required: [stage, passed, decision, reasons, evidence, checked_at]
+      properties:
+        stage:
+          type: string
+        passed:
+          type: boolean
+        decision:
+          type: string
+          enum: [ready, blocked]
+        reasons:
+          type: array
+          items:
+            type: string
+        evidence:
+          type: object
+        checked_at:
+          type: string
     GatewayCommand:
       type: object
-      required:
-        - command_id
-        - type
-        - correlation_id
-        - idempotency_key
-        - mode
+      required: [type, correlation_id, idempotency_key, mode]
       properties:
         command_id:
           type: string
@@ -183,6 +612,28 @@ components:
           type: string
         mode:
           type: string
+        account:
+          type: string
+        instrument:
+          type: string
+        action:
+          type: string
+        qty:
+          type: integer
+        accounts:
+          type: array
+          items:
+            type: string
+        items:
+          type: array
+          items:
+            type: object
+        orderId:
+          type: string
+        namePrefix:
+          type: string
+        bracket:
+          type: object
         strategy_freeze_id:
           type: string
         strategy_spec_hash:

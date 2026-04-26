@@ -3,15 +3,29 @@ from __future__ import annotations
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from pathlib import Path
 from time import sleep
 
 from .config import load_symbols
+from .events import (
+    build_event_context_rows,
+    load_event_calendar,
+    validate_event_calendar,
+)
 from .experiments import load_experiment_audit_logs, load_experiment_summary
-from .execution import build_execution_intent_response, submit_paper_shadow
+from .execution import build_execution_intent_response, evaluate_live_readiness, submit_paper_shadow
+from .modules import (
+    discover_module_memory_files,
+    load_module_performance_memory,
+    strategy_module_catalog,
+    summarize_module_performance,
+)
+from .monitor import build_monitor_report
 from .nt_gateway import Nt8SimGateway
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import load_leaderboard_report, load_research_artifacts
+from .storage import bar_path
 from .strategy import StrategySpecError, load_strategy_spec
 from .tasks import (
     TERMINAL_STATUSES,
@@ -105,6 +119,98 @@ def build_experiment_artifacts_response(
     row_limit: int = 2_000,
 ) -> dict:
     return load_research_artifacts(experiments_root, experiment_id, row_limit=row_limit)
+
+
+def build_event_list_response(
+    calendar_path: Path,
+    symbol: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> dict:
+    calendar = load_event_calendar(calendar_path)
+    from_date = datetime_from_date(date_from) if date_from else None
+    to_date = datetime_from_date(date_to, end_of_day=True) if date_to else None
+    rows = []
+    for event in calendar["events"]:
+        if symbol and symbol not in event.affected_symbols and "*" not in event.affected_symbols:
+            continue
+        if from_date and event.timestamp_utc < from_date:
+            continue
+        if to_date and event.timestamp_utc > to_date:
+            continue
+        rows.append(event.to_dict())
+    return {
+        "calendar_id": calendar["calendar_id"],
+        "event_calendar_hash": calendar["event_calendar_hash"],
+        "events": rows,
+        "event_count": len(rows),
+    }
+
+
+def build_event_context_response(payload: dict) -> dict:
+    from .cli import parse_date
+
+    calendar_path = Path(payload.get("calendar", "configs/macro_events.yaml"))
+    symbol = str(payload.get("symbol", ""))
+    timeframe = str(payload.get("timeframe", "5m"))
+    if not symbol:
+        raise ValueError("symbol is required")
+    if not payload.get("date_from") or not payload.get("date_to"):
+        raise ValueError("date_from and date_to are required")
+    data_root = Path(payload.get("data_root", "data"))
+    calendar = load_event_calendar(calendar_path)
+    start = parse_date(payload["date_from"])
+    end = parse_date(payload["date_to"])
+    files = []
+    day = start
+    while day <= end:
+        files.append(bar_path(data_root, symbol, timeframe, day))
+        day = day + timedelta(days=1)
+    contexts = build_event_context_rows(symbol, files, calendar["events"])
+    return {
+        "calendar_id": calendar["calendar_id"],
+        "event_calendar_hash": calendar["event_calendar_hash"],
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "contexts": [context.to_dict() for context in contexts],
+        "context_count": len(contexts),
+    }
+
+
+def build_module_memory_response(experiments_root: Path) -> dict:
+    records = load_module_performance_memory(discover_module_memory_files(experiments_root))
+    return summarize_module_performance(records)
+
+
+def build_monitor_report_response(payload: dict) -> dict:
+    from .cli import parse_date
+
+    symbol = str(payload.get("symbol", ""))
+    timeframe = str(payload.get("timeframe", "5m"))
+    date_value = payload.get("date")
+    if not symbol:
+        raise ValueError("symbol is required")
+    if not date_value:
+        raise ValueError("date is required")
+    data_root = Path(payload.get("data_root", "data"))
+    files = [bar_path(data_root, symbol, timeframe, parse_date(date_value))]
+    events = []
+    if payload.get("calendar"):
+        events = load_event_calendar(Path(payload["calendar"]))["events"]
+    return build_monitor_report(
+        symbol=symbol,
+        timeframe=timeframe,
+        bar_files=files,
+        events=events,
+        proximity_points=float(payload.get("proximity_points", 2.0)),
+    )
+
+
+def datetime_from_date(value: str, end_of_day: bool = False):
+    from datetime import datetime, time
+
+    date_value = datetime.fromisoformat(value).date()
+    return datetime.combine(date_value, time.max if end_of_day else time.min)
 
 
 def create_app():
@@ -242,6 +348,35 @@ def create_app():
         )
         return report.to_dict()
 
+    @app.post("/api/events/validate")
+    def events_validate(payload: dict = Body(...)) -> dict:
+        try:
+            calendar = payload.get("calendar")
+            if not calendar:
+                raise ValueError("calendar is required")
+            return validate_event_calendar(Path(calendar))
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/events")
+    def events_list(
+        calendar: str = "configs/macro_events.yaml",
+        symbol: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> dict:
+        try:
+            return build_event_list_response(Path(calendar), symbol, date_from, date_to)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/events/context")
+    def events_context(payload: dict = Body(...)) -> dict:
+        try:
+            return build_event_context_response(payload)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/strategies/validate")
     def strategies_validate(payload: dict = Body(...)) -> dict:
         try:
@@ -283,6 +418,21 @@ def create_app():
     def monitor_once(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "monitor.once", payload)
 
+    @app.post("/api/monitor/run")
+    def monitor_run(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "monitor.run", payload)
+
+    @app.post("/api/monitor/replay")
+    def monitor_replay(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "monitor.replay", payload)
+
+    @app.post("/api/monitor/report")
+    def monitor_report(payload: dict = Body(...)) -> dict:
+        try:
+            return build_monitor_report_response(payload)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/execution/intents")
     def execution_intents(payload: dict = Body(...)) -> dict:
         try:
@@ -299,6 +449,21 @@ def create_app():
             return submit_paper_shadow(payload, Path(audit_path))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/execution/readiness")
+    def execution_readiness(payload: dict = Body(...)) -> dict:
+        try:
+            return evaluate_live_readiness(str(payload.get("stage", "")), dict(payload.get("evidence") or {}))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/modules")
+    def modules_list() -> dict:
+        return {"modules": strategy_module_catalog()}
+
+    @app.get("/api/modules/memory")
+    def modules_memory(experiments_root: str = "experiments") -> dict:
+        return build_module_memory_response(Path(experiments_root))
 
     @app.get("/api/gateways/nt8/health")
     def nt8_health() -> dict:
