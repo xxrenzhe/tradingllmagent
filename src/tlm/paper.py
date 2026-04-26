@@ -14,7 +14,10 @@ class PaperReplayResult:
     ending_equity: float
     realized_pnl: float
     trade_count: int
+    account: dict[str, Any]
+    orders: list[dict[str, Any]]
     fills: list[dict[str, Any]]
+    positions: list[dict[str, Any]]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -22,7 +25,10 @@ class PaperReplayResult:
             "ending_equity": self.ending_equity,
             "realized_pnl": self.realized_pnl,
             "trade_count": self.trade_count,
+            "account": self.account,
+            "orders": self.orders,
             "fills": self.fills,
+            "positions": self.positions,
         }
 
 
@@ -35,16 +41,59 @@ def load_backtest_result(path: Path) -> dict[str, Any]:
 
 def replay_trades(trades: Sequence[dict[str, Any]], starting_equity: float = 100_000) -> PaperReplayResult:
     equity = starting_equity
+    orders: list[dict[str, Any]] = []
     fills: list[dict[str, Any]] = []
+    positions: list[dict[str, Any]] = []
     for index, trade in enumerate(trades):
         net_pnl = float(trade["net_pnl"])
+        contracts = int(trade["contracts"])
+        entry_order_id = f"order_{index:06d}_entry"
+        exit_order_id = f"order_{index:06d}_exit"
+        position_id = f"position_{index:06d}"
+        entry_action = "buy" if trade["side"] == "long" else "sell_short"
+        exit_action = "sell" if trade["side"] == "long" else "buy_to_cover"
+        orders.extend(
+            [
+                {
+                    "order_id": entry_order_id,
+                    "position_id": position_id,
+                    "symbol": trade["symbol"],
+                    "side": trade["side"],
+                    "action": entry_action,
+                    "contracts": contracts,
+                    "order_type": "market",
+                    "status": "filled",
+                    "submitted_time": trade["entry_time"],
+                    "filled_time": trade["entry_time"],
+                    "fill_price": float(trade["entry_price"]),
+                    "risk_fields": _trade_risk_fields(trade),
+                },
+                {
+                    "order_id": exit_order_id,
+                    "position_id": position_id,
+                    "symbol": trade["symbol"],
+                    "side": trade["side"],
+                    "action": exit_action,
+                    "contracts": contracts,
+                    "order_type": "market",
+                    "status": "filled",
+                    "submitted_time": trade["exit_time"],
+                    "filled_time": trade["exit_time"],
+                    "fill_price": float(trade["exit_price"]),
+                    "risk_fields": _trade_risk_fields(trade),
+                },
+            ]
+        )
         equity += net_pnl
         fills.append(
             {
                 "fill_id": f"fill_{index:06d}",
+                "position_id": position_id,
+                "entry_order_id": entry_order_id,
+                "exit_order_id": exit_order_id,
                 "symbol": trade["symbol"],
                 "side": trade["side"],
-                "contracts": int(trade["contracts"]),
+                "contracts": contracts,
                 "entry_time": trade["entry_time"],
                 "exit_time": trade["exit_time"],
                 "entry_price": float(trade["entry_price"]),
@@ -58,13 +107,48 @@ def replay_trades(trades: Sequence[dict[str, Any]], starting_equity: float = 100
                 "equity_after": equity,
             }
         )
+        positions.append(
+            {
+                "position_id": position_id,
+                "symbol": trade["symbol"],
+                "side": trade["side"],
+                "contracts": contracts,
+                "status": "closed",
+                "opened_time": trade["entry_time"],
+                "closed_time": trade["exit_time"],
+                "entry_price": float(trade["entry_price"]),
+                "exit_price": float(trade["exit_price"]),
+                "realized_pnl": net_pnl,
+                "equity_after_close": equity,
+            }
+        )
+    account = {
+        "mode": "paper_replay",
+        "starting_equity": starting_equity,
+        "ending_equity": equity,
+        "realized_pnl": equity - starting_equity,
+        "open_position_count": 0,
+        "closed_position_count": len(positions),
+    }
     return PaperReplayResult(
         starting_equity=starting_equity,
         ending_equity=equity,
         realized_pnl=equity - starting_equity,
         trade_count=len(fills),
+        account=account,
+        orders=orders,
         fills=fills,
+        positions=positions,
     )
+
+
+def _trade_risk_fields(trade: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "stop_loss": trade.get("stop_loss") or trade.get("stop_price"),
+        "take_profit": trade.get("take_profit") or trade.get("target_price"),
+        "max_loss": trade.get("max_loss"),
+        "exit_reason": trade.get("exit_reason"),
+    }
 
 
 def export_ninjatrader_signals(

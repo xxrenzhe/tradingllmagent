@@ -45,6 +45,13 @@ class PaperReplayTests(unittest.TestCase):
         self.assertEqual(replay.realized_pnl, 45.0)
         self.assertEqual(replay.ending_equity, 100_045.0)
         self.assertEqual(replay.fills[0]["entry_reason"], "close_above_opening_range_high")
+        payload = replay.to_dict()
+        self.assertEqual(payload["account"]["open_position_count"], 0)
+        self.assertEqual(payload["account"]["closed_position_count"], 1)
+        self.assertEqual(len(payload["orders"]), 2)
+        self.assertEqual(payload["orders"][0]["status"], "filled")
+        self.assertEqual(payload["positions"][0]["status"], "closed")
+        self.assertEqual(payload["positions"][0]["realized_pnl"], 45.0)
 
     def test_ninjatrader_csv_and_oif_exports_are_offline_signals(self) -> None:
         trades = sample_result()["trades"]
@@ -110,6 +117,8 @@ class PaperReplayTests(unittest.TestCase):
         self.assertEqual(replay_code, 0)
         self.assertEqual(export_code, 0)
         self.assertEqual(replay_payload["ending_equity"], 100_045.0)
+        self.assertEqual(replay_payload["account"]["mode"], "paper_replay")
+        self.assertEqual(len(replay_payload["positions"]), 1)
         self.assertEqual(loaded["symbol"], "NQmain")
         self.assertIn("close_above_opening_range_high", signal_output)
 
