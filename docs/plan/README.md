@@ -16,6 +16,7 @@ Older documents remain useful as design history, but they should not override ne
 - `agent-driven-trading-system-optimization.md`: authoritative for strategy module memory, 5m/15m cadence, trade intent boundaries, and the high-level research-to-execution layering.
 - `nt8-live-integration-roadmap.md`: authoritative for post-v1 execution readiness, NT8 gateway evolution, paper shadow, sim, micro-live, controlled live, incident response, and execution safety.
 - `integrated-trading-system-implementation-plan.md`: authoritative for cross-document implementation sequencing, phase gates, and immediate landing order.
+- `current-trading-system-optimization-roadmap.md`: authoritative for current completeness assessment, remaining optimization priorities, and next implementation milestones.
 
 ## 3. Version Boundaries
 
