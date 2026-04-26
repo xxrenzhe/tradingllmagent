@@ -18,9 +18,10 @@ from tlm.llm import (
     OpenAICompatibleLLM,
     append_audit_log,
     create_llm_adapter,
+    load_train_validation_feedback,
     train_validation_feedback,
 )
-from tlm.research import run_research_bar_validation
+from tlm.research import run_research_bar_validation, write_research_result
 from tlm.strategy import parse_strategy_spec
 
 from test_strategy_backtest import base_spec
@@ -106,6 +107,45 @@ class LLMAndExperimentTests(unittest.TestCase):
             feedback = train_validation_feedback([result])
 
         payload = json.dumps(feedback, sort_keys=True)
+        self.assertIn("validation_metrics", payload)
+        self.assertNotIn("test_metrics", payload)
+        self.assertNotIn("final_holdout", payload)
+
+    def test_load_train_validation_feedback_from_persisted_results_is_safe(self) -> None:
+        spec = parse_strategy_spec(base_spec())
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            experiments_root = root / "experiments"
+            for offset in range(40):
+                write_breakout_day(data_root, date(2025, 1, 1) + timedelta(days=offset))
+            result = run_research_bar_validation(
+                spec=spec,
+                symbol_config=symbol_config(),
+                data_root=data_root,
+                experiment_id="safe_feedback_trial_0000",
+                date_from=date(2025, 1, 1),
+                date_to=date(2025, 2, 9),
+                train_days=5,
+                validation_days=5,
+                test_days=5,
+                step_days=5,
+                embargo_days=1,
+                final_holdout_days=5,
+                min_folds=1,
+            )
+            write_research_result(
+                experiments_root / result.experiment_id / "leaderboard.json",
+                result,
+            )
+            feedback = load_train_validation_feedback(
+                experiments_root,
+                experiment_id="safe_feedback",
+            )
+
+        payload = json.dumps(feedback, sort_keys=True)
+        self.assertEqual(len(feedback), 1)
+        self.assertIn("train_metrics", payload)
         self.assertIn("validation_metrics", payload)
         self.assertNotIn("test_metrics", payload)
         self.assertNotIn("final_holdout", payload)

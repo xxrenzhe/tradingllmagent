@@ -20,7 +20,7 @@ from .experiments import (
     record_experiment,
     record_trial,
 )
-from .llm import append_audit_log, create_llm_adapter
+from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_quality_report
 from .research import load_leaderboard_report, run_budgeted_research, write_research_result
@@ -298,7 +298,12 @@ def cmd_research_run(args: argparse.Namespace) -> int:
 def cmd_research_propose(args: argparse.Namespace) -> int:
     seed_spec = load_strategy_spec(Path(args.spec))
     experiment_id = args.experiment_id or f"{seed_spec.name}_proposal"
-    proposal = create_llm_adapter(args.model, args.llm_parameters).propose(seed_spec)
+    feedback = load_train_validation_feedback(
+        Path(args.feedback_experiments_root),
+        experiment_id=args.feedback_experiment_id,
+        limit=args.feedback_limit,
+    ) if args.feedback_experiments_root else None
+    proposal = create_llm_adapter(args.model, args.llm_parameters).propose(seed_spec, feedback=feedback)
     output_path = Path(args.output) if args.output else Path("strategies/generated") / f"{proposal.strategy.name}.json"
     write_json(output_path, proposal.strategy.raw)
 
@@ -316,7 +321,12 @@ def cmd_research_propose(args: argparse.Namespace) -> int:
         experiment_id=experiment_id,
         symbol=proposal.strategy.symbol,
         status="proposed",
-        metadata={"seed_spec": str(Path(args.spec)), "output": str(output_path)},
+        metadata={
+            "seed_spec": str(Path(args.spec)),
+            "output": str(output_path),
+            "feedback_count": len(feedback or []),
+            "feedback_experiment_id": args.feedback_experiment_id,
+        },
     )
     record_audit_event(
         experiment_db,
@@ -333,6 +343,7 @@ def cmd_research_propose(args: argparse.Namespace) -> int:
                 "experiment_id": experiment_id,
                 "prompt_hash": proposal.prompt_hash,
                 "response_hash": proposal.response_hash,
+                "feedback_count": len(feedback or []),
             },
             indent=2,
             sort_keys=True,
@@ -509,6 +520,9 @@ def build_parser() -> argparse.ArgumentParser:
     propose.add_argument("--spec", required=True)
     propose.add_argument("--model", default="local-deterministic-template")
     propose.add_argument("--llm-parameters", type=parse_json_object, default={})
+    propose.add_argument("--feedback-experiments-root")
+    propose.add_argument("--feedback-experiment-id")
+    propose.add_argument("--feedback-limit", type=int, default=10)
     propose.add_argument("--experiment-id")
     propose.add_argument("--experiments-root", default="experiments")
     propose.add_argument("--experiment-db", default="experiments/research.sqlite3")

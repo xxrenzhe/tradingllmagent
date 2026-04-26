@@ -82,6 +82,39 @@ def train_validation_feedback(results: list[Any]) -> list[dict[str, Any]]:
     return feedback
 
 
+def load_train_validation_feedback(
+    experiments_root: Path,
+    experiment_id: str | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    feedback = []
+    for result_path in sorted(experiments_root.glob("*/leaderboard.json"), reverse=True):
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        payload_experiment_id = payload.get("experiment_id", result_path.parent.name)
+        if experiment_id and not (
+            payload_experiment_id == experiment_id
+            or payload_experiment_id.startswith(f"{experiment_id}_")
+        ):
+            continue
+        feedback.append(train_validation_feedback_from_payload(payload))
+        if len(feedback) >= max(limit, 0):
+            break
+    return feedback
+
+
+def train_validation_feedback_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "experiment_id": payload.get("experiment_id"),
+        "strategy_name": payload.get("strategy_name"),
+        "strategy_spec_hash": payload.get("strategy_spec_hash"),
+        "variant_parameters": payload.get("variant_parameters", {}),
+        "folds": [
+            {key: value for key, value in fold.items() if key in TRAIN_VALIDATION_ONLY_KEYS}
+            for fold in payload.get("fold_results", [])
+        ],
+    }
+
+
 class DeterministicLocalLLM:
     def __init__(self, model: str = "local-deterministic-template") -> None:
         self.model = model
