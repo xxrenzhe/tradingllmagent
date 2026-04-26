@@ -496,7 +496,8 @@ tr.selected td {
 }
 
 .chart-grid,
-.distribution-grid {
+.distribution-grid,
+.strict-validation-grid {
   display: grid;
   gap: 16px;
 }
@@ -507,6 +508,10 @@ tr.selected td {
 
 .distribution-grid {
   grid-template-columns: repeat(5, minmax(180px, 1fr));
+}
+
+.strict-validation-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .chart-card {
@@ -784,7 +789,8 @@ pre {
   .artifact-summary,
   .strategy-card-grid,
   .chart-grid,
-  .distribution-grid {
+  .distribution-grid,
+  .strict-validation-grid {
     grid-template-columns: 1fr;
   }
 

@@ -230,6 +230,7 @@ export default function App() {
     const minSharpe = Number(deferredFilter.minSharpe || 0);
     return (row.sharpe_test ?? -Infinity) >= minSharpe || !row.passed;
   });
+  const selectedLeaderboardRow = (leaderboard.rows ?? []).find((row) => row.experiment_id === selectedArtifactId);
 
   const runningTasks = tasks.filter((task) => ["queued", "running"].includes(task.status)).length;
   const failedTasks = tasks.filter((task) => task.status === "failed").length;
@@ -395,7 +396,7 @@ export default function App() {
 
       <Panel title="Strategy Replay Detail" kicker={selectedArtifactId || "Select a leaderboard row"}>
         {artifactDetail ? (
-          <ArtifactDashboard detail={artifactDetail} />
+          <ArtifactDashboard detail={artifactDetail} row={selectedLeaderboardRow} />
         ) : (
           <EmptyState
             title="No strategy artifacts loaded"
@@ -645,6 +646,8 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
             <th>Score</th>
             <th>Test Sharpe</th>
             <th>Annual Trades</th>
+            <th>Tick Replay</th>
+            <th>Non-Overlap</th>
             <th>Trade Spread</th>
             <th>Test PnL</th>
             <th>Holdout PnL</th>
@@ -660,6 +663,7 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
             const costSensitivity = row.cost_sensitivity_report ?? {};
             const parameterStability = row.parameter_stability_report ?? {};
             const tradeDistribution = row.trade_count_distribution_report ?? {};
+            const tickReplay = row.tick_replay_report ?? {};
             const costStressKnown = typeof costSensitivity.worst_case_survives === "boolean";
             return (
               <tr key={row.experiment_id} className={selectedExperimentId === row.experiment_id ? "selected" : ""}>
@@ -684,6 +688,18 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
                 <td>{formatNumber(row.robustness_score, 3)}</td>
                 <td>{formatNumber(row.sharpe_test)}</td>
                 <td>{formatCompact(row.annual_trades_test)}</td>
+                <td>
+                  <span className={`status-pill ${tickReplayStatusClass(tickReplay)}`}>
+                    {tickReplay.status ?? "unknown"}
+                  </span>
+                  <div className="table-detail">{tickReplay.method ?? "method unknown"}</div>
+                </td>
+                <td>
+                  {formatNumber(row.sharpe_non_overlap_test)}
+                  <div className="table-detail">
+                    {formatCompact((row.non_overlap_test_fold_indexes ?? []).length)} folds · {row.overlapping_test_folds ? "overlap flagged" : "no overlap"}
+                  </div>
+                </td>
                 <td>
                   <span className={`status-pill ${tradeDistribution.status === "balanced" ? "completed" : "failed"}`}>
                     {tradeDistribution.status ?? "unknown"}
@@ -722,10 +738,21 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
   );
 }
 
-function ArtifactDashboard({ detail }) {
+function ArtifactDashboard({ detail, row }) {
   const distributions = detail.distributions ?? {};
   const trades = detail.trades ?? [];
   const foldMetrics = detail.fold_metrics ?? [];
+  const strictValidation = row ? {
+    tick_replay_report: row.tick_replay_report,
+    final_holdout_policy: row.final_holdout_policy,
+    overlapping_test_folds: row.overlapping_test_folds,
+    non_overlap_test_fold_indexes: row.non_overlap_test_fold_indexes,
+    non_overlap_test_metrics: {
+      sharpe: row.sharpe_non_overlap_test,
+      net_pnl: row.net_pnl_non_overlap_test,
+      annual_trades: row.annual_trades_non_overlap_test
+    }
+  } : detail.manifest?.strict_validation;
   return (
     <div className="artifact-dashboard">
       <div className="artifact-summary">
@@ -734,6 +761,7 @@ function ArtifactDashboard({ detail }) {
         <Metric label="Metric Splits" value={formatCompact(foldMetrics.length)} detail="train / validation / test / holdout" />
         <Metric label="Schema" value={`v${detail.manifest?.schema_version ?? "-"}`} detail={shortHash(detail.manifest?.data_version_hash)} />
       </div>
+      <StrictValidationSummary strictValidation={strictValidation} />
       <div className="chart-grid">
         <section className="chart-card wide-chart">
           <div className="chart-heading">
@@ -753,6 +781,35 @@ function ArtifactDashboard({ detail }) {
       <TradeDistributionGrid distributions={distributions} />
       <SplitMetricsTable rows={foldMetrics} />
     </div>
+  );
+}
+
+function StrictValidationSummary({ strictValidation }) {
+  if (!strictValidation) {
+    return <EmptyState title="No strict validation summary" text="Run research again to write strict validation metadata." />;
+  }
+  const tickReplay = strictValidation.tick_replay_report ?? {};
+  const holdoutPolicy = strictValidation.final_holdout_policy ?? {};
+  const nonOverlap = strictValidation.non_overlap_test_metrics ?? {};
+  return (
+    <section className="strict-validation-grid" aria-label="Strict validation summary">
+      <Metric label="Tick Replay" value={tickReplay.status ?? "unknown"} detail={tickReplay.method ?? "method unknown"} />
+      <Metric
+        label="Replay Gap"
+        value={tickReplay.strict_tick_replay_gap ? "flagged" : "clear"}
+        detail={tickReplay.native_tick_replay ? "native bid/ask replay" : "fallback or not applicable"}
+      />
+      <Metric
+        label="Non-Overlap Sharpe"
+        value={formatNumber(nonOverlap.sharpe)}
+        detail={`${formatCompact((strictValidation.non_overlap_test_fold_indexes ?? []).length)} non-overlap folds`}
+      />
+      <Metric
+        label="Holdout Isolation"
+        value={holdoutPolicy.isolation_status ?? holdoutPolicy.status ?? "unknown"}
+        detail={(holdoutPolicy.llm_hidden_splits ?? []).join(" / ") || "hidden split policy unknown"}
+      />
+    </section>
   );
 }
 
@@ -957,6 +1014,16 @@ function parameterStabilityStatusClass(status) {
   }
   if (status === "fragile") {
     return "failed";
+  }
+  return "running";
+}
+
+function tickReplayStatusClass(report) {
+  if (report?.strict_tick_replay_gap) {
+    return "failed";
+  }
+  if (report?.native_tick_replay || report?.status === "not_applicable") {
+    return "completed";
   }
   return "running";
 }

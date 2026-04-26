@@ -320,6 +320,15 @@ class RollingValidationTests(unittest.TestCase):
         self.assertIn("CFD proxy", manifest["data_disclaimer"]["data_source"])
         self.assertEqual(manifest["reproducibility"]["random_seed"], 123)
         self.assertEqual(manifest["leaderboard_path"], "leaderboard.json")
+        self.assertIn("strict_validation", manifest)
+        self.assertEqual(
+            manifest["strict_validation"]["tick_replay_report"]["status"],
+            result.tick_replay_report["status"],
+        )
+        self.assertEqual(
+            manifest["strict_validation"]["non_overlap_test_fold_indexes"],
+            result.non_overlap_test_fold_indexes,
+        )
         self.assertEqual(manifest["artifacts"]["fold_metrics"]["row_count"], len(result.split_artifacts))
         self.assertEqual(manifest["artifacts"]["trades"]["row_count"], trade_rows)
         self.assertEqual(manifest["artifacts"]["equity"]["row_count"], equity_rows)

@@ -1162,6 +1162,13 @@ def write_research_artifacts(
         "snapshot": result.snapshot,
         "cost_model": result.cost_model,
         "validation_plan": result.validation_plan.to_dict(),
+        "strict_validation": {
+            "tick_replay_report": result.tick_replay_report,
+            "final_holdout_policy": result.final_holdout_policy,
+            "overlapping_test_folds": result.overlapping_test_folds,
+            "non_overlap_test_fold_indexes": result.non_overlap_test_fold_indexes,
+            "non_overlap_test_metrics": result.non_overlap_test_metrics.to_dict(),
+        },
         "reproducibility": {
             "code_version": result.snapshot.get("code_version"),
             "config_snapshot_hash": result.snapshot.get("config_snapshot_hash"),
