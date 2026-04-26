@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -219,15 +220,125 @@ def append_execution_audit(path: Path, event: dict[str, Any]) -> None:
 
 
 def submit_paper_shadow(payload: dict[str, Any], audit_path: Path) -> dict[str, Any]:
-    response = build_execution_intent_response(payload)
+    response = build_paper_shadow_run(payload)
     event = {
         "event_type": "paper_shadow_intent",
         "intent": response["intent"],
         "risk": response["risk"],
+        "paper_shadow_run": response["paper_shadow_run"],
         "recorded_at": datetime.now(UTC).isoformat(),
     }
     append_execution_audit(audit_path, event)
     return {**response, "audit_path": str(audit_path)}
+
+
+def build_paper_shadow_run(payload: dict[str, Any]) -> dict[str, Any]:
+    response = build_execution_intent_response(payload)
+    intent = response["intent"]
+    risk = response["risk"]
+    market_snapshot = dict(payload.get("market_snapshot") or {})
+    slippage_model = dict(payload.get("slippage_model") or {})
+    backtest_costs = dict(payload.get("backtest_costs") or {})
+    blocked = risk["decision"] != "risk_approved"
+    paper_shadow_run = {
+        "schema_version": 1,
+        "paper_shadow_run_id": str(payload.get("paper_shadow_run_id") or f"ps_{uuid4().hex}"),
+        "intent_id": intent["intent_id"],
+        "strategy_spec_hash": intent["source_strategy"].get("strategy_spec_hash"),
+        "strategy_freeze_id": intent["source_strategy"].get("strategy_freeze_id"),
+        "module_id": intent["source_strategy"].get("module_id"),
+        "module_version": intent["source_strategy"].get("module_version"),
+        "snapshot_hash": snapshot_hash(market_snapshot),
+        "replay_key": paper_shadow_replay_key(intent, market_snapshot),
+        "risk_decision_id": risk["risk_decision_id"],
+        "risk_decision": risk["decision"],
+        "blocked": blocked,
+        "blocked_reasons": list(risk.get("reasons", [])),
+        "hypothetical_fill": None if blocked else hypothetical_fill(intent, market_snapshot, slippage_model),
+        "drift_report": drift_report(backtest_costs, market_snapshot, slippage_model),
+        "live_gateway_command_created": False,
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    return {**response, "paper_shadow_run": paper_shadow_run}
+
+
+def snapshot_hash(snapshot: dict[str, Any]) -> str:
+    if snapshot.get("snapshot_hash"):
+        return str(snapshot["snapshot_hash"])
+    return stable_hash(snapshot)
+
+
+def paper_shadow_replay_key(intent: dict[str, Any], market_snapshot: dict[str, Any]) -> str:
+    payload = {
+        "strategy_spec_hash": intent.get("source_strategy", {}).get("strategy_spec_hash"),
+        "module_id": intent.get("source_strategy", {}).get("module_id"),
+        "instrument": intent.get("instrument"),
+        "action": intent.get("action"),
+        "quantity": intent.get("quantity"),
+        "order_type": intent.get("order_type"),
+        "snapshot_hash": snapshot_hash(market_snapshot),
+    }
+    return stable_hash(payload)
+
+
+def hypothetical_fill(
+    intent: dict[str, Any],
+    market_snapshot: dict[str, Any],
+    slippage_model: dict[str, Any],
+) -> dict[str, Any]:
+    bid = _optional_float(market_snapshot.get("bid"))
+    ask = _optional_float(market_snapshot.get("ask"))
+    last_price = _optional_float(market_snapshot.get("last_price"))
+    tick_size = float(slippage_model.get("tick_size", market_snapshot.get("tick_size", 0.25)))
+    slippage_ticks = float(slippage_model.get("slippage_ticks", 0))
+    action = intent["action"]
+    if action in {"buy", "buy_to_cover"}:
+        reference_price = ask if ask is not None else last_price
+        fill_price = None if reference_price is None else reference_price + slippage_ticks * tick_size
+    else:
+        reference_price = bid if bid is not None else last_price
+        fill_price = None if reference_price is None else reference_price - slippage_ticks * tick_size
+    return {
+        "instrument": intent["instrument"],
+        "action": action,
+        "quantity": intent["quantity"],
+        "reference_price": reference_price,
+        "fill_price": fill_price,
+        "slippage_ticks": slippage_ticks,
+        "tick_size": tick_size,
+        "bracket": intent.get("bracket", {}),
+    }
+
+
+def drift_report(
+    backtest_costs: dict[str, Any],
+    market_snapshot: dict[str, Any],
+    slippage_model: dict[str, Any],
+) -> dict[str, Any]:
+    expected_spread = _optional_float(backtest_costs.get("expected_spread_ticks"))
+    observed_spread = _optional_float(market_snapshot.get("spread_ticks"))
+    expected_slippage = _optional_float(backtest_costs.get("expected_slippage_ticks"))
+    observed_slippage = _optional_float(slippage_model.get("slippage_ticks"))
+    return {
+        "schema_version": 1,
+        "expected_spread_ticks": expected_spread,
+        "observed_spread_ticks": observed_spread,
+        "spread_drift_ticks": _delta(observed_spread, expected_spread),
+        "expected_slippage_ticks": expected_slippage,
+        "observed_slippage_ticks": observed_slippage,
+        "slippage_drift_ticks": _delta(observed_slippage, expected_slippage),
+    }
+
+
+def stable_hash(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _delta(observed: float | None, expected: float | None) -> float | None:
+    if observed is None or expected is None:
+        return None
+    return observed - expected
 
 
 def evaluate_live_readiness(stage: str, evidence: dict[str, Any]) -> dict[str, Any]:

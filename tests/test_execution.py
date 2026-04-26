@@ -7,6 +7,7 @@ from pathlib import Path
 
 from tlm.api import build_execution_intent_response
 from tlm.execution import (
+    build_paper_shadow_run,
     build_gateway_command,
     create_execution_intent,
     evaluate_live_readiness,
@@ -110,6 +111,48 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertEqual(response["audit_path"], str(audit_path))
         self.assertEqual(events[0]["event_type"], "paper_shadow_intent")
         self.assertEqual(events[0]["risk"]["decision"], "risk_approved")
+        self.assertFalse(events[0]["paper_shadow_run"]["live_gateway_command_created"])
+
+    def test_paper_shadow_run_records_replayable_fill_and_drift(self) -> None:
+        payload = {
+            **sample_intent_payload(),
+            "intent_id": "intent_fixed",
+            "idempotency_key": "idem_fixed",
+            "market_snapshot": {
+                "snapshot_time": "2026-04-27T13:30:00",
+                "bid": 19000.0,
+                "ask": 19000.5,
+                "spread_ticks": 2,
+                "tick_size": 0.25,
+            },
+            "slippage_model": {"tick_size": 0.25, "slippage_ticks": 1},
+            "backtest_costs": {"expected_spread_ticks": 1, "expected_slippage_ticks": 0.5},
+        }
+
+        first = build_paper_shadow_run(payload)
+        second = build_paper_shadow_run(payload)
+        run = first["paper_shadow_run"]
+
+        self.assertEqual(first["intent"]["status"], "risk_approved")
+        self.assertEqual(run["strategy_spec_hash"], "abc123")
+        self.assertEqual(run["module_id"], "opening_range_breakout")
+        self.assertFalse(run["blocked"])
+        self.assertEqual(run["hypothetical_fill"]["fill_price"], 19000.75)
+        self.assertEqual(run["drift_report"]["spread_drift_ticks"], 1)
+        self.assertEqual(run["drift_report"]["slippage_drift_ticks"], 0.5)
+        self.assertEqual(run["replay_key"], second["paper_shadow_run"]["replay_key"])
+        self.assertFalse(run["live_gateway_command_created"])
+
+    def test_paper_shadow_blocks_without_hypothetical_fill_when_risk_rejected(self) -> None:
+        payload = sample_intent_payload()
+        payload["risk_profile"] = {**payload["risk_profile"], "event_blackout": True}
+
+        run = build_paper_shadow_run(payload)["paper_shadow_run"]
+
+        self.assertTrue(run["blocked"])
+        self.assertIn("event_blackout", run["blocked_reasons"])
+        self.assertIsNone(run["hypothetical_fill"])
+        self.assertFalse(run["live_gateway_command_created"])
 
     def test_live_readiness_blocks_without_external_validation(self) -> None:
         micro_live = evaluate_live_readiness(
