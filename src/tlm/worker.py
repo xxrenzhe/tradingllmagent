@@ -14,7 +14,7 @@ from .cli import bar_parquet_files, day_bounds, parse_date, tick_parquet_files
 from .cli_dates import iter_dates
 from .config import get_cost_model, get_symbol
 from .dukascopy import download_hour, iter_hours, parse_bi5_file
-from .experiments import record_audit_event, record_experiment
+from .experiments import record_audit_event, record_experiment, record_trial
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import run_budgeted_research, write_research_result
@@ -320,12 +320,30 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
     config_dir = Path(payload.get("config_dir", "configs"))
     data_root = Path(payload.get("data_root", "data"))
     experiments_root = Path(payload.get("experiments_root", "experiments"))
+    experiment_db = Path(payload.get("experiment_db", "experiments/research.sqlite3"))
     date_from = parse_date(_required(payload, "date_from", "from"))
     date_to = parse_date(_required(payload, "date_to", "to"))
     experiment_id = payload.get("experiment_id") or f"research_{date_from}_{date_to}"
     llm_parameters = payload.get("llm_parameters", {})
     if not isinstance(llm_parameters, dict):
         raise ValueError("llm_parameters must be an object")
+    record_experiment(
+        experiment_db,
+        experiment_id=experiment_id,
+        symbol=str(payload.get("symbol", specs[0].symbol if specs else "unknown")),
+        status="running",
+        metadata={
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "execution_mode": payload.get("execution_mode", "bar"),
+            "max_trials": payload.get("max_trials"),
+            "max_trials_per_family": payload.get("max_trials_per_family"),
+            "family_weights": payload.get("family_weights"),
+            "llm_model": payload.get("llm_model", "local-deterministic-template"),
+            "llm_parameters": llm_parameters,
+            "deduplication_report": deduplication_report,
+        },
+    )
     result_paths = []
     by_family: dict[str, int] = {}
     family_outcomes: dict[str, dict[str, Any]] = {}
@@ -397,14 +415,41 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
         for result in results:
             output_path = experiments_root / result.experiment_id / "leaderboard.json"
             write_research_result(output_path, result)
+            record_trial(experiment_db, experiment_id, result)
+            record_audit_event(
+                experiment_db,
+                experiment_id=experiment_id,
+                trial_id=result.experiment_id,
+                event_type="research_trial_completed",
+                payload={
+                    "trial_id": result.experiment_id,
+                    "strategy_spec_hash": result.strategy_spec_hash,
+                    "prompt_hash": result.prompt_hash,
+                    "gates": result.gates,
+                },
+            )
             result_paths.append(str(output_path))
-    return {
+    result_payload = {
         "trials": sum(by_family.values()),
         "by_family": by_family,
         "family_weight_report": build_family_weight_report(family_outcomes),
         "result_paths": result_paths,
         "deduplication_report": deduplication_report,
     }
+    record_experiment(
+        experiment_db,
+        experiment_id=experiment_id,
+        symbol=str(payload.get("symbol", specs[0].symbol if specs else "unknown")),
+        status="completed",
+        metadata={
+            "trials": result_payload["trials"],
+            "execution_mode": payload.get("execution_mode", "bar"),
+            "by_family": by_family,
+            "family_weight_report": result_payload["family_weight_report"],
+            "deduplication_report": deduplication_report,
+        },
+    )
+    return result_payload
 
 
 def build_family_weight_report(

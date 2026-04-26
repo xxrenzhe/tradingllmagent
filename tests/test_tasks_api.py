@@ -15,6 +15,7 @@ from tlm.api import (
     create_app,
 )
 from tlm.dukascopy import Tick
+from tlm.experiments import load_experiment_audit_logs, load_experiment_summary
 from tlm.storage import normalized_tick_path, write_ticks_parquet
 from tlm.tasks import (
     append_task_log,
@@ -231,6 +232,7 @@ class TaskStoreTests(unittest.TestCase):
             root = Path(temp_dir)
             data_root = root / "data"
             experiments_root = root / "experiments"
+            experiment_db = root / "research.sqlite3"
             db_path = root / "tasks.sqlite3"
             opening_path = root / "opening.json"
             trend_path = root / "trend.json"
@@ -248,6 +250,7 @@ class TaskStoreTests(unittest.TestCase):
                     "experiment_id": "portfolio",
                     "data_root": str(data_root),
                     "experiments_root": str(experiments_root),
+                    "experiment_db": str(experiment_db),
                     "max_trials_per_family": 2,
                     "family_weights": {
                         "opening_range_breakout": 0.5,
@@ -268,6 +271,8 @@ class TaskStoreTests(unittest.TestCase):
                 experiments_root,
                 "portfolio_opening_range_breakout_trial_0000",
             )
+            summary = load_experiment_summary(experiment_db, "portfolio")
+            audit_logs = load_experiment_audit_logs(experiment_db, "portfolio")
 
         self.assertEqual(completed["status"], "completed")
         self.assertEqual(completed["result"]["trials"], 2)
@@ -296,6 +301,10 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(len(completed["result"]["result_paths"]), 2)
         self.assertTrue(artifacts["trades"])
         self.assertTrue(artifacts["distributions"]["by_direction"])
+        self.assertEqual(summary["experiment"]["status"], "completed")
+        self.assertEqual(len(summary["trials"]), 2)
+        self.assertEqual(summary["experiment"]["metadata"]["trials"], 2)
+        self.assertEqual({entry["event_type"] for entry in audit_logs}, {"research_trial_completed"})
 
     def test_run_task_deduplicates_duplicate_research_specs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
