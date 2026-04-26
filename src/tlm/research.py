@@ -812,8 +812,14 @@ def promotion_summary(result: ResearchRunResult | None) -> dict | None:
 def build_final_holdout_policy(plan: ValidationPlan) -> dict:
     return {
         "status": "frozen_once_after_candidate_selection",
+        "isolation_status": "isolated_from_llm_feedback",
+        "run_timing": "same_research_run_after_rolling_candidate_evaluation",
         "llm_feedback_includes_final_holdout": False,
+        "llm_visible_splits": ["train", "validation"],
+        "llm_hidden_splits": ["test", "final_holdout"],
         "promotion_uses_final_holdout": False,
+        "separate_freeze_task_required_for_strict_plan": True,
+        "strict_freeze_task_implemented": False,
         "range": plan.final_holdout.to_dict(),
         "embargo_days": plan.embargo_days,
         "indicator_warmup_days": plan.indicator_warmup_days,

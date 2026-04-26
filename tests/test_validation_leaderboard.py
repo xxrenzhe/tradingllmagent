@@ -380,6 +380,9 @@ class RollingValidationTests(unittest.TestCase):
             rows[0]["hard_gate_report"],
         )
         self.assertFalse(rows[0]["final_holdout_policy"]["llm_feedback_includes_final_holdout"])
+        self.assertEqual(rows[0]["final_holdout_policy"]["isolation_status"], "isolated_from_llm_feedback")
+        self.assertEqual(rows[0]["final_holdout_policy"]["llm_visible_splits"], ["train", "validation"])
+        self.assertIn("final_holdout", rows[0]["final_holdout_policy"]["llm_hidden_splits"])
         self.assertTrue(rows[0]["next_round_suggestions"])
         self.assertEqual(
             rows[0]["cost_sensitivity_report"]["stress_scenarios"][1]["name"],
@@ -414,6 +417,12 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(result.hard_gate_report)
         self.assertTrue(any(not gate["passed"] for gate in result.hard_gate_report))
         self.assertEqual(result.final_holdout_policy["status"], "frozen_once_after_candidate_selection")
+        self.assertEqual(
+            result.final_holdout_policy["run_timing"],
+            "same_research_run_after_rolling_candidate_evaluation",
+        )
+        self.assertTrue(result.final_holdout_policy["separate_freeze_task_required_for_strict_plan"])
+        self.assertFalse(result.final_holdout_policy["strict_freeze_task_implemented"])
         self.assertTrue(result.next_round_suggestions)
         self.assertTrue(result.final_holdout_data_version_hash)
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])
