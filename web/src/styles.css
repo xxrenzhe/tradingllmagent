@@ -273,6 +273,10 @@ select {
   margin-top: 16px;
 }
 
+.two-column-form {
+  grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
+}
+
 .button-row,
 .toolbar,
 .inline-form,
@@ -397,6 +401,13 @@ tr.selected td {
   gap: 16px;
 }
 
+.module-memory-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
 .strategy-card {
   display: grid;
   gap: 14px;
@@ -406,6 +417,44 @@ tr.selected td {
     linear-gradient(145deg, rgba(255, 253, 248, 0.88), rgba(236, 216, 174, 0.26)),
     rgba(255, 253, 248, 0.72);
   padding: 18px;
+}
+
+.module-memory-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(72, 61, 38, 0.18);
+  border-radius: 22px;
+  background: rgba(255, 253, 248, 0.68);
+  padding: 18px;
+}
+
+.module-memory-card h3 {
+  margin: 0;
+  font-family: "Fraunces", "Georgia", serif;
+  font-size: 1.15rem;
+}
+
+.module-memory-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.module-memory-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.module-memory-stats .metric-card {
+  min-height: 104px;
+  padding: 14px;
+  box-shadow: none;
+}
+
+.module-memory-stats .metric-card strong {
+  font-size: 1.25rem;
 }
 
 .strategy-card.selected {
@@ -512,6 +561,35 @@ tr.selected td {
 
 .strict-validation-grid {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.readiness-grid {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.readiness-grid .json-block {
+  max-height: 320px;
+}
+
+.readiness-banner {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(222, 211, 189, 0.78);
+  border-radius: 18px;
+  background: rgba(255, 253, 248, 0.6);
+  padding: 16px;
+}
+
+.readiness-banner strong {
+  font-family: "Azeret Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 1.4rem;
+}
+
+.readiness-banner small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .chart-card {

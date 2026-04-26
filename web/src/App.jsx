@@ -41,6 +41,19 @@ export default function App() {
   });
   const [paperReplay, setPaperReplay] = useState(null);
   const [ntExport, setNtExport] = useState(null);
+  const [monitorForm, setMonitorForm] = useState({
+    symbol: "NQmain",
+    date: today(),
+    timeframe: "5m",
+    calendar: "configs/macro_events.yaml"
+  });
+  const [monitorReport, setMonitorReport] = useState(null);
+  const [readinessForm, setReadinessForm] = useState({
+    stage: "paper_shadow",
+    evidence: "{\"trading_days\":0,\"replay_consistent\":false,\"max_allowed_drift\":1}"
+  });
+  const [readinessDecision, setReadinessDecision] = useState(null);
+  const [moduleMemory, setModuleMemory] = useState(null);
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
   const [filters, setFilters] = useState({ minSharpe: "2", onlyPassed: false });
@@ -122,6 +135,14 @@ export default function App() {
     setPaperForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updateMonitorForm(key, value) {
+    setMonitorForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateReadinessForm(key, value) {
+    setReadinessForm((current) => ({ ...current, [key]: value }));
+  }
+
   async function runAction(label, fn) {
     setIsPending(true);
     try {
@@ -179,6 +200,33 @@ export default function App() {
     });
     setNtExport(payload);
     return { task_id: "nt export generated" };
+  }
+
+  async function runMonitorReport() {
+    const payload = await apiRequest(apiBase, "/api/monitor/report", {
+      method: "POST",
+      body: JSON.stringify(monitorForm)
+    });
+    setMonitorReport(payload);
+    return { task_id: "monitor report loaded" };
+  }
+
+  async function evaluateReadiness() {
+    const payload = await apiRequest(apiBase, "/api/execution/readiness", {
+      method: "POST",
+      body: JSON.stringify({
+        stage: readinessForm.stage,
+        evidence: parseJsonObject(readinessForm.evidence, "Readiness Evidence")
+      })
+    });
+    setReadinessDecision(payload);
+    return { task_id: `readiness ${payload.decision}` };
+  }
+
+  async function refreshModuleMemory() {
+    const payload = await apiRequest(apiBase, "/api/modules/memory");
+    setModuleMemory(payload);
+    return { task_id: "module memory refreshed" };
   }
 
   async function refreshQuality() {
@@ -466,6 +514,58 @@ export default function App() {
         {paperReplay ? <JsonBlock payload={paperReplay} /> : null}
         {ntExport ? <JsonBlock payload={ntExport} /> : null}
       </Panel>
+
+      <section className="workbench-grid">
+        <Panel title="Runtime Monitor" kicker="Snapshot, events, signal class">
+          <div className="form-grid compact-form">
+            <TextField label="Symbol" value={monitorForm.symbol} onChange={(value) => updateMonitorForm("symbol", value)} />
+            <TextField label="Date" type="date" value={monitorForm.date} onChange={(value) => updateMonitorForm("date", value)} />
+            <TextField label="Timeframe" value={monitorForm.timeframe} onChange={(value) => updateMonitorForm("timeframe", value)} />
+            <TextField label="Event Calendar" className="wide" value={monitorForm.calendar} onChange={(value) => updateMonitorForm("calendar", value)} />
+          </div>
+          <div className="button-row">
+            <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Monitor", runMonitorReport)}>
+              Load Monitor Report
+            </ActionButton>
+          </div>
+          {monitorReport ? <RuntimeMonitorSummary report={monitorReport} /> : <EmptyState title="No runtime report" text="Load a monitor report from local bar data and event context." />}
+        </Panel>
+
+        <Panel title="Execution Readiness" kicker="Paper, sim, live gates">
+          <div className="form-grid compact-form two-column-form">
+            <label className="field">
+              <span>Stage</span>
+              <select value={readinessForm.stage} onChange={(event) => updateReadinessForm("stage", event.target.value)}>
+                <option value="paper_shadow">paper shadow</option>
+                <option value="nt8_sim">nt8 sim</option>
+                <option value="micro_live">micro live</option>
+                <option value="controlled_live">controlled live</option>
+              </select>
+            </label>
+            <TextField
+              label="Evidence JSON"
+              className="wide"
+              value={readinessForm.evidence}
+              onChange={(value) => updateReadinessForm("evidence", value)}
+            />
+          </div>
+          <div className="button-row">
+            <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Readiness", evaluateReadiness)}>
+              Evaluate Readiness
+            </ActionButton>
+          </div>
+          {readinessDecision ? <ReadinessSummary decision={readinessDecision} /> : <EmptyState title="No readiness decision" text="Evaluate evidence before enabling any execution stage." />}
+        </Panel>
+      </section>
+
+      <Panel title="Module Memory" kicker="Promotion, retirement, retest">
+        <div className="button-row">
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Module memory", refreshModuleMemory)}>
+            Refresh Module Memory
+          </ActionButton>
+        </div>
+        {moduleMemory ? <ModuleMemorySummary summary={moduleMemory} /> : <EmptyState title="No module memory loaded" text="Refresh after research writes module performance records." />}
+      </Panel>
     </main>
   );
 }
@@ -734,6 +834,62 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function RuntimeMonitorSummary({ report }) {
+  const signal = report.signal ?? {};
+  const eventContext = report.event_context ?? {};
+  const snapshot = report.snapshot ?? {};
+  return (
+    <div className="readiness-grid">
+      <Metric label="Signal" value={signal.bucket ?? "none"} detail={(signal.reasons ?? []).join(", ") || "no reasons"} />
+      <Metric label="Last Price" value={formatNumber(snapshot.last_price)} detail={snapshot.snapshot_time ?? "no timestamp"} />
+      <Metric label="Event State" value={eventContext.event_state ?? "normal"} detail={(eventContext.active_event_ids ?? []).join(", ") || "no active events"} />
+      <Metric label="Key Levels" value={(report.key_levels ?? []).length} detail={(report.key_levels ?? []).slice(0, 2).map((level) => level.level).join(", ") || "none"} />
+      <JsonBlock payload={report} />
+    </div>
+  );
+}
+
+function ReadinessSummary({ decision }) {
+  const statusClass = decision.passed ? "completed" : "failed";
+  return (
+    <div className="readiness-grid">
+      <div className="readiness-banner">
+        <span className={`status-pill ${statusClass}`}>{decision.decision}</span>
+        <strong>{decision.stage}</strong>
+        <small>{(decision.reasons ?? []).join(", ") || "all gates passed"}</small>
+      </div>
+      <JsonBlock payload={decision} />
+    </div>
+  );
+}
+
+function ModuleMemorySummary({ summary }) {
+  const modules = summary.modules ?? [];
+  return (
+    <div className="module-memory-grid">
+      {modules.slice(0, 12).map((module) => (
+        <article key={module.module_id} className="module-memory-card">
+          <div className="strategy-card-topline">
+            <span className={`status-pill ${moduleStatusClass(module.status)}`}>{module.status ?? "summary"}</span>
+            <span>{formatPercent(module.pass_rate ?? 0)}</span>
+          </div>
+          <h3>{module.module_id}</h3>
+          <p>{module.catalog?.description ?? "No catalog description."}</p>
+          <div className="module-memory-stats">
+            <Metric label="Records" value={formatCompact(module.evaluated_records)} detail={`${formatCompact(module.passed_records)} passed`} />
+            <Metric label="Trades" value={formatCompact(module.total_trade_count)} detail={module.best_experiment_id ?? "no best experiment"} />
+          </div>
+          <div className="gate-list">
+            {Object.entries(module.rejection_reasons ?? {}).slice(0, 4).map(([reason, count]) => (
+              <span key={reason} className="failed">{reason}: {count}</span>
+            ))}
+          </div>
+        </article>
+      ))}
     </div>
   );
 }
@@ -1024,6 +1180,16 @@ function tickReplayStatusClass(report) {
   }
   if (report?.native_tick_replay || report?.status === "not_applicable") {
     return "completed";
+  }
+  return "running";
+}
+
+function moduleStatusClass(status) {
+  if (["candidate", "freeze_confirmed", "paper_shadow"].includes(status)) {
+    return "completed";
+  }
+  if (status === "retired") {
+    return "failed";
   }
   return "running";
 }
