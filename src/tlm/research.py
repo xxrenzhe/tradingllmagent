@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
+from math import log, sqrt
 from pathlib import Path
 from statistics import median
 from typing import Sequence
@@ -1748,15 +1749,23 @@ def build_overfitting_report(
     else:
         risk_level = "low"
 
+    fold_count = len(fold_test_metrics)
+    trial_count = grid_metadata.selected_combinations
+    effective_trials = max(grid_metadata.total_combinations, trial_count, 1)
+    test_sharpe = aggregate_test_metrics.sharpe
+    trial_count_penalty = sqrt(2 * log(effective_trials)) / sqrt(max(fold_count, 1)) if effective_trials > 1 else 0.0
+    trial_adjusted_sharpe = test_sharpe - trial_count_penalty if test_sharpe is not None else None
+    pbo_proxy_score = min(1.0, max(0.0, trial_count_penalty / abs(test_sharpe))) if test_sharpe else None
+
     return {
         "risk_level": risk_level,
         "reasons": reasons,
-        "trial_count": grid_metadata.selected_combinations,
+        "trial_count": trial_count,
         "parameter_combination_count": grid_metadata.total_combinations,
         "parameter_budget_exceeded": grid_metadata.budget_exceeded,
         "high_risk_parameter_budget": grid_metadata.high_risk_budget,
         "default_parameter_budget": grid_metadata.default_budget,
-        "fold_count": len(fold_test_metrics),
+        "fold_count": fold_count,
         "positive_test_fold_ratio": positive_test_fold_ratio,
         "median_test_fold_sharpe": median(fold_sharpes) if fold_sharpes else None,
         "validation_sharpe": aggregate_validation_metrics.sharpe,
@@ -1764,10 +1773,15 @@ def build_overfitting_report(
         "final_holdout_sharpe": final_holdout_metrics.sharpe,
         "validation_to_test_sharpe_decay": validation_to_test_sharpe_decay,
         "test_to_holdout_sharpe_decay": test_to_holdout_sharpe_decay,
-        "pbo_status": "not_computed_v1",
+        "pbo_status": "computed_proxy_v1",
+        "pbo_proxy_score": pbo_proxy_score,
+        "trial_count_penalty": trial_count_penalty,
+        "trial_adjusted_sharpe": trial_adjusted_sharpe,
+        "effective_trial_count": effective_trials,
         "pbo_note": (
-            "V1 records trial count, fold count, and out-of-sample performance; "
-            "full Probability of Backtest Overfitting estimation is deferred."
+            "V1 computes a deterministic proxy from tested parameter combinations, "
+            "test-fold count, and aggregate test Sharpe; full combinatorially symmetric "
+            "cross-validation PBO remains deferred until richer fold-by-variant returns exist."
         ),
     }
 
