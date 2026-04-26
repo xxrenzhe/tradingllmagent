@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import lzma
+import io
 import struct
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -14,6 +16,7 @@ from tlm.bars import (
     build_minute_bars_from_ticks,
     build_timeframe_bars_from_1m_parquet,
 )
+from tlm.cli import main
 from tlm.dukascopy import TICK_STRUCT, dukascopy_url, parse_bi5_ticks
 from tlm.quality import build_quality_report
 from tlm.storage import normalized_tick_path, write_ticks_parquet
@@ -122,13 +125,33 @@ class BarAndQualityTests(unittest.TestCase):
                 max_normal_price_jump=0.2,
             )
             self.assertEqual(report.rows, 4)
+            self.assertEqual(report.expected_files, 3)
             self.assertEqual(report.files, 2)
+            self.assertAlmostEqual(report.coverage_ratio, 2 / 3)
+            self.assertEqual(report.status, "gaps_or_anomalies")
+            self.assertIn("missing_partitions", report.quality_flags)
+            self.assertIn("empty_partitions", report.quality_flags)
+            self.assertIn("large_spread", report.quality_flags)
+            self.assertIn("price_jumps", report.quality_flags)
             self.assertEqual(report.missing_files, [str(missing_path)])
             self.assertEqual(report.zero_row_files, [str(empty_path)])
             self.assertEqual(report.duplicate_timestamps, 1)
             self.assertGreater(report.max_spread or 0, 0)
             self.assertGreater(report.large_spread_rows, 0)
             self.assertGreater(report.price_jump_rows, 0)
+
+    def test_data_discover_filters_provider(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main(["data", "discover", "--provider", "dukascopy", "--query", "NQmain"])
+        self.assertEqual(code, 0)
+        self.assertIn("NQmain\tdukascopy", output.getvalue())
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main(["data", "discover", "--provider", "twelvedata", "--query", "NQmain"])
+        self.assertEqual(code, 0)
+        self.assertEqual(output.getvalue(), "")
 
     def test_build_higher_timeframe_bars_from_1m_bars(self) -> None:
         hour = datetime(2025, 3, 19, 13, tzinfo=UTC)

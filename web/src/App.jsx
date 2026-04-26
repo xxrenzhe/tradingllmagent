@@ -1,5 +1,5 @@
 import { startTransition, useDeferredValue, useEffect, useState } from "react";
-import { apiRequest, apiUrl, formatCompact, formatNumber } from "./api.js";
+import { apiRequest, apiUrl, formatCompact, formatNumber, formatPercent } from "./api.js";
 
 const DEFAULT_FORMS = {
   symbol: "NQmain",
@@ -264,10 +264,12 @@ export default function App() {
           {quality ? (
             <div className="quality-grid">
               <Metric label="Rows" value={formatCompact(quality.rows)} detail="normalized ticks" />
-              <Metric label="Files" value={quality.files ?? 0} detail="existing parquet partitions" />
+              <Metric label="Coverage" value={formatPercent(quality.coverage_ratio)} detail={quality.status ?? "unknown"} />
+              <Metric label="Files" value={`${quality.files ?? 0}/${quality.expected_files ?? "?"}`} detail="existing / expected partitions" />
               <Metric label="Start" value={quality.start_timestamp ? quality.start_timestamp.slice(0, 10) : "-"} detail={quality.start_timestamp || "no rows"} />
               <Metric label="End" value={quality.end_timestamp ? quality.end_timestamp.slice(0, 10) : "-"} detail={quality.end_timestamp || "no rows"} />
               <Metric label="Missing" value={quality.missing_files?.length ?? 0} detail={(quality.missing_files ?? []).slice(0, 1).join(" | ") || "none"} />
+              <Metric label="Flags" value={quality.quality_flags?.length ?? 0} detail={(quality.quality_flags ?? []).join(", ") || "none"} />
               <Metric label="Empty" value={quality.zero_row_files?.length ?? 0} detail={(quality.zero_row_files ?? []).slice(0, 1).join(" | ") || "none"} />
               <Metric label="Duplicates" value={quality.duplicate_timestamps} detail="same timestamp rows" />
               <Metric label="Avg Spread" value={formatNumber(quality.avg_spread)} detail="mean bid/ask gap" />

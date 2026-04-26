@@ -10,7 +10,11 @@ import duckdb
 @dataclass(frozen=True)
 class QualityReport:
     symbol: str
+    expected_files: int
     files: int
+    coverage_ratio: float
+    status: str
+    quality_flags: list[str]
     missing_files: list[str]
     zero_row_files: list[str]
     rows: int
@@ -35,16 +39,29 @@ def build_quality_report(
 ) -> QualityReport:
     missing_files = [str(path) for path in tick_files if not path.exists()]
     existing_paths = [path for path in tick_files if path.exists()]
+    expected_files = len(tick_files)
     files = [str(path) for path in existing_paths]
     zero_row_files = [
         str(path)
         for path in existing_paths
         if _parquet_row_count(path) == 0
     ]
+    coverage_ratio = len(existing_paths) / expected_files if expected_files else 1.0
     if not files:
+        quality_flags = _quality_flags(
+            missing_files=missing_files,
+            zero_row_files=[],
+            negative_spread_rows=0,
+            large_spread_rows=0,
+            price_jump_rows=0,
+        )
         return QualityReport(
             symbol=symbol,
+            expected_files=expected_files,
             files=0,
+            coverage_ratio=coverage_ratio,
+            status=_quality_status(quality_flags),
+            quality_flags=quality_flags,
             missing_files=missing_files,
             zero_row_files=[],
             rows=0,
@@ -107,9 +124,20 @@ def build_quality_report(
     finally:
         con.close()
 
+    quality_flags = _quality_flags(
+        missing_files=missing_files,
+        zero_row_files=zero_row_files,
+        negative_spread_rows=int(row[6]),
+        large_spread_rows=int(row[7]),
+        price_jump_rows=int(row[8]),
+    )
     return QualityReport(
         symbol=symbol,
+        expected_files=expected_files,
         files=len(files),
+        coverage_ratio=coverage_ratio,
+        status=_quality_status(quality_flags),
+        quality_flags=quality_flags,
         missing_files=missing_files,
         zero_row_files=zero_row_files,
         rows=int(row[0]),
@@ -122,6 +150,31 @@ def build_quality_report(
         large_spread_rows=int(row[7]),
         price_jump_rows=int(row[8]),
     )
+
+
+def _quality_flags(
+    missing_files: Sequence[str],
+    zero_row_files: Sequence[str],
+    negative_spread_rows: int,
+    large_spread_rows: int,
+    price_jump_rows: int,
+) -> list[str]:
+    flags = []
+    if missing_files:
+        flags.append("missing_partitions")
+    if zero_row_files:
+        flags.append("empty_partitions")
+    if negative_spread_rows:
+        flags.append("negative_spread")
+    if large_spread_rows:
+        flags.append("large_spread")
+    if price_jump_rows:
+        flags.append("price_jumps")
+    return flags
+
+
+def _quality_status(flags: Sequence[str]) -> str:
+    return "gaps_or_anomalies" if flags else "ok"
 
 
 def _parquet_row_count(path: Path) -> int:

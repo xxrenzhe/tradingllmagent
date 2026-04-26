@@ -34,3 +34,13 @@ export function formatCompact(value) {
   }
   return Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
+
+export function formatPercent(value, digits = 1) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "-";
+  }
+  return `${(Number(value) * 100).toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits
+  })}%`;
+}

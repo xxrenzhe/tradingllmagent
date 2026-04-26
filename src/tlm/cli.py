@@ -64,7 +64,10 @@ def tick_parquet_files(data_root: Path, symbol: str, start: date, end: date) -> 
 def cmd_data_discover(args: argparse.Namespace) -> int:
     symbols = load_symbols(Path(args.config_dir))
     query = args.query.lower()
+    provider = args.provider.lower()
     for alias, symbol in sorted(symbols.items()):
+        if provider not in {"", "all"} and symbol.provider.lower() != provider:
+            continue
         haystack = f"{alias} {symbol.instrument} {symbol.description}".lower()
         if query in haystack:
             print(f"{alias}\t{symbol.provider}\t{symbol.instrument}\t{symbol.description}")
