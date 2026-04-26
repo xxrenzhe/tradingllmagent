@@ -251,6 +251,9 @@ export default function App() {
             <ActionButton disabled={isPending} onClick={() => runAction("Research queued", () => createTask("/api/experiments/research-runs", researchPayload(forms)))}>
               Run Research
             </ActionButton>
+            <ActionButton disabled={isPending} onClick={() => runAction("Proposal queued", () => createTask("/api/experiments/proposals", proposalPayload(forms)))}>
+              Generate Proposal
+            </ActionButton>
             <ActionButton disabled={isPending} onClick={() => runAction("Tick backtest queued", () => createTask("/api/backtests/tick", backtestPayload(forms)))}>
               Tick Backtest
             </ActionButton>
@@ -435,6 +438,19 @@ function researchPayload(forms) {
     payload.spec = specs[0] || forms.spec;
   }
   return payload;
+}
+
+function proposalPayload(forms) {
+  const specs = forms.spec
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return {
+    spec: specs[0] || forms.spec,
+    experiment_id: forms.experimentId ? `${forms.experimentId}_proposal` : "",
+    model: forms.llmModel,
+    llm_parameters: parseJsonObject(forms.llmParameters, "LLM Parameters")
+  };
 }
 
 function optionalNumber(value) {
