@@ -46,28 +46,94 @@ class Nt8SimGateway:
     orders: dict[str, SimOrder] = field(default_factory=dict)
     positions: dict[tuple[str, str], int] = field(default_factory=dict)
     brackets: list[dict[str, Any]] = field(default_factory=list)
+    command_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
+    incident_events: list[dict[str, Any]] = field(default_factory=list)
+    sequence: int = 0
+    read_only: bool = False
+    safe_mode: bool = False
 
     def health(self) -> dict[str, Any]:
         return {
-            "status": "ok",
+            "status": "safe_mode" if self.safe_mode else "ok",
             "mode": "nt8_sim",
-            "read_only": False,
+            "read_only": self.read_only,
+            "safe_mode": self.safe_mode,
             "accounts": self.accounts,
             "instruments": self.instruments,
             "order_count": len(self.orders),
             "position_count": len([qty for qty in self.positions.values() if qty]),
+            "sequence": self.sequence,
             "checked_at": datetime.now(UTC).isoformat(),
         }
 
     def execute(self, command: dict[str, Any]) -> dict[str, Any]:
+        idempotency_key = command.get("idempotency_key")
+        if idempotency_key and idempotency_key in self.command_cache:
+            cached = dict(self.command_cache[str(idempotency_key)])
+            cached["duplicate"] = True
+            return cached
         command_type = str(command.get("type", ""))
         if command_type not in SUPPORTED_COMMANDS:
             return self._ack(command, "rejected", [f"unsupported_command:{command_type}"])
+        if self.read_only:
+            return self._ack(command, "rejected", ["gateway_read_only"])
+        if self.safe_mode and command_type not in {"cancelOrders", "flatten", "flattenBatch", "closeQty"}:
+            return self._ack(command, "rejected", ["gateway_safe_mode"])
         handler = getattr(self, f"_handle_{command_type}")
         try:
-            return handler(command)
+            ack = handler(command)
         except ValueError as exc:
-            return self._ack(command, "rejected", [str(exc)])
+            ack = self._ack(command, "rejected", [str(exc)])
+        if idempotency_key:
+            self.command_cache[str(idempotency_key)] = ack
+        return ack
+
+    def set_read_only(self, enabled: bool, reason: str = "manual") -> dict[str, Any]:
+        self.read_only = enabled
+        return self._incident("read_only_enabled" if enabled else "read_only_disabled", reason)
+
+    def enter_safe_mode(self, reason: str) -> dict[str, Any]:
+        self.safe_mode = True
+        return self._incident("safe_mode_entered", reason)
+
+    def exit_safe_mode(self, reason: str) -> dict[str, Any]:
+        self.safe_mode = False
+        return self._incident("safe_mode_exited", reason)
+
+    def reconciliation_report(
+        self,
+        expected_positions: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        actual = {
+            (account, instrument): quantity
+            for (account, instrument), quantity in self.positions.items()
+            if quantity
+        }
+        expected = {
+            (str(row["account"]), str(row["instrument"])): int(row.get("quantity", 0))
+            for row in expected_positions or []
+            if int(row.get("quantity", 0))
+        }
+        drift = []
+        for key in sorted(set(actual) | set(expected)):
+            if actual.get(key, 0) != expected.get(key, 0):
+                drift.append(
+                    {
+                        "account": key[0],
+                        "instrument": key[1],
+                        "expected_quantity": expected.get(key, 0),
+                        "actual_quantity": actual.get(key, 0),
+                    }
+                )
+        if drift:
+            self.enter_safe_mode("reconciliation_drift")
+        return {
+            "status": "drift" if drift else "ok",
+            "mode": "nt8_sim",
+            "drift": drift,
+            "safe_mode": self.safe_mode,
+            "checked_at": datetime.now(UTC).isoformat(),
+        }
 
     def _handle_marketOrder(self, command: dict[str, Any]) -> dict[str, Any]:
         account = self._required_account(command)
@@ -215,9 +281,14 @@ class Nt8SimGateway:
         orders: list[dict[str, Any]] | None = None,
         brackets: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        self.sequence += 1
         return {
             "command_id": command.get("command_id") or f"cmd_{uuid4().hex}",
             "correlation_id": command.get("correlation_id"),
+            "idempotency_key": command.get("idempotency_key"),
+            "schema_version": command.get("schema_version", 1),
+            "protocol_version": command.get("protocol_version", "nt8-sim.v1"),
+            "sequence": self.sequence,
             "status": status,
             "errors": errors,
             "orders": orders or [],
@@ -228,3 +299,16 @@ class Nt8SimGateway:
             ],
             "acknowledged_at": datetime.now(UTC).isoformat(),
         }
+
+    def _incident(self, event_type: str, reason: str) -> dict[str, Any]:
+        event = {
+            "incident_id": f"incident_{uuid4().hex}",
+            "event_type": event_type,
+            "reason": reason,
+            "mode": "nt8_sim",
+            "safe_mode": self.safe_mode,
+            "read_only": self.read_only,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+        self.incident_events.append(event)
+        return event

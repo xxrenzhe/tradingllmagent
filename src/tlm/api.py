@@ -316,6 +316,24 @@ def create_app():
     def nt8_commands(payload: dict = Body(...)) -> dict:
         return nt8_gateway.execute(payload)
 
+    @app.get("/api/gateways/nt8/reconciliation")
+    def nt8_reconciliation() -> dict:
+        return nt8_gateway.reconciliation_report()
+
+    @app.post("/api/gateways/nt8/reconciliation")
+    def nt8_reconciliation_post(payload: dict = Body(default={})) -> dict:
+        return nt8_gateway.reconciliation_report(payload.get("expected_positions", []))
+
+    @app.post("/api/incidents")
+    def nt8_incident(payload: dict = Body(...)) -> dict:
+        event_type = str(payload.get("event_type", "manual_incident"))
+        reason = str(payload.get("reason", "manual"))
+        if event_type == "read_only":
+            return nt8_gateway.set_read_only(True, reason)
+        if event_type == "safe_mode":
+            return nt8_gateway.enter_safe_mode(reason)
+        return nt8_gateway.enter_safe_mode(f"{event_type}:{reason}")
+
     @app.get("/api/experiments/{experiment_id}")
     def experiments_get(
         experiment_id: str,
