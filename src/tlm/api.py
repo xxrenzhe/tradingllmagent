@@ -259,6 +259,10 @@ def create_app():
     def experiments_research_runs(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "research.run", payload)
 
+    @app.post("/api/experiments/proposals")
+    def experiments_proposals(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "research.propose", payload)
+
     @app.get("/api/experiments/{experiment_id}")
     def experiments_get(
         experiment_id: str,

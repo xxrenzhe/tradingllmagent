@@ -14,12 +14,15 @@ from .cli import bar_parquet_files, day_bounds, parse_date, tick_parquet_files
 from .cli_dates import iter_dates
 from .config import get_cost_model, get_symbol
 from .dukascopy import download_hour, iter_hours, parse_bi5_file
+from .experiments import record_audit_event, record_experiment
+from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import run_budgeted_research, write_research_result
 from .storage import (
     bar_path,
     compute_data_version_hash,
     normalized_tick_path,
+    write_json,
     write_ticks_parquet,
 )
 from .strategy import load_strategy_spec
@@ -82,6 +85,8 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_nt_export_signal(payload)
     if task_type == "research.run":
         return execute_research_run(payload)
+    if task_type == "research.propose":
+        return execute_research_propose(payload)
     raise ValueError(f"Unsupported task_type: {task_type}")
 
 
@@ -243,6 +248,70 @@ def execute_nt_export_signal(payload: dict[str, Any]) -> dict[str, Any]:
         "format": export_format,
         "content": content,
         "line_count": len([line for line in content.splitlines() if line.strip()]),
+    }
+
+
+def execute_research_propose(payload: dict[str, Any]) -> dict[str, Any]:
+    seed_spec = load_strategy_spec(Path(_required(payload, "spec")))
+    experiments_root = Path(payload.get("experiments_root", "experiments"))
+    experiment_id = str(payload.get("experiment_id") or f"{seed_spec.name}_proposal")
+    llm_parameters = payload.get("llm_parameters", {})
+    if not isinstance(llm_parameters, dict):
+        raise ValueError("llm_parameters must be an object")
+    feedback = None
+    feedback_root = payload.get("feedback_experiments_root")
+    if feedback_root:
+        feedback = load_train_validation_feedback(
+            Path(str(feedback_root)),
+            experiment_id=payload.get("feedback_experiment_id"),
+            limit=int(payload.get("feedback_limit", 10)),
+        )
+    proposal = create_llm_adapter(
+        str(payload.get("model", "local-deterministic-template")),
+        llm_parameters,
+    ).propose(seed_spec, feedback=feedback)
+    output_path = (
+        Path(str(payload["output"]))
+        if payload.get("output")
+        else Path("strategies/generated") / f"{proposal.strategy.name}.json"
+    )
+    write_json(output_path, proposal.strategy.raw)
+    audit_path = (
+        Path(str(payload["audit_log"]))
+        if payload.get("audit_log")
+        else experiments_root / experiment_id / "llm_audit.jsonl"
+    )
+    audit_record = proposal.audit_record()
+    append_audit_log(audit_path, audit_record)
+
+    experiment_db = Path(payload.get("experiment_db", "experiments/research.sqlite3"))
+    record_experiment(
+        experiment_db,
+        experiment_id=experiment_id,
+        symbol=proposal.strategy.symbol,
+        status="proposed",
+        metadata={
+            "seed_spec": str(Path(_required(payload, "spec"))),
+            "output": str(output_path),
+            "feedback_count": len(feedback or []),
+            "feedback_experiment_id": payload.get("feedback_experiment_id"),
+        },
+    )
+    record_audit_event(
+        experiment_db,
+        experiment_id=experiment_id,
+        event_type="llm_strategy_proposal",
+        payload=audit_record,
+    )
+    return {
+        "strategy_spec": str(output_path),
+        "audit_log": str(audit_path),
+        "experiment_id": experiment_id,
+        "prompt_hash": proposal.prompt_hash,
+        "response_hash": proposal.response_hash,
+        "feedback_count": len(feedback or []),
+        "strategy_name": proposal.strategy.name,
+        "strategy_family": proposal.strategy.strategy_family,
     }
 
 

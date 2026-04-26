@@ -348,6 +348,42 @@ class TaskStoreTests(unittest.TestCase):
         self.assertTrue(report["skipped"][0]["strategy_logic_hash"])
         self.assertEqual(report["skipped"][0]["duplicate_of"], first_payload["name"])
 
+    def test_run_task_executes_llm_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            db_path = root / "tasks.sqlite3"
+            experiment_db = root / "research.sqlite3"
+            experiments_root = root / "experiments"
+            output_path = root / "generated" / "proposal.json"
+            seed_path = root / "seed.json"
+            seed_path.write_text(json.dumps(base_spec()), encoding="utf-8")
+            create_task(
+                db_path,
+                "research.propose",
+                {
+                    "spec": str(seed_path),
+                    "experiment_id": "proposal_task",
+                    "experiments_root": str(experiments_root),
+                    "experiment_db": str(experiment_db),
+                    "output": str(output_path),
+                    "model": "local-deterministic-template",
+                    "llm_parameters": {"temperature": 0},
+                },
+                task_id="task_research_propose",
+            )
+            completed = run_task(db_path, "task_research_propose")
+            audit_path = Path(completed["result"]["audit_log"])
+            output_exists = output_path.exists()
+            audit_exists = audit_path.exists()
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["result"]["experiment_id"], "proposal_task")
+        self.assertEqual(completed["result"]["strategy_family"], "opening_range_breakout")
+        self.assertTrue(output_exists)
+        self.assertTrue(audit_exists)
+        self.assertTrue(completed["result"]["prompt_hash"])
+        self.assertTrue(completed["result"]["response_hash"])
+
 
 class APIImportTests(unittest.TestCase):
     def test_api_module_imports_without_fastapi_installed(self) -> None:
@@ -383,6 +419,7 @@ class APIImportTests(unittest.TestCase):
         paths = {route.path for route in app.routes}
 
         self.assertIn("/api/backtests/tick", paths)
+        self.assertIn("/api/experiments/proposals", paths)
         self.assertIn("/api/experiments/{experiment_id}/audit-logs", paths)
         self.assertIn("/api/experiments/{experiment_id}/artifacts", paths)
 
