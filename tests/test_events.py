@@ -30,6 +30,7 @@ def write_calendar(path: Path) -> None:
                         "importance": "high",
                         "affected_symbols": ["NQmain"],
                         "pre_event_minutes": 15,
+                        "release_window_minutes": 5,
                         "post_event_minutes": 20,
                         "policy_ref": "high_impact_macro_v1",
                     }
@@ -58,6 +59,11 @@ class MacroEventTests(unittest.TestCase):
                 datetime(2026, 4, 27, 12, 0),
                 calendar["events"],
             )
+            release_context = context_for_timestamp(
+                "NQmain",
+                datetime(2026, 4, 27, 13, 30),
+                calendar["events"],
+            )
 
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["event_count"], 1)
@@ -66,7 +72,56 @@ class MacroEventTests(unittest.TestCase):
         self.assertEqual(pre_context.active_event_ids, ["cpi_test"])
         self.assertEqual(pre_context.max_importance, "high")
         self.assertEqual(pre_context.minutes_to_event, 10)
+        self.assertEqual(release_context.event_state, "release_window")
         self.assertEqual(normal_context.event_state, "normal")
+
+    def test_event_calendar_normalizes_aliases_and_calendar_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_dir = root / "configs"
+            config_dir.mkdir()
+            calendar_path = config_dir / "macro_events.yaml"
+            calendar_path.write_text(
+                json.dumps(
+                    {
+                        "calendar_id": "macro_events_v1",
+                        "events": [
+                            {
+                                "event_id": "nfp_alias",
+                                "name": "NFP alias",
+                                "time": "2026-04-27T13:30:00Z",
+                                "importance": "high",
+                                "symbols": ["NQmain"],
+                                "pre_window_minutes": 20,
+                                "release_window_minutes": 10,
+                                "post_window_minutes": 25,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()) as stdout:
+                exit_code = main(
+                    [
+                        "--config-dir",
+                        str(config_dir),
+                        "events",
+                        "validate",
+                        "--calendar",
+                        "macro_events_v1",
+                    ]
+                )
+            payload = json.loads(stdout.getvalue())
+            calendar = load_event_calendar(calendar_path)
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["valid"])
+        self.assertEqual(calendar["events"][0].affected_symbols, ["NQmain"])
+        self.assertEqual(calendar["events"][0].pre_event_minutes, 20)
+        self.assertEqual(calendar["events"][0].release_window_minutes, 10)
+        self.assertEqual(calendar["events"][0].post_event_minutes, 25)
 
     def test_cli_builds_event_context_from_bars(self) -> None:
         day = datetime(2026, 4, 27, 13, 10)

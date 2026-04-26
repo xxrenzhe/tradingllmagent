@@ -110,22 +110,29 @@ def score_monitor_signal(
     snapshot: MarketSnapshot,
     key_level_signals: Sequence[dict[str, Any]],
     event_state: str = "normal",
+    max_importance: str | None = None,
 ) -> dict[str, Any]:
     if snapshot.last_price is None:
-        return {"strength": 0.0, "bucket": "none", "reasons": ["no_bars"]}
+        return {"strength": 0.0, "bucket": "none", "signal_class": "none", "reasons": ["no_bars"]}
     level_score = max((float(signal["proximity_score"]) for signal in key_level_signals), default=0.0)
-    event_bonus = 0.15 if event_state in {"pre_event", "event_release", "post_event"} else 0.0
+    event_bonus = 0.15 if event_state in {"pre_event", "release_window", "event_release", "post_event"} else 0.0
     strength = min(1.0, level_score + event_bonus)
-    if strength >= 0.7:
+    if event_state in {"release_window", "event_release"} and max_importance == "high":
+        bucket = "blocked"
+    elif strength >= 0.78:
         bucket = "strong_review"
+    elif strength >= 0.60:
+        bucket = "medium_watch"
     elif strength >= 0.35:
-        bucket = "watch"
+        bucket = "weak_notice"
     else:
-        bucket = "log_only"
+        bucket = "none"
     reasons = [f"near_{signal['level']}" for signal in key_level_signals[:3]]
     if event_bonus:
         reasons.append(f"event_state_{event_state}")
-    return {"strength": strength, "bucket": bucket, "reasons": reasons}
+    if bucket == "blocked":
+        reasons.append("blocked_by_high_impact_release_window")
+    return {"strength": strength, "bucket": bucket, "signal_class": bucket, "reasons": reasons}
 
 
 def build_monitor_report(
@@ -153,7 +160,12 @@ def build_monitor_report(
         }
     )
     key_levels = scan_key_levels(snapshot, proximity_points=proximity_points)
-    signal = score_monitor_signal(snapshot, key_levels, event_state=event_context["event_state"])
+    signal = score_monitor_signal(
+        snapshot,
+        key_levels,
+        event_state=event_context["event_state"],
+        max_importance=event_context.get("max_importance"),
+    )
     return {
         "monitor_run_id": monitor_run_id(symbol, timeframe, snapshot.snapshot_time),
         "snapshot": snapshot.to_dict(),

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from tlm.cli import main
+from tlm.events import MacroEvent
 from tlm.monitor import build_market_snapshot, build_monitor_report, scan_key_levels
 from tlm.storage import bar_path, write_bars_parquet
 from tlm.tasks import create_task
@@ -95,6 +96,35 @@ class RuntimeMonitorTests(unittest.TestCase):
         self.assertEqual(payload["signal"]["bucket"], "strong_review")
         self.assertTrue(json_exists)
         self.assertIn("Runtime Monitor", report_text)
+
+    def test_high_impact_release_window_blocks_strong_signal(self) -> None:
+        day = datetime(2026, 4, 27, 13, 30)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            write_monitor_bars(data_root, day)
+            event = MacroEvent(
+                event_id="cpi_release",
+                name="CPI",
+                timestamp_utc=day + timedelta(minutes=15),
+                importance="high",
+                affected_symbols=["NQmain"],
+                pre_event_minutes=30,
+                release_window_minutes=5,
+                post_event_minutes=30,
+                policy_ref="high_impact_macro_v1",
+            )
+
+            report = build_monitor_report(
+                symbol="NQmain",
+                timeframe="5m",
+                bar_files=[bar_path(data_root, "NQmain", "5m", day.date())],
+                events=[event],
+            )
+
+        self.assertEqual(report["event_context"]["event_state"], "release_window")
+        self.assertEqual(report["signal"]["bucket"], "blocked")
+        self.assertIn("blocked_by_high_impact_release_window", report["signal"]["reasons"])
 
     def test_worker_executes_monitor_once_task(self) -> None:
         day = datetime(2026, 4, 27, 13, 30)

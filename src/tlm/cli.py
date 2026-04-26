@@ -23,6 +23,7 @@ from .experiments import (
 from .events import (
     build_event_context_rows,
     load_event_calendar,
+    resolve_event_calendar_path,
     validate_event_calendar,
     write_event_context_parquet,
 )
@@ -486,12 +487,14 @@ def cmd_nt_export_signal(args: argparse.Namespace) -> int:
 
 
 def cmd_events_validate(args: argparse.Namespace) -> int:
-    print(json.dumps(validate_event_calendar(Path(args.calendar)), indent=2, sort_keys=True))
+    calendar_path = resolve_event_calendar_path(args.calendar, Path(args.config_dir))
+    print(json.dumps(validate_event_calendar(calendar_path), indent=2, sort_keys=True))
     return 0
 
 
 def cmd_events_list(args: argparse.Namespace) -> int:
-    calendar = load_event_calendar(Path(args.calendar))
+    calendar_path = resolve_event_calendar_path(args.calendar, Path(args.config_dir))
+    calendar = load_event_calendar(calendar_path)
     date_from = parse_date(args.date_from) if args.date_from else None
     date_to = parse_date(args.date_to) if args.date_to else None
     rows = []
@@ -519,7 +522,8 @@ def cmd_events_list(args: argparse.Namespace) -> int:
 
 
 def cmd_events_build_context(args: argparse.Namespace) -> int:
-    calendar = load_event_calendar(Path(args.calendar))
+    calendar_path = resolve_event_calendar_path(args.calendar, Path(args.config_dir))
+    calendar = load_event_calendar(calendar_path)
     data_root = Path(args.data_root)
     date_from = parse_date(args.date_from)
     date_to = parse_date(args.date_to)
@@ -552,7 +556,8 @@ def cmd_monitor_once(args: argparse.Namespace) -> int:
     day = parse_date(args.date)
     calendar_events = []
     if args.calendar:
-        calendar_events = load_event_calendar(Path(args.calendar))["events"]
+        calendar_path = resolve_event_calendar_path(args.calendar, Path(args.config_dir))
+        calendar_events = load_event_calendar(calendar_path)["events"]
     payload = build_monitor_report(
         symbol=args.symbol,
         timeframe=args.timeframe,
