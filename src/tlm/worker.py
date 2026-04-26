@@ -261,18 +261,23 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
     by_family: dict[str, int] = {}
     family_outcomes: dict[str, dict[str, Any]] = {}
     for spec in specs:
-        family_trials = _family_trial_quota(payload, spec.strategy_family)
+        requested_family_trials = _family_trial_quota(payload, spec.strategy_family)
+        family_weight = _family_sampling_weight(payload, spec.strategy_family)
+        family_trials = apply_family_trial_weight(requested_family_trials, family_weight)
         outcome = family_outcomes.setdefault(
             spec.strategy_family,
             {
                 "strategy_family": spec.strategy_family,
+                "requested_quota": 0,
                 "quota": 0,
+                "applied_weight": family_weight,
                 "completed_trials": 0,
                 "passed_trials": 0,
                 "failed_trials": 0,
                 "failure_reasons": {},
             },
         )
+        outcome["requested_quota"] += max(requested_family_trials, 0)
         outcome["quota"] += max(family_trials, 0)
         if family_trials <= 0:
             outcome["skipped_by_quota"] = True
@@ -362,7 +367,9 @@ def build_family_weight_report(
         row = {
             "strategy_family": family,
             "status": status,
+            "requested_quota": int(outcome.get("requested_quota", outcome.get("quota", 0))),
             "quota": int(outcome.get("quota", 0)),
+            "applied_weight": float(outcome.get("applied_weight", 1.0)),
             "completed_trials": completed,
             "passed_trials": passed,
             "failed_trials": failed,
@@ -379,6 +386,24 @@ def build_family_weight_report(
         "families": families,
         "next_weights": next_weights,
     }
+
+
+def apply_family_trial_weight(requested_trials: int, weight: float, min_positive_trials: int = 1) -> int:
+    if requested_trials <= 0:
+        return 0
+    weighted_trials = int(requested_trials * max(weight, 0))
+    return max(min_positive_trials, weighted_trials)
+
+
+def _family_sampling_weight(payload: dict[str, Any], strategy_family: str) -> float:
+    weights = payload.get("family_weights")
+    if not isinstance(weights, dict):
+        previous_report = payload.get("family_weight_report")
+        if isinstance(previous_report, dict):
+            weights = previous_report.get("next_weights")
+    if isinstance(weights, dict) and strategy_family in weights:
+        return float(weights[strategy_family])
+    return 1.0
 
 
 def _research_specs(payload: dict[str, Any]) -> list[Any]:

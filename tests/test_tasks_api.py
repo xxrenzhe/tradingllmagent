@@ -248,7 +248,11 @@ class TaskStoreTests(unittest.TestCase):
                     "experiment_id": "portfolio",
                     "data_root": str(data_root),
                     "experiments_root": str(experiments_root),
-                    "max_trials_per_family": 1,
+                    "max_trials_per_family": 2,
+                    "family_weights": {
+                        "opening_range_breakout": 0.5,
+                        "trend_pullback": 1.0,
+                    },
                     "train_days": 5,
                     "validation_days": 5,
                     "test_days": 5,
@@ -280,6 +284,14 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(
             {row["strategy_family"]: row["completed_trials"] for row in family_report["families"]},
             {"opening_range_breakout": 1, "trend_pullback": 1},
+        )
+        self.assertEqual(
+            {row["strategy_family"]: row["requested_quota"] for row in family_report["families"]},
+            {"opening_range_breakout": 2, "trend_pullback": 2},
+        )
+        self.assertEqual(
+            {row["strategy_family"]: row["quota"] for row in family_report["families"]},
+            {"opening_range_breakout": 1, "trend_pullback": 2},
         )
         self.assertEqual(len(completed["result"]["result_paths"]), 2)
         self.assertTrue(artifacts["trades"])
