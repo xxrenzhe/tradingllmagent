@@ -16,8 +16,9 @@ from tlm.cli import main
 from tlm.config import SymbolConfig
 from tlm.dukascopy import Tick
 from tlm.leaderboard import evaluate_hard_gates, robustness_score
-from tlm.metrics import calculate_metrics
+from tlm.metrics import BacktestMetrics, calculate_metrics
 from tlm.research import (
+    build_trade_count_distribution_report,
     build_signal_similarity_report,
     estimate_indicator_warmup_days,
     load_leaderboard,
@@ -350,6 +351,12 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(rows[0]["positive_year_ratio"], 1.0)
         self.assertEqual(rows[0]["yearly_results"][0]["year"], 2025)
         self.assertGreater(rows[0]["yearly_results"][0]["trade_count"], 0)
+        self.assertIn("trade_count_distribution_report", rows[0])
+        self.assertEqual(rows[0]["trade_count_distribution_report"]["status"], "balanced")
+        self.assertEqual(
+            rows[0]["trade_count_distribution_report"]["total_test_trades"],
+            result.aggregate_test_metrics.trade_count,
+        )
         self.assertIn("sharpe_validation", rows[0])
         self.assertIn("validation_to_test_sharpe_decay", rows[0])
         self.assertIn("test_to_holdout_sharpe_decay", rows[0])
@@ -410,6 +417,36 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])
         self.assertTrue(result.fold_results[0]["validation_data_version_hash"])
         self.assertTrue(result.fold_results[0]["test_data_version_hash"])
+
+    def test_trade_count_distribution_report_flags_concentration(self) -> None:
+        plan = generate_rolling_folds(
+            date(2020, 1, 1),
+            date(2024, 12, 31),
+            train_days=365,
+            validation_days=60,
+            test_days=60,
+            step_days=120,
+            final_holdout_days=365,
+            min_folds=2,
+        )
+        metrics = [
+            BacktestMetrics(95, 1_000, 1_200, -200, 6.0, 2.1, 100, 577.9, 10.5),
+            BacktestMetrics(5, -100, 50, -150, 0.33, -1.0, 200, 30.4, -20.0),
+        ]
+        report = build_trade_count_distribution_report(
+            yearly_results=[
+                {"year": 2022, "trade_count": 95, "net_pnl": 1_000},
+                {"year": 2023, "trade_count": 5, "net_pnl": -100},
+            ],
+            fold_test_metrics=metrics,
+            validation_plan=plan,
+        )
+
+        self.assertEqual(report["status"], "concentrated")
+        self.assertIn("fold_trade_concentration", report["reasons"])
+        self.assertIn("year_trade_concentration", report["reasons"])
+        self.assertEqual(report["total_test_trades"], 100)
+        self.assertEqual(report["by_fold"][0]["trade_count"], 95)
 
     def test_indicator_warmup_days_are_recorded_and_excluded_from_metrics(self) -> None:
         spec = parse_strategy_spec(trend_pullback_spec())

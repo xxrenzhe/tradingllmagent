@@ -554,6 +554,7 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
             <th>Score</th>
             <th>Test Sharpe</th>
             <th>Annual Trades</th>
+            <th>Trade Spread</th>
             <th>Test PnL</th>
             <th>Holdout PnL</th>
             <th>Cost Stress</th>
@@ -567,6 +568,7 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
             const overfitting = row.overfitting_report ?? {};
             const costSensitivity = row.cost_sensitivity_report ?? {};
             const parameterStability = row.parameter_stability_report ?? {};
+            const tradeDistribution = row.trade_count_distribution_report ?? {};
             const costStressKnown = typeof costSensitivity.worst_case_survives === "boolean";
             return (
               <tr key={row.experiment_id} className={selectedExperimentId === row.experiment_id ? "selected" : ""}>
@@ -591,6 +593,14 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
                 <td>{formatNumber(row.robustness_score, 3)}</td>
                 <td>{formatNumber(row.sharpe_test)}</td>
                 <td>{formatCompact(row.annual_trades_test)}</td>
+                <td>
+                  <span className={`status-pill ${tradeDistribution.status === "balanced" ? "completed" : "failed"}`}>
+                    {tradeDistribution.status ?? "unknown"}
+                  </span>
+                  <div className="table-detail">
+                    max fold {formatNumber(tradeDistribution.max_fold_trade_share, 2)}
+                  </div>
+                </td>
                 <td>{formatNumber(row.net_pnl_test)}</td>
                 <td>{formatNumber(row.net_pnl_holdout)}</td>
                 <td>

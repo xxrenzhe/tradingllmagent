@@ -73,6 +73,7 @@ class ResearchRunResult:
     validation_plan: ValidationPlan
     fold_results: list[dict]
     yearly_results: list[dict]
+    trade_count_distribution_report: dict
     positive_year_ratio: float
     round_trip_cost: float
     aggregate_validation_metrics: BacktestMetrics
@@ -117,6 +118,7 @@ class ResearchRunResult:
             "validation_plan": self.validation_plan.to_dict(),
             "fold_results": self.fold_results,
             "yearly_results": self.yearly_results,
+            "trade_count_distribution_report": self.trade_count_distribution_report,
             "positive_year_ratio": self.positive_year_ratio,
             "round_trip_cost": self.round_trip_cost,
             "aggregate_validation_metrics": self.aggregate_validation_metrics.to_dict(),
@@ -346,6 +348,11 @@ def run_research_bar_validation(
     )
     yearly_results = summarize_yearly_trades(all_test_trades)
     positive_year_ratio = calculate_positive_year_ratio(yearly_results)
+    trade_count_distribution_report = build_trade_count_distribution_report(
+        yearly_results=yearly_results,
+        fold_test_metrics=fold_test_metrics,
+        validation_plan=plan,
+    )
     holdout = _run_range(
         spec,
         symbol_config,
@@ -467,6 +474,7 @@ def run_research_bar_validation(
         validation_plan=plan,
         fold_results=fold_results,
         yearly_results=yearly_results,
+        trade_count_distribution_report=trade_count_distribution_report,
         positive_year_ratio=positive_year_ratio,
         round_trip_cost=round_trip_cost,
         aggregate_validation_metrics=aggregate_validation_metrics,
@@ -1457,6 +1465,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "positive_year_ratio": payload.get("positive_year_ratio"),
                 "round_trip_cost": payload.get("round_trip_cost"),
                 "yearly_results": payload.get("yearly_results", []),
+                "trade_count_distribution_report": payload.get("trade_count_distribution_report", {}),
                 "validation_to_test_sharpe_decay": payload.get("validation_to_test_sharpe_decay"),
                 "test_to_holdout_sharpe_decay": payload.get("test_to_holdout_sharpe_decay"),
                 "overfitting_report": payload.get("overfitting_report", {}),
@@ -1536,6 +1545,68 @@ def summarize_yearly_trades(trades: Sequence[Trade]) -> list[dict]:
         row["trade_count"] += 1
         row["net_pnl"] += trade.net_pnl
     return [by_year[year] for year in sorted(by_year)]
+
+
+def build_trade_count_distribution_report(
+    yearly_results: Sequence[dict],
+    fold_test_metrics: Sequence[BacktestMetrics],
+    validation_plan: ValidationPlan,
+    max_bucket_trade_share: float = 0.6,
+) -> dict:
+    fold_rows = [
+        {
+            "fold_index": fold.index,
+            "start": fold.test.start.isoformat(),
+            "end": fold.test.end.isoformat(),
+            "trade_count": metric.trade_count,
+            "annual_trades": metric.annual_trades,
+            "net_pnl": metric.net_pnl,
+        }
+        for fold, metric in zip(validation_plan.folds, fold_test_metrics, strict=False)
+    ]
+    year_rows = [
+        {
+            "year": row["year"],
+            "trade_count": int(row.get("trade_count", 0)),
+            "net_pnl": float(row.get("net_pnl", 0.0)),
+        }
+        for row in yearly_results
+    ]
+    total_test_trades = sum(row["trade_count"] for row in fold_rows)
+    total_year_trades = sum(row["trade_count"] for row in year_rows)
+    fold_counts = [row["trade_count"] for row in fold_rows]
+    year_counts = [row["trade_count"] for row in year_rows]
+    max_fold_trade_share = max(fold_counts) / total_test_trades if total_test_trades else None
+    max_year_trade_share = max(year_counts) / total_year_trades if total_year_trades else None
+
+    reasons = []
+    if not fold_rows:
+        reasons.append("missing_test_folds")
+    if not year_rows:
+        reasons.append("missing_yearly_trade_counts")
+    if any(count == 0 for count in fold_counts):
+        reasons.append("zero_trade_test_fold")
+    if max_fold_trade_share is not None and len(fold_rows) > 1 and max_fold_trade_share > max_bucket_trade_share:
+        reasons.append("fold_trade_concentration")
+    if max_year_trade_share is not None and len(year_rows) > 1 and max_year_trade_share > max_bucket_trade_share:
+        reasons.append("year_trade_concentration")
+
+    return {
+        "status": "concentrated" if reasons else "balanced",
+        "reasons": reasons,
+        "max_bucket_trade_share": max_bucket_trade_share,
+        "total_test_trades": total_test_trades,
+        "total_year_trades": total_year_trades,
+        "fold_count": len(fold_rows),
+        "year_count": len(year_rows),
+        "min_fold_trade_count": min(fold_counts) if fold_counts else None,
+        "median_fold_trade_count": median(fold_counts) if fold_counts else None,
+        "max_fold_trade_count": max(fold_counts) if fold_counts else None,
+        "max_fold_trade_share": max_fold_trade_share,
+        "max_year_trade_share": max_year_trade_share,
+        "by_fold": fold_rows,
+        "by_year": year_rows,
+    }
 
 
 def calculate_positive_year_ratio(yearly_results: Sequence[dict]) -> float:

@@ -232,6 +232,7 @@ def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
         "positive_year_ratio": result.get("positive_year_ratio"),
         "round_trip_cost": result.get("round_trip_cost"),
         "yearly_results": result.get("yearly_results", []),
+        "trade_count_distribution_report": result.get("trade_count_distribution_report", {}),
         "validation_to_test_sharpe_decay": result.get("validation_to_test_sharpe_decay"),
         "test_to_holdout_sharpe_decay": result.get("test_to_holdout_sharpe_decay"),
         "overfitting_report": result.get("overfitting_report", {}),
