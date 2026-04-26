@@ -8,6 +8,7 @@ from time import sleep
 
 from .config import load_symbols
 from .experiments import load_experiment_audit_logs, load_experiment_summary
+from .execution import build_execution_intent_response, submit_paper_shadow
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import load_leaderboard_report, load_research_artifacts
 from .strategy import StrategySpecError, load_strategy_spec
@@ -270,6 +271,23 @@ def create_app():
     @app.post("/api/monitor/once")
     def monitor_once(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "monitor.once", payload)
+
+    @app.post("/api/execution/intents")
+    def execution_intents(payload: dict = Body(...)) -> dict:
+        try:
+            return build_execution_intent_response(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/execution/paper-shadow")
+    def execution_paper_shadow(
+        payload: dict = Body(...),
+        audit_path: str = "experiments/execution_audit.jsonl",
+    ) -> dict:
+        try:
+            return submit_paper_shadow(payload, Path(audit_path))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/experiments/{experiment_id}")
     def experiments_get(
