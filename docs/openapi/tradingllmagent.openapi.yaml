@@ -6,9 +6,19 @@ paths:
   /api/execution/intents:
     post:
       summary: Build an execution intent and deterministic risk decision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutionIntentRequest"
       responses:
         "200":
           description: Execution intent with risk result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionIntentResponse"
   /api/execution/paper-shadow:
     post:
       summary: Persist a paper-shadow execution intent audit event.
@@ -37,6 +47,145 @@ paths:
     post:
       summary: Submit an NT8 sim gateway command.
       description: Supports marketOrder, marketBatch, cancelOrders, flatten, flattenBatch, closeQty, and bracket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GatewayCommand"
       responses:
         "200":
           description: Gateway ACK/NACK.
+components:
+  schemas:
+    ExecutionIntentRequest:
+      type: object
+      required:
+        - account
+        - instrument
+        - action
+        - quantity
+        - source_strategy
+      properties:
+        mode:
+          type: string
+          enum: [offline_export, nt8_sim, paper_shadow, micro_live, live]
+          default: paper_shadow
+        account:
+          type: string
+        instrument:
+          type: string
+        action:
+          type: string
+          enum: [buy, sell, sell_short, buy_to_cover]
+        quantity:
+          type: integer
+          minimum: 1
+        order_type:
+          type: string
+          default: market
+        bracket:
+          type: object
+          properties:
+            stop:
+              type: number
+            limit:
+              type: number
+        source_strategy:
+          $ref: "#/components/schemas/SourceStrategy"
+        idempotency_key:
+          type: string
+        correlation_id:
+          type: string
+        schema_version:
+          type: integer
+          default: 1
+        protocol_version:
+          type: string
+          default: execution.v1
+        expected_spread_ticks:
+          type: number
+        expected_max_slippage_ticks:
+          type: number
+        risk_profile:
+          $ref: "#/components/schemas/RiskProfile"
+    SourceStrategy:
+      type: object
+      required:
+        - strategy_spec_hash
+      properties:
+        strategy_spec_hash:
+          type: string
+        strategy_freeze_id:
+          type: string
+        module_id:
+          type: string
+    RiskProfile:
+      type: object
+      properties:
+        allowed_accounts:
+          type: array
+          items:
+            type: string
+        allowed_instruments:
+          type: array
+          items:
+            type: string
+        max_quantity:
+          type: integer
+          minimum: 1
+        live_enabled:
+          type: boolean
+        require_bracket:
+          type: boolean
+        kill_switch:
+          type: boolean
+        data_stale:
+          type: boolean
+        event_blackout:
+          type: boolean
+        daily_loss_limit_reached:
+          type: boolean
+        max_spread_ticks:
+          type: number
+        max_slippage_ticks:
+          type: number
+        max_position_after_fill:
+          type: integer
+    ExecutionIntentResponse:
+      type: object
+      properties:
+        intent:
+          type: object
+        risk:
+          type: object
+    GatewayCommand:
+      type: object
+      required:
+        - command_id
+        - type
+        - correlation_id
+        - idempotency_key
+        - mode
+      properties:
+        command_id:
+          type: string
+        type:
+          type: string
+          enum: [marketOrder, marketBatch, cancelOrders, flatten, flattenBatch, closeQty, bracket]
+        correlation_id:
+          type: string
+        idempotency_key:
+          type: string
+        schema_version:
+          type: integer
+        protocol_version:
+          type: string
+        mode:
+          type: string
+        strategy_freeze_id:
+          type: string
+        strategy_spec_hash:
+          type: string
+        risk_decision_id:
+          type: string
