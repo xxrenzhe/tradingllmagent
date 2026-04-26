@@ -240,6 +240,7 @@ def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
         "promotion_report": result.get("promotion_report", {}),
         "strategy_card": result.get("strategy_card", {}),
         "hard_gate_report": result.get("hard_gate_report", []),
+        "signal_similarity_report": result.get("signal_similarity_report", {}),
         "next_round_suggestions": result.get("next_round_suggestions", []),
         "final_holdout_policy": result.get("final_holdout_policy", {}),
         "overlapping_test_folds": result.get("overlapping_test_folds", False),

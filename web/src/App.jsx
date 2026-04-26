@@ -664,13 +664,14 @@ function StrategyCards({ rows, selectedExperimentId, onInspect }) {
       {rows.map((row) => {
         const card = row.strategy_card ?? {};
         const promotion = row.promotion_report ?? {};
+        const similarity = row.signal_similarity_report ?? {};
         const test = card.key_metrics?.test ?? {};
         const holdout = card.key_metrics?.final_holdout ?? {};
         return (
           <article key={row.experiment_id} className={`strategy-card ${selectedExperimentId === row.experiment_id ? "selected" : ""}`}>
             <div className="strategy-card-topline">
               <span className={`status-pill ${row.passed ? "completed" : "failed"}`}>{card.status ?? (row.passed ? "qualified" : "rejected")}</span>
-              <span>{promotion.stage ?? "direct"}</span>
+              <span>{promotion.stage ?? "direct"} · {similarity.status ?? "signals unknown"}</span>
             </div>
             <h3>{card.name ?? row.strategy_name}</h3>
             <p>{card.market_hypothesis ?? "No market hypothesis recorded."}</p>

@@ -18,6 +18,7 @@ from tlm.dukascopy import Tick
 from tlm.leaderboard import evaluate_hard_gates, robustness_score
 from tlm.metrics import calculate_metrics
 from tlm.research import (
+    build_signal_similarity_report,
     estimate_indicator_warmup_days,
     load_leaderboard,
     load_leaderboard_report,
@@ -772,7 +773,42 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(all(row["parameter_stability_report"]["evaluated_trials"] == 2 for row in rows))
         self.assertTrue(all(row["parameter_stability_report"]["adjacent_pair_count"] >= 1 for row in rows))
         self.assertTrue(all("positive_neighbor_ratio" in row["parameter_stability_report"] for row in rows))
+        self.assertTrue(all(row["signal_similarity_report"]["evaluated_trials"] == 2 for row in rows))
+        self.assertTrue(all("pairs" in row["signal_similarity_report"] for row in rows))
         self.assertFalse(any(row["parameter_budget_exceeded"] for row in rows))
+
+    def test_signal_similarity_report_flags_duplicate_trade_signals(self) -> None:
+        spec = parse_strategy_spec(base_spec())
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            for offset in range(40):
+                write_breakout_day(data_root, date(2025, 1, 1) + timedelta(days=offset))
+            result = run_research_bar_validation(
+                spec=spec,
+                symbol_config=symbol_config(),
+                data_root=data_root,
+                experiment_id="signals_a",
+                date_from=date(2025, 1, 1),
+                date_to=date(2025, 2, 9),
+                train_days=5,
+                validation_days=5,
+                test_days=5,
+                step_days=5,
+                embargo_days=1,
+                final_holdout_days=5,
+                min_folds=1,
+            )
+
+        report = build_signal_similarity_report(
+            [
+                result,
+                replace(result, experiment_id="signals_b"),
+            ]
+        )
+
+        self.assertEqual(report["status"], "near_duplicates_found")
+        self.assertEqual(report["near_duplicate_pair_count"], 1)
+        self.assertEqual(report["pairs"][0]["similarity"], 1.0)
 
 
 if __name__ == "__main__":

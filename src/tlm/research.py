@@ -89,6 +89,7 @@ class ResearchRunResult:
     gates: dict
     hard_gate_report: list[dict]
     robustness_score: float | None
+    signal_similarity_report: dict
     split_artifacts: list[ResearchSplitArtifact]
     promotion_report: dict
     strategy_card: dict
@@ -132,6 +133,7 @@ class ResearchRunResult:
             "gates": self.gates,
             "hard_gate_report": self.hard_gate_report,
             "robustness_score": self.robustness_score,
+            "signal_similarity_report": self.signal_similarity_report,
             "promotion_report": self.promotion_report,
             "strategy_card": self.strategy_card,
             "next_round_suggestions": self.next_round_suggestions,
@@ -481,6 +483,7 @@ def run_research_bar_validation(
         gates=gates_payload,
         hard_gate_report=hard_gate_report,
         robustness_score=score,
+        signal_similarity_report=single_trial_signal_similarity_report(),
         split_artifacts=split_artifacts,
         promotion_report=promotion_report,
         strategy_card=strategy_card,
@@ -558,8 +561,13 @@ def run_budgeted_research(
             )
         )
     stability_report = build_parameter_stability_report(results, grid_metadata)
+    signal_similarity_report = build_signal_similarity_report(results)
     return [
-        replace(result, parameter_stability_report=stability_report)
+        replace(
+            result,
+            parameter_stability_report=stability_report,
+            signal_similarity_report=signal_similarity_report,
+        )
         for result in results
     ]
 
@@ -824,6 +832,71 @@ def compact_metrics(metrics: BacktestMetrics) -> dict:
         "annual_trades": metrics.annual_trades,
         "avg_trade_net_pnl": metrics.avg_trade_net_pnl,
     }
+
+
+def single_trial_signal_similarity_report() -> dict:
+    return {
+        "status": "insufficient_trials",
+        "evaluated_trials": 1,
+        "threshold": 0.8,
+        "near_duplicate_pair_count": 0,
+        "pairs": [],
+    }
+
+
+def build_signal_similarity_report(
+    results: Sequence[ResearchRunResult],
+    threshold: float = 0.8,
+) -> dict:
+    if len(results) < 2:
+        return single_trial_signal_similarity_report()
+    signatures = {
+        result.experiment_id: trade_signal_signature(result)
+        for result in results
+    }
+    pairs = []
+    for left_index, left in enumerate(results):
+        for right in results[left_index + 1:]:
+            left_signals = signatures[left.experiment_id]
+            right_signals = signatures[right.experiment_id]
+            intersection = left_signals & right_signals
+            union = left_signals | right_signals
+            similarity = len(intersection) / len(union) if union else 1.0
+            pairs.append(
+                {
+                    "left_trial": left.experiment_id,
+                    "right_trial": right.experiment_id,
+                    "similarity": similarity,
+                    "overlap_count": len(intersection),
+                    "left_signal_count": len(left_signals),
+                    "right_signal_count": len(right_signals),
+                    "near_duplicate": similarity >= threshold,
+                }
+            )
+    near_duplicate_count = sum(1 for pair in pairs if pair["near_duplicate"])
+    return {
+        "status": "near_duplicates_found" if near_duplicate_count else "distinct",
+        "evaluated_trials": len(results),
+        "threshold": threshold,
+        "near_duplicate_pair_count": near_duplicate_count,
+        "pairs": pairs,
+    }
+
+
+def trade_signal_signature(result: ResearchRunResult) -> set[tuple[str, str, str]]:
+    signatures = set()
+    for artifact in result.split_artifacts:
+        if artifact.split != "test":
+            continue
+        for trade in artifact.trades:
+            signatures.add(
+                (
+                    trade.side,
+                    trade.entry_time.isoformat(),
+                    trade.entry_reason,
+                )
+            )
+    return signatures
 
 
 def build_hard_gate_report(
@@ -1391,6 +1464,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "promotion_report": payload.get("promotion_report", {}),
                 "strategy_card": payload.get("strategy_card", {}),
                 "hard_gate_report": payload.get("hard_gate_report", []),
+                "signal_similarity_report": payload.get("signal_similarity_report", {}),
                 "next_round_suggestions": payload.get("next_round_suggestions", []),
                 "final_holdout_policy": payload.get("final_holdout_policy", {}),
                 "overlapping_test_folds": payload.get("overlapping_test_folds", False),
