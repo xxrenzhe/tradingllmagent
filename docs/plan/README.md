@@ -1,0 +1,47 @@
+# Docs Plan Coordination
+
+## 1. Precedence Rule
+
+When documents in this directory conflict, the newer generated or updated document is authoritative for the conflicting topic.
+
+Older documents remain useful as design history, but they should not override newer architecture boundaries, stage definitions, API contracts, or acceptance criteria.
+
+中文口径：`docs/plan` 下如果出现方案冲突，以后生成或后更新的文档为准。旧文档保留为设计历史，但不能覆盖新的架构边界、阶段定义、API 契约或验收标准。
+
+## 2. Current Authority Map
+
+- `local-llm-nq-strategy-system.md`: authoritative for the v1 research system, data pipeline, Strategy Spec, backtesting, validation, leaderboard, paper replay, and no-live-execution boundary.
+- `macro-event-aware-nq-strategy-optimization.md`: authoritative for structured macro event inputs, event context, event policy concepts, and event-risk attribution.
+- `runtime-market-monitor-optimization.md`: authoritative for runtime market snapshots, key-level scanning, strong-signal review, and paper-only runtime observation.
+- `agent-driven-trading-system-optimization.md`: authoritative for strategy module memory, 5m/15m cadence, trade intent boundaries, and the high-level research-to-execution layering.
+- `nt8-live-integration-roadmap.md`: authoritative for post-v1 execution readiness, NT8 gateway evolution, paper shadow, sim, micro-live, controlled live, incident response, and execution safety.
+- `integrated-trading-system-implementation-plan.md`: authoritative for cross-document implementation sequencing, phase gates, and immediate landing order.
+
+## 3. Version Boundaries
+
+- `v1 research`: local data, Strategy Spec validation, bar/tick backtests, rolling validation, leaderboard, paper replay, offline NT export, module memory, macro event context, and runtime monitor reports.
+- `v2 execution readiness`: OpenAPI contract hardening, typed clients, paper shadow, sim gateway, reconciliation model, execution audit, and runbooks.
+- `v3 controlled live`: micro-live, live profile approval, broker-side protective orders, incident handling, and controlled automation.
+
+No `v1 research` feature should require a live account, Windows-only NT8 runtime, or broker connectivity.
+
+## 4. Contract Source Of Truth
+
+`docs/openapi/tradingllmagent.openapi.yaml` is the source of truth for HTTP API contracts. Plan documents may list intended endpoints, but implementation should update the OpenAPI contract first when endpoint details diverge.
+
+## 5. Implementation Notes
+
+The repository may contain partial implementations of later-stage concepts for contract testing or local simulation. Those local stubs do not imply live execution readiness unless the relevant `v2` or `v3` acceptance criteria and runbooks are complete.
+
+## 6. Immediate Landing Order
+
+The current implementation should follow this order:
+
+1. Stabilize v1 research artifacts: Strategy Spec, module id, leaderboard, report artifacts, hidden final holdout, and reproducibility hashes.
+2. Add structured context: macro event calendar, event context, runtime snapshot, key-level scanner, and paper-only monitor reports.
+3. Add memory and review layer: strategy cards, module performance memory, LLM report reviews, debate ranking, and global-memory events.
+4. Add execution contract without live permission: OpenAPI schemas, typed client, `ExecutionIntent`, `RiskDecision`, audit events, and mock/sim gateway contracts.
+5. Add NT8 sim boundary: independent gateway process, heartbeat, ACK/NACK, reconciliation, incident events, and sim-only validation.
+6. Add controlled live only after gates: paper shadow, micro-live with manual approval, broker-side protection, runbooks, and live profile whitelist.
+
+Do not start from live order buttons, unrestricted NT8 control, or free-form LLM trading actions. Those are downstream capabilities gated by `nt8-live-integration-roadmap.md`.
