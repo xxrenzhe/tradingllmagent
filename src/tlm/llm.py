@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +25,7 @@ class LLMStrategyProposal:
     prompt_hash: str
     response_hash: str
     strategy: StrategySpec
+    metadata: dict[str, Any] | None = None
 
     def audit_record(self) -> dict[str, Any]:
         return {
@@ -33,6 +37,7 @@ class LLMStrategyProposal:
             "response": self.response,
             "strategy_name": self.strategy.name,
             "strategy_spec_hash": stable_hash(self.strategy.raw),
+            "metadata": self.metadata or {},
         }
 
 
@@ -93,6 +98,7 @@ class DeterministicLocalLLM:
             prompt_hash=stable_hash(prompt),
             response_hash=stable_hash(response),
             strategy=strategy,
+            metadata={"provider": "deterministic"},
         )
 
     def _mutate_seed(self, raw_seed: dict[str, Any]) -> dict[str, Any]:
@@ -106,6 +112,132 @@ class DeterministicLocalLLM:
         if "opening_range_minutes" in parameters:
             parameters["opening_range_minutes"] = {"values": [5, 15, 30]}
         return raw
+
+
+class OpenAICompatibleLLM:
+    def __init__(
+        self,
+        model: str,
+        parameters: dict[str, Any] | None = None,
+        transport: Any | None = None,
+    ) -> None:
+        self.model = model
+        self.parameters = parameters or {}
+        self.base_url = str(self.parameters.get("base_url", "https://api.openai.com/v1")).rstrip("/")
+        self.api_key_env = str(self.parameters.get("api_key_env", "OPENAI_API_KEY"))
+        self.api_key = self.parameters.get("api_key") or os.environ.get(self.api_key_env)
+        self.timeout_seconds = float(self.parameters.get("timeout_seconds", 60))
+        self.transport = transport or self._post_json
+        if not self.api_key:
+            raise ValueError(f"Missing API key. Set {self.api_key_env} or llm_parameters.api_key.")
+
+    def propose(
+        self,
+        seed_spec: StrategySpec,
+        feedback: list[dict[str, Any]] | None = None,
+    ) -> LLMStrategyProposal:
+        prompt = build_strategy_prompt(seed_spec, feedback=feedback)
+        request_payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You generate only bounded Strategy Spec JSON for a local backtest system. "
+                        "Never include executable code or hidden test/final-holdout analysis."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+            **self.completion_parameters(),
+        }
+        response_payload = self.transport(
+            f"{self.base_url}/chat/completions",
+            request_payload,
+            self.request_headers(),
+            self.timeout_seconds,
+        )
+        response = extract_chat_content(response_payload)
+        strategy = parse_llm_response(response)
+        return LLMStrategyProposal(
+            model=self.model,
+            prompt=prompt,
+            response=response,
+            prompt_hash=stable_hash(prompt),
+            response_hash=stable_hash(response),
+            strategy=strategy,
+            metadata={
+                "provider": "openai_compatible",
+                "base_url": self.base_url,
+                "usage": response_payload.get("usage", {}),
+            },
+        )
+
+    def completion_parameters(self) -> dict[str, Any]:
+        reserved = {
+            "provider",
+            "api_key",
+            "api_key_env",
+            "base_url",
+            "timeout_seconds",
+        }
+        return {key: value for key, value in self.parameters.items() if key not in reserved}
+
+    def request_headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _post_json(
+        self,
+        url: str,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+        timeout_seconds: float,
+    ) -> dict[str, Any]:
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"LLM request failed with HTTP {exc.code}: {body}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"LLM request failed: {exc}") from exc
+
+
+def create_llm_adapter(
+    model: str,
+    parameters: dict[str, Any] | None = None,
+    transport: Any | None = None,
+):
+    parameters = parameters or {}
+    provider = parameters.get("provider")
+    if provider in {None, "", "deterministic"} and model.startswith("local-"):
+        return DeterministicLocalLLM(model=model)
+    if provider == "deterministic":
+        return DeterministicLocalLLM(model=model)
+    if provider in {None, "openai", "openai_compatible"}:
+        return OpenAICompatibleLLM(model=model, parameters=parameters, transport=transport)
+    raise ValueError(f"Unsupported LLM provider: {provider}")
+
+
+def extract_chat_content(payload: dict[str, Any]) -> str:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("LLM response missing choices")
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("LLM response missing message content")
+    return content
 
 
 def parse_llm_response(response: str) -> StrategySpec:

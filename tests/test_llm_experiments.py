@@ -13,7 +13,13 @@ from tlm.experiments import (
     record_experiment,
     record_trial,
 )
-from tlm.llm import DeterministicLocalLLM, append_audit_log, train_validation_feedback
+from tlm.llm import (
+    DeterministicLocalLLM,
+    OpenAICompatibleLLM,
+    append_audit_log,
+    create_llm_adapter,
+    train_validation_feedback,
+)
 from tlm.research import run_research_bar_validation
 from tlm.strategy import parse_strategy_spec
 
@@ -34,6 +40,47 @@ class LLMAndExperimentTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["prompt_hash"], proposal.prompt_hash)
         self.assertIn("strategy_spec_hash", records[0])
+        self.assertEqual(records[0]["metadata"]["provider"], "deterministic")
+
+    def test_openai_compatible_adapter_uses_mock_transport_and_audits_usage(self) -> None:
+        seed = parse_strategy_spec(base_spec())
+        calls = []
+
+        def transport(url, payload, headers, timeout_seconds):
+            calls.append((url, payload, headers, timeout_seconds))
+            raw = dict(seed.raw)
+            raw["name"] = "mock_live_llm_candidate"
+            return {
+                "choices": [{"message": {"content": json.dumps({"strategy_spec": raw})}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+
+        adapter = OpenAICompatibleLLM(
+            model="gpt-test",
+            parameters={
+                "provider": "openai_compatible",
+                "api_key": "test-key",
+                "base_url": "https://llm.example/v1",
+                "temperature": 0,
+            },
+            transport=transport,
+        )
+        proposal = adapter.propose(seed, feedback=[{"folds": []}])
+        audit = proposal.audit_record()
+
+        self.assertEqual(proposal.strategy.name, "mock_live_llm_candidate")
+        self.assertEqual(calls[0][0], "https://llm.example/v1/chat/completions")
+        self.assertEqual(calls[0][1]["temperature"], 0)
+        self.assertNotIn("api_key", calls[0][1])
+        self.assertEqual(audit["metadata"]["provider"], "openai_compatible")
+        self.assertEqual(audit["metadata"]["usage"]["total_tokens"], 15)
+
+    def test_create_llm_adapter_requires_key_for_live_provider(self) -> None:
+        with self.assertRaises(ValueError):
+            create_llm_adapter(
+                "gpt-test",
+                {"provider": "openai_compatible", "api_key_env": "TLM_MISSING_KEY"},
+            )
 
     def test_feedback_excludes_test_and_holdout_metrics(self) -> None:
         spec = parse_strategy_spec(base_spec())

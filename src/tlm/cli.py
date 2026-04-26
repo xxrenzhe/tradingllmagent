@@ -20,7 +20,7 @@ from .experiments import (
     record_experiment,
     record_trial,
 )
-from .llm import DeterministicLocalLLM, append_audit_log
+from .llm import append_audit_log, create_llm_adapter
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_quality_report
 from .research import load_leaderboard_report, run_budgeted_research, write_research_result
@@ -298,7 +298,7 @@ def cmd_research_run(args: argparse.Namespace) -> int:
 def cmd_research_propose(args: argparse.Namespace) -> int:
     seed_spec = load_strategy_spec(Path(args.spec))
     experiment_id = args.experiment_id or f"{seed_spec.name}_proposal"
-    proposal = DeterministicLocalLLM(model=args.model).propose(seed_spec)
+    proposal = create_llm_adapter(args.model, args.llm_parameters).propose(seed_spec)
     output_path = Path(args.output) if args.output else Path("strategies/generated") / f"{proposal.strategy.name}.json"
     write_json(output_path, proposal.strategy.raw)
 
@@ -508,6 +508,7 @@ def build_parser() -> argparse.ArgumentParser:
     propose = research_subparsers.add_parser("propose")
     propose.add_argument("--spec", required=True)
     propose.add_argument("--model", default="local-deterministic-template")
+    propose.add_argument("--llm-parameters", type=parse_json_object, default={})
     propose.add_argument("--experiment-id")
     propose.add_argument("--experiments-root", default="experiments")
     propose.add_argument("--experiment-db", default="experiments/research.sqlite3")
