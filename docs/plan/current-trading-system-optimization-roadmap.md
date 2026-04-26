@@ -368,7 +368,9 @@ ExecutionIntent 目前有基础状态和 risk gate，但还没有持久化状态
 
 ## 17. 本轮 repo-local 落地状态
 
-本轮已完成本文第一至第七优先级的本地代码落地，并补齐对应测试与 UI/API hook。这里的“落地”指当前仓库内可验证的 contract、artifact、状态机、测试和前端入口已经实现；第八至第十优先级涉及 Windows、真实 NT8、broker、交易日样本和人工验收，仍必须按外部验收流程执行，不能用本地 sim/mock 冒充 live readiness。
+前一轮已完成本文第一至第七优先级的本地代码落地。本轮继续完成第八至第十优先级在当前仓库内可以实现的部分：独立 NT8 gateway 协议脚手架、成本校准 artifact、外部验收证据门禁、readiness API/UI 补齐，以及最终验证。
+
+这里的“100% 落地”定义为：所有能在当前 macOS/Python/React 仓库内实现和自动化验证的 contract、artifact、状态机、测试、脚手架和前端入口已经完成；真实 NT8 AddOn 编译安装、Windows/NinjaTrader 8 运行、broker 连接、连续交易日样本和 micro-live/controlled-live 交易结果必须由外部环境产生证据，再由本仓库的 evidence gate 判定是否通过。系统不会用本地 sim/mock 冒充 live readiness。
 
 | 阶段 | 本轮状态 | 落地内容 |
 | --- | --- | --- |
@@ -379,7 +381,10 @@ ExecutionIntent 目前有基础状态和 risk gate，但还没有持久化状态
 | 运行期 structured review | 已落地 | monitor review 固定输出 bull/bear/risk/decision/invalidation，action 限定在 paper/research 范围，高影响 release window 禁止 `paper_allow`。 |
 | Execution state machine | 已落地 | SQLite 表、risk/approval/gateway/order/audit 记录和状态迁移约束已实现，`risk_rejected` 终态、`approved` 必须绑定 approval 或 automation profile。 |
 | WebUI readiness 控制台 | 已落地 | 前端新增 Runtime Monitor、Execution Readiness、Module Memory 三个运行期视图；仍不提供任意 Buy/Sell 自由下单入口。 |
-| NT8 独立 gateway 与真实验收 | 外部待验收 | 当前仓库仍只有 sim/mock gateway；真实 NT8 AddOn、连续 sim command、micro-live、controlled-live 必须在外部环境按 runbook 验证。 |
+| NT8 独立 gateway 工程 | repo-local 已落地，外部待编译验收 | 新增 `tools/nt8-gateway` C# AddOn skeleton、`nt8-gateway.v1` 协议 manifest、sim-only account guard、append-only gateway event、order update 和 external intervention 检测。真实 NT8 编译安装仍需 Windows/NT8。 |
+| 数据质量和成本模型校准 | 已落地 | 新增 cost calibration sample、spread/slippage 分布、推荐成本模型、cost model version hash、data quality hash、CFD proxy vs CME executable warning artifact。 |
+| 真实外部验收阶段 | evidence gate 已落地，真实证据待外部产生 | 新增 external validation artifact，对 paper shadow、NT8 sim、micro-live、controlled-live 分别检查交易日/样本/覆盖窗口/断线重连/idempotency/flatten/broker stop/incident 等证据。缺证据默认 blocked。 |
+| Readiness API/UI 完整面 | 已落地 | API 增加 approval queue、external validation、cost calibration、gateway order updates、incident timeline；UI 增加 gateway state、approval queue、incident/order update、cost calibration 视图。 |
 
 本轮验证命令：
 
@@ -388,3 +393,9 @@ PYTHONPATH=src:tests python3 -m unittest discover -s tests
 npm run build
 git diff --check
 ```
+
+本轮最终验证结果：
+
+- `PYTHONPATH=src:tests python3 -m unittest discover -s tests`：121 tests OK。
+- `npm run build`：Vite production build OK。
+- `git diff --check`：OK。
