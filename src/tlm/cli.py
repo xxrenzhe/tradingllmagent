@@ -484,7 +484,7 @@ def build_parser() -> argparse.ArgumentParser:
     research_run.add_argument("--experiments-root", default="experiments")
     research_run.add_argument("--experiment-db", default="experiments/research.sqlite3")
     research_run.add_argument("--max-trials", type=int, default=1)
-    research_run.add_argument("--execution-mode", choices=["bar", "tick"], default="bar")
+    research_run.add_argument("--execution-mode", choices=["bar", "tick", "bar_then_tick"], default="bar")
     research_run.add_argument("--random-seed", type=int, default=0)
     research_run.add_argument("--llm-model", default="local-deterministic-template")
     research_run.add_argument("--llm-parameters", type=parse_json_object, default={})

@@ -88,6 +88,10 @@ class ResearchRunResult:
     gates: dict
     robustness_score: float | None
     split_artifacts: list[ResearchSplitArtifact]
+    promotion_report: dict
+    strategy_card: dict
+    next_round_suggestions: list[str]
+    final_holdout_policy: dict
 
     def to_dict(self) -> dict:
         return {
@@ -124,6 +128,10 @@ class ResearchRunResult:
             "final_holdout_metrics": self.final_holdout_metrics.to_dict(),
             "gates": self.gates,
             "robustness_score": self.robustness_score,
+            "promotion_report": self.promotion_report,
+            "strategy_card": self.strategy_card,
+            "next_round_suggestions": self.next_round_suggestions,
+            "final_holdout_policy": self.final_holdout_policy,
         }
 
 
@@ -401,6 +409,28 @@ def run_research_bar_validation(
         positive_year_ratio=positive_year_ratio,
         round_trip_cost=round_trip_cost,
     )
+    gates_payload = gates.to_dict()
+    final_holdout_policy = build_final_holdout_policy(plan)
+    promotion_report = build_direct_promotion_report(execution_mode)
+    next_round_suggestions = build_next_round_suggestions(
+        gates_payload["reasons"],
+        overfitting_report,
+        cost_sensitivity_report,
+        grid_metadata,
+    )
+    strategy_card = build_strategy_card(
+        result_status="qualified" if gates_payload["passed"] else "rejected",
+        spec=spec,
+        execution_mode=execution_mode,
+        aggregate_validation_metrics=aggregate_validation_metrics,
+        aggregate_test_metrics=aggregate_test_metrics,
+        final_holdout_metrics=holdout.metrics,
+        gates=gates_payload,
+        robustness_score=score,
+        promotion_report=promotion_report,
+        next_round_suggestions=next_round_suggestions,
+        final_holdout_policy=final_holdout_policy,
+    )
     return ResearchRunResult(
         experiment_id=experiment_id,
         execution_mode=execution_mode,
@@ -433,9 +463,13 @@ def run_research_bar_validation(
         parameter_stability_report=single_trial_parameter_stability_report(grid_metadata),
         final_holdout_data_version_hash=holdout.data_version_hash,
         final_holdout_metrics=holdout.metrics,
-        gates=gates.to_dict(),
+        gates=gates_payload,
         robustness_score=score,
         split_artifacts=split_artifacts,
+        promotion_report=promotion_report,
+        strategy_card=strategy_card,
+        next_round_suggestions=next_round_suggestions,
+        final_holdout_policy=final_holdout_policy,
     )
 
 
@@ -465,7 +499,7 @@ def run_budgeted_research(
     llm_model: str = "local-deterministic-template",
     llm_parameters: dict | None = None,
 ) -> list[ResearchRunResult]:
-    if execution_mode not in {"bar", "tick"}:
+    if execution_mode not in {"bar", "tick", "bar_then_tick"}:
         raise ValueError(f"Unsupported execution_mode: {execution_mode}")
     grid_metadata = parameter_grid_metadata(
         seed_spec,
@@ -482,7 +516,7 @@ def run_budgeted_research(
     for index, variant in enumerate(variants[:max_trials]):
         variant_experiment_id = f"{experiment_id}_trial_{index:04d}"
         results.append(
-            run_research_bar_validation(
+            run_staged_research_validation(
                 spec=variant,
                 symbol_config=symbol_config,
                 data_root=data_root,
@@ -512,6 +546,301 @@ def run_budgeted_research(
         replace(result, parameter_stability_report=stability_report)
         for result in results
     ]
+
+
+def run_staged_research_validation(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    data_root: Path,
+    experiment_id: str,
+    date_from: date,
+    date_to: date,
+    starting_equity: float,
+    train_days: int,
+    validation_days: int,
+    test_days: int,
+    step_days: int,
+    embargo_days: int,
+    final_holdout_days: int,
+    min_folds: int,
+    indicator_warmup_days: int | None,
+    grid_metadata: ParameterGridMetadata,
+    execution_mode: str,
+    cost_model: CostModelConfig | None,
+    config_dir: Path,
+    random_seed: int,
+    llm_model: str,
+    llm_parameters: dict | None,
+) -> ResearchRunResult:
+    if execution_mode in {"bar", "tick"}:
+        return run_research_bar_validation(
+            spec=spec,
+            symbol_config=symbol_config,
+            data_root=data_root,
+            experiment_id=experiment_id,
+            date_from=date_from,
+            date_to=date_to,
+            starting_equity=starting_equity,
+            train_days=train_days,
+            validation_days=validation_days,
+            test_days=test_days,
+            step_days=step_days,
+            embargo_days=embargo_days,
+            final_holdout_days=final_holdout_days,
+            min_folds=min_folds,
+            indicator_warmup_days=indicator_warmup_days,
+            grid_metadata=grid_metadata,
+            execution_mode=execution_mode,
+            cost_model=cost_model,
+            config_dir=config_dir,
+            random_seed=random_seed,
+            llm_model=llm_model,
+            llm_parameters=llm_parameters,
+        )
+    if execution_mode != "bar_then_tick":
+        raise ValueError(f"Unsupported execution_mode: {execution_mode}")
+
+    bar_result = run_research_bar_validation(
+        spec=spec,
+        symbol_config=symbol_config,
+        data_root=data_root,
+        experiment_id=experiment_id,
+        date_from=date_from,
+        date_to=date_to,
+        starting_equity=starting_equity,
+        train_days=train_days,
+        validation_days=validation_days,
+        test_days=test_days,
+        step_days=step_days,
+        embargo_days=embargo_days,
+        final_holdout_days=final_holdout_days,
+        min_folds=min_folds,
+        indicator_warmup_days=indicator_warmup_days,
+        grid_metadata=grid_metadata,
+        execution_mode="bar",
+        cost_model=cost_model,
+        config_dir=config_dir,
+        random_seed=random_seed,
+        llm_model=llm_model,
+        llm_parameters=llm_parameters,
+    )
+    promotion_report = build_bar_to_tick_promotion_report(bar_result, tick_result=None)
+    if not promotion_report["promoted"]:
+        return with_promotion_outputs(bar_result, promotion_report)
+
+    tick_result = run_research_bar_validation(
+        spec=spec,
+        symbol_config=symbol_config,
+        data_root=data_root,
+        experiment_id=experiment_id,
+        date_from=date_from,
+        date_to=date_to,
+        starting_equity=starting_equity,
+        train_days=train_days,
+        validation_days=validation_days,
+        test_days=test_days,
+        step_days=step_days,
+        embargo_days=embargo_days,
+        final_holdout_days=final_holdout_days,
+        min_folds=min_folds,
+        indicator_warmup_days=indicator_warmup_days,
+        grid_metadata=grid_metadata,
+        execution_mode="tick",
+        cost_model=cost_model,
+        config_dir=config_dir,
+        random_seed=random_seed,
+        llm_model=llm_model,
+        llm_parameters=llm_parameters,
+    )
+    return with_promotion_outputs(
+        tick_result,
+        build_bar_to_tick_promotion_report(bar_result, tick_result=tick_result),
+    )
+
+
+def with_promotion_outputs(result: ResearchRunResult, promotion_report: dict) -> ResearchRunResult:
+    next_round_suggestions = build_next_round_suggestions(
+        result.gates["reasons"],
+        result.overfitting_report,
+        result.cost_sensitivity_report,
+        result.parameter_grid,
+        promotion_report=promotion_report,
+    )
+    current_card = result.strategy_card
+    strategy_card = build_strategy_card(
+        result_status="qualified" if result.gates["passed"] else "rejected",
+        spec_name=current_card.get("name", result.strategy_name),
+        strategy_family=current_card.get("strategy_family"),
+        symbol=current_card.get("symbol"),
+        market_hypothesis=current_card.get("market_hypothesis"),
+        execution_mode=result.execution_mode,
+        aggregate_validation_metrics=result.aggregate_validation_metrics,
+        aggregate_test_metrics=result.aggregate_test_metrics,
+        final_holdout_metrics=result.final_holdout_metrics,
+        gates=result.gates,
+        robustness_score=result.robustness_score,
+        promotion_report=promotion_report,
+        next_round_suggestions=next_round_suggestions,
+        final_holdout_policy=result.final_holdout_policy,
+    )
+    return replace(
+        result,
+        promotion_report=promotion_report,
+        next_round_suggestions=next_round_suggestions,
+        strategy_card=strategy_card,
+    )
+
+
+def build_direct_promotion_report(execution_mode: str) -> dict:
+    return {
+        "mode": execution_mode,
+        "stage": f"direct_{execution_mode}",
+        "promoted": execution_mode == "tick",
+        "reasons": [],
+        "bar_summary": None,
+        "tick_summary": None,
+        "final_holdout_used_for_promotion": False,
+    }
+
+
+def build_bar_to_tick_promotion_report(
+    bar_result: ResearchRunResult,
+    tick_result: ResearchRunResult | None,
+) -> dict:
+    reasons = bar_candidate_rejection_reasons(bar_result)
+    promoted = not reasons
+    return {
+        "mode": "bar_then_tick",
+        "stage": "promoted_to_tick" if promoted and tick_result else "bar_rejected_before_tick",
+        "promoted": promoted,
+        "reasons": reasons,
+        "bar_summary": promotion_summary(bar_result),
+        "tick_summary": promotion_summary(tick_result) if tick_result else None,
+        "final_holdout_used_for_promotion": False,
+    }
+
+
+def bar_candidate_rejection_reasons(result: ResearchRunResult) -> list[str]:
+    reasons = []
+    if result.aggregate_validation_metrics.trade_count <= 0:
+        reasons.append("bar_validation_no_trades")
+    if result.aggregate_validation_metrics.net_pnl <= 0:
+        reasons.append("bar_validation_net_pnl")
+    if result.aggregate_test_metrics.trade_count <= 0:
+        reasons.append("bar_test_no_trades")
+    if result.aggregate_test_metrics.net_pnl <= 0:
+        reasons.append("bar_test_net_pnl")
+    if result.parameter_budget_exceeded:
+        reasons.append("parameter_budget_exceeded_before_tick")
+    return reasons
+
+
+def promotion_summary(result: ResearchRunResult | None) -> dict | None:
+    if result is None:
+        return None
+    return {
+        "experiment_id": result.experiment_id,
+        "execution_mode": result.execution_mode,
+        "validation": result.aggregate_validation_metrics.to_dict(),
+        "test": result.aggregate_test_metrics.to_dict(),
+        "gates": result.gates,
+    }
+
+
+def build_final_holdout_policy(plan: ValidationPlan) -> dict:
+    return {
+        "status": "frozen_once_after_candidate_selection",
+        "llm_feedback_includes_final_holdout": False,
+        "promotion_uses_final_holdout": False,
+        "range": plan.final_holdout.to_dict(),
+        "embargo_days": plan.embargo_days,
+        "indicator_warmup_days": plan.indicator_warmup_days,
+    }
+
+
+def build_strategy_card(
+    result_status: str,
+    execution_mode: str,
+    aggregate_validation_metrics: BacktestMetrics,
+    aggregate_test_metrics: BacktestMetrics,
+    final_holdout_metrics: BacktestMetrics,
+    gates: dict,
+    robustness_score: float | None,
+    promotion_report: dict,
+    next_round_suggestions: list[str],
+    final_holdout_policy: dict,
+    spec: StrategySpec | None = None,
+    spec_name: str | None = None,
+    strategy_family: str | None = None,
+    symbol: str | None = None,
+    market_hypothesis: str | None = None,
+) -> dict:
+    return {
+        "status": result_status,
+        "name": spec.name if spec else spec_name,
+        "strategy_family": spec.strategy_family if spec else strategy_family,
+        "symbol": spec.symbol if spec else symbol,
+        "market_hypothesis": spec.market_hypothesis if spec else market_hypothesis,
+        "execution_mode": execution_mode,
+        "promotion_stage": promotion_report.get("stage"),
+        "passed": gates["passed"],
+        "robustness_score": robustness_score,
+        "key_metrics": {
+            "validation": compact_metrics(aggregate_validation_metrics),
+            "test": compact_metrics(aggregate_test_metrics),
+            "final_holdout": compact_metrics(final_holdout_metrics),
+        },
+        "risk_flags": gates["reasons"],
+        "next_round_suggestions": next_round_suggestions,
+        "final_holdout_policy": final_holdout_policy,
+    }
+
+
+def compact_metrics(metrics: BacktestMetrics) -> dict:
+    return {
+        "trade_count": metrics.trade_count,
+        "net_pnl": metrics.net_pnl,
+        "sharpe": metrics.sharpe,
+        "max_drawdown": metrics.max_drawdown,
+        "annual_trades": metrics.annual_trades,
+        "avg_trade_net_pnl": metrics.avg_trade_net_pnl,
+    }
+
+
+def build_next_round_suggestions(
+    gate_reasons: Sequence[str],
+    overfitting_report: dict,
+    cost_sensitivity_report: dict,
+    grid_metadata: ParameterGridMetadata | dict,
+    promotion_report: dict | None = None,
+) -> list[str]:
+    suggestions = []
+    reason_set = set(gate_reasons)
+    promotion_reasons = set((promotion_report or {}).get("reasons", []))
+    if promotion_reasons:
+        suggestions.append("Do not run tick replay again until bar validation and bar test are both positive.")
+    if "annual_trades_test" in reason_set:
+        suggestions.append("Increase trade frequency through broader time-of-day coverage without increasing position size.")
+    if "sharpe_test" in reason_set or "median_sharpe_test_fold" in reason_set:
+        suggestions.append("Tighten regime filters or exit timing; do not widen the parameter grid to chase Sharpe.")
+    if "avg_trade_net_pnl" in reason_set:
+        suggestions.append("Improve per-trade edge before costs; avoid strategies whose edge is smaller than round-trip cost.")
+    if "positive_year_ratio" in reason_set or "positive_test_fold_ratio" in overfitting_report.get("reasons", []):
+        suggestions.append("Prefer hypotheses that work across more years and folds rather than one narrow market regime.")
+    if "final_holdout_sharpe_decay" in reason_set or "test_to_holdout_sharpe_decay" in reason_set:
+        suggestions.append("Treat recent-period degradation as a rejection signal; propose a simpler hypothesis next round.")
+    if not cost_sensitivity_report.get("worst_case_survives", True):
+        suggestions.append("Reduce dependence on tight fills; require the strategy to survive extra slippage before promotion.")
+    budget_exceeded = (
+        grid_metadata.budget_exceeded
+        if isinstance(grid_metadata, ParameterGridMetadata)
+        else grid_metadata.get("budget_exceeded", False)
+    )
+    if budget_exceeded:
+        suggestions.append("Shrink the parameter grid and retest neighboring values before considering the strategy stable.")
+    if not suggestions:
+        suggestions.append("Freeze the current spec and monitor tick replay versus bar replay drift before expanding scope.")
+    return suggestions
 
 
 def _run_range(
@@ -959,6 +1288,10 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "overfitting_report": payload.get("overfitting_report", {}),
                 "cost_sensitivity_report": payload.get("cost_sensitivity_report", {}),
                 "parameter_stability_report": payload.get("parameter_stability_report", {}),
+                "promotion_report": payload.get("promotion_report", {}),
+                "strategy_card": payload.get("strategy_card", {}),
+                "next_round_suggestions": payload.get("next_round_suggestions", []),
+                "final_holdout_policy": payload.get("final_holdout_policy", {}),
                 "overlapping_test_folds": payload.get("overlapping_test_folds", False),
                 "non_overlap_test_fold_indexes": payload.get("non_overlap_test_fold_indexes", []),
                 "passed": payload["gates"]["passed"],

@@ -237,6 +237,7 @@ export default function App() {
               <select value={forms.executionMode} onChange={(event) => updateForm("executionMode", event.target.value)}>
                 <option value="bar">bar</option>
                 <option value="tick">tick</option>
+                <option value="bar_then_tick">bar then tick</option>
               </select>
             </label>
           </div>
@@ -327,6 +328,14 @@ export default function App() {
         </div>
         <LeaderboardTable
           rows={visibleRows}
+          selectedExperimentId={selectedArtifactId}
+          onInspect={(id) => runAction("Artifacts", () => loadResearchArtifacts(id))}
+        />
+      </Panel>
+
+      <Panel title="Strategy Cards" kicker="Promotion, holdout, next round">
+        <StrategyCards
+          rows={visibleRows.slice(0, 8)}
           selectedExperimentId={selectedArtifactId}
           onInspect={(id) => runAction("Artifacts", () => loadResearchArtifacts(id))}
         />
@@ -642,6 +651,44 @@ function ArtifactDashboard({ detail }) {
       </div>
       <TradeDistributionGrid distributions={distributions} />
       <SplitMetricsTable rows={foldMetrics} />
+    </div>
+  );
+}
+
+function StrategyCards({ rows, selectedExperimentId, onInspect }) {
+  if (!rows.length) {
+    return <EmptyState title="No strategy cards" text="Run research to generate promotion reports and strategy cards." />;
+  }
+  return (
+    <div className="strategy-card-grid">
+      {rows.map((row) => {
+        const card = row.strategy_card ?? {};
+        const promotion = row.promotion_report ?? {};
+        const test = card.key_metrics?.test ?? {};
+        const holdout = card.key_metrics?.final_holdout ?? {};
+        return (
+          <article key={row.experiment_id} className={`strategy-card ${selectedExperimentId === row.experiment_id ? "selected" : ""}`}>
+            <div className="strategy-card-topline">
+              <span className={`status-pill ${row.passed ? "completed" : "failed"}`}>{card.status ?? (row.passed ? "qualified" : "rejected")}</span>
+              <span>{promotion.stage ?? "direct"}</span>
+            </div>
+            <h3>{card.name ?? row.strategy_name}</h3>
+            <p>{card.market_hypothesis ?? "No market hypothesis recorded."}</p>
+            <div className="strategy-card-metrics">
+              <Metric label="Test Sharpe" value={formatNumber(test.sharpe ?? row.sharpe_test)} detail="sample-out aggregate" />
+              <Metric label="Holdout PnL" value={formatNumber(holdout.net_pnl ?? row.net_pnl_holdout)} detail="frozen final check" />
+            </div>
+            <div className="suggestion-list">
+              {(row.next_round_suggestions ?? card.next_round_suggestions ?? []).slice(0, 2).map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+            <ActionButton variant="secondary" onClick={() => onInspect(row.experiment_id)}>
+              Inspect Replay
+            </ActionButton>
+          </article>
+        );
+      })}
     </div>
   );
 }

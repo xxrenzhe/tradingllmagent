@@ -349,6 +349,10 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(rows[0]["overfitting_report"]["pbo_status"], "not_computed_v1")
         self.assertIn("cost_sensitivity_report", rows[0])
         self.assertEqual(rows[0]["cost_sensitivity_report"]["baseline_round_trip_cost"], 15.0)
+        self.assertEqual(rows[0]["promotion_report"]["stage"], "direct_bar")
+        self.assertEqual(rows[0]["strategy_card"]["name"], result.strategy_name)
+        self.assertFalse(rows[0]["final_holdout_policy"]["llm_feedback_includes_final_holdout"])
+        self.assertTrue(rows[0]["next_round_suggestions"])
         self.assertEqual(
             rows[0]["cost_sensitivity_report"]["stress_scenarios"][1]["name"],
             "plus_1_tick_slippage_per_side",
@@ -377,6 +381,10 @@ class RollingValidationTests(unittest.TestCase):
         self.assertIn(result.overfitting_report["risk_level"], {"low", "medium", "high"})
         self.assertEqual(result.cost_sensitivity_report["method"], "deterministic_trade_pnl_adjustment")
         self.assertEqual(len(result.cost_sensitivity_report["stress_scenarios"]), 4)
+        self.assertEqual(result.promotion_report["stage"], "direct_bar")
+        self.assertEqual(result.strategy_card["promotion_stage"], "direct_bar")
+        self.assertEqual(result.final_holdout_policy["status"], "frozen_once_after_candidate_selection")
+        self.assertTrue(result.next_round_suggestions)
         self.assertTrue(result.final_holdout_data_version_hash)
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])
         self.assertTrue(result.fold_results[0]["validation_data_version_hash"])
@@ -575,6 +583,43 @@ class RollingValidationTests(unittest.TestCase):
         self.assertGreater(result.aggregate_test_metrics.trade_count, 0)
         self.assertEqual(rows[0]["execution_mode"], "tick")
         self.assertTrue(rows[0]["data_version_hash"])
+
+    def test_bar_then_tick_promotes_candidate_and_records_strategy_card(self) -> None:
+        spec = parse_strategy_spec(base_spec())
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            for offset in range(40):
+                day = date(2025, 1, 1) + timedelta(days=offset)
+                write_breakout_day(data_root, day)
+                write_breakout_ticks(data_root, day)
+
+            results = run_budgeted_research(
+                seed_spec=spec,
+                symbol_config=symbol_config(),
+                data_root=data_root,
+                experiment_id="staged",
+                date_from=date(2025, 1, 1),
+                date_to=date(2025, 2, 9),
+                max_trials=1,
+                train_days=5,
+                validation_days=5,
+                test_days=5,
+                step_days=5,
+                embargo_days=1,
+                final_holdout_days=5,
+                min_folds=1,
+                execution_mode="bar_then_tick",
+            )
+
+        result = results[0]
+        self.assertEqual(result.execution_mode, "tick")
+        self.assertEqual(result.promotion_report["mode"], "bar_then_tick")
+        self.assertEqual(result.promotion_report["stage"], "promoted_to_tick")
+        self.assertTrue(result.promotion_report["promoted"])
+        self.assertFalse(result.promotion_report["final_holdout_used_for_promotion"])
+        self.assertEqual(result.strategy_card["promotion_stage"], "promoted_to_tick")
+        self.assertEqual(result.strategy_card["key_metrics"]["test"]["trade_count"], result.aggregate_test_metrics.trade_count)
+        self.assertFalse(result.final_holdout_policy["promotion_uses_final_holdout"])
 
     def test_expand_strategy_variants_applies_supported_parameters(self) -> None:
         payload = base_spec()

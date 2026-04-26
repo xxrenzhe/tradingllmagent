@@ -387,6 +387,83 @@ tr.selected td {
   gap: 18px;
 }
 
+.strategy-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.strategy-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(72, 61, 38, 0.18);
+  border-radius: 24px;
+  background:
+    linear-gradient(145deg, rgba(255, 253, 248, 0.88), rgba(236, 216, 174, 0.26)),
+    rgba(255, 253, 248, 0.72);
+  padding: 18px;
+}
+
+.strategy-card.selected {
+  border-color: rgba(11, 111, 91, 0.48);
+  box-shadow: 0 18px 42px rgba(11, 111, 91, 0.16);
+}
+
+.strategy-card h3 {
+  margin: 0;
+  font-family: "Fraunces", "Georgia", serif;
+  font-size: 1.24rem;
+  line-height: 1.05;
+}
+
+.strategy-card p,
+.suggestion-list span {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.strategy-card-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.strategy-card-topline > span:last-child {
+  color: var(--blueprint);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.strategy-card-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.strategy-card-metrics .metric-card {
+  min-height: 110px;
+  padding: 14px;
+  box-shadow: none;
+}
+
+.strategy-card-metrics .metric-card strong {
+  font-size: 1.35rem;
+}
+
+.suggestion-list {
+  display: grid;
+  gap: 8px;
+}
+
+.suggestion-list span {
+  border-left: 3px solid rgba(11, 111, 91, 0.36);
+  padding-left: 10px;
+}
+
 .chart-grid,
 .distribution-grid {
   display: grid;
@@ -674,6 +751,7 @@ pre {
   .metric-grid,
   .quality-grid,
   .artifact-summary,
+  .strategy-card-grid,
   .chart-grid,
   .distribution-grid {
     grid-template-columns: 1fr;
