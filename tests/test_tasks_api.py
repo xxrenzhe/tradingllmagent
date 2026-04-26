@@ -393,6 +393,57 @@ class TaskStoreTests(unittest.TestCase):
         self.assertTrue(completed["result"]["prompt_hash"])
         self.assertTrue(completed["result"]["response_hash"])
 
+    def test_run_task_executes_llm_iteration(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            experiments_root = root / "experiments"
+            experiment_db = root / "research.sqlite3"
+            db_path = root / "tasks.sqlite3"
+            seed_path = root / "seed.json"
+            seed_path.write_text(json.dumps(base_spec()), encoding="utf-8")
+            for offset in range(40):
+                write_breakout_day(data_root, datetime(2025, 1, 1).date() + timedelta(days=offset))
+            create_task(
+                db_path,
+                "research.iterate",
+                {
+                    "spec": str(seed_path),
+                    "date_from": "2025-01-01",
+                    "date_to": "2025-02-09",
+                    "experiment_id": "iteration_task",
+                    "data_root": str(data_root),
+                    "experiments_root": str(experiments_root),
+                    "experiment_db": str(experiment_db),
+                    "max_trials": 1,
+                    "train_days": 5,
+                    "validation_days": 5,
+                    "test_days": 5,
+                    "step_days": 5,
+                    "embargo_days": 1,
+                    "final_holdout_days": 5,
+                    "min_folds": 1,
+                    "model": "local-deterministic-template",
+                    "llm_parameters": {"temperature": 0},
+                },
+                task_id="task_research_iterate",
+            )
+            completed = run_task(db_path, "task_research_iterate")
+            proposed_path = Path(completed["result"]["proposal"]["strategy_spec"])
+            proposed_exists = proposed_path.exists()
+            summary = load_experiment_summary(experiment_db, "iteration_task")
+            audit_logs = load_experiment_audit_logs(experiment_db, "iteration_task")
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertTrue(proposed_exists)
+        self.assertEqual(completed["result"]["research"]["trials"], 1)
+        self.assertEqual(summary["experiment"]["status"], "completed")
+        self.assertEqual(len(summary["trials"]), 1)
+        self.assertEqual(
+            {entry["event_type"] for entry in audit_logs},
+            {"llm_strategy_proposal", "research_trial_completed"},
+        )
+
 
 class APIImportTests(unittest.TestCase):
     def test_api_module_imports_without_fastapi_installed(self) -> None:
@@ -429,6 +480,7 @@ class APIImportTests(unittest.TestCase):
 
         self.assertIn("/api/backtests/tick", paths)
         self.assertIn("/api/experiments/proposals", paths)
+        self.assertIn("/api/experiments/iterations", paths)
         self.assertIn("/api/experiments/{experiment_id}/audit-logs", paths)
         self.assertIn("/api/experiments/{experiment_id}/artifacts", paths)
 

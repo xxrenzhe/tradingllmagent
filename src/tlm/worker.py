@@ -87,6 +87,8 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_research_run(payload)
     if task_type == "research.propose":
         return execute_research_propose(payload)
+    if task_type == "research.iterate":
+        return execute_research_iterate(payload)
     raise ValueError(f"Unsupported task_type: {task_type}")
 
 
@@ -312,6 +314,38 @@ def execute_research_propose(payload: dict[str, Any]) -> dict[str, Any]:
         "feedback_count": len(feedback or []),
         "strategy_name": proposal.strategy.name,
         "strategy_family": proposal.strategy.strategy_family,
+    }
+
+
+def execute_research_iterate(payload: dict[str, Any]) -> dict[str, Any]:
+    seed_spec = load_strategy_spec(Path(_required(payload, "spec")))
+    experiments_root = Path(payload.get("experiments_root", "experiments"))
+    experiment_id = str(payload.get("experiment_id") or f"{seed_spec.name}_iteration")
+    proposal_payload = dict(payload)
+    proposal_payload["experiment_id"] = experiment_id
+    proposal_payload.setdefault(
+        "output",
+        str(experiments_root / experiment_id / "proposed_strategy.json"),
+    )
+    proposal_payload.setdefault(
+        "audit_log",
+        str(experiments_root / experiment_id / "llm_audit.jsonl"),
+    )
+    if "model" not in proposal_payload and payload.get("llm_model"):
+        proposal_payload["model"] = payload["llm_model"]
+    proposal = execute_research_propose(proposal_payload)
+
+    research_payload = dict(payload)
+    research_payload["experiment_id"] = experiment_id
+    research_payload["spec"] = proposal["strategy_spec"]
+    research_payload.pop("specs", None)
+    if "llm_model" not in research_payload and payload.get("model"):
+        research_payload["llm_model"] = payload["model"]
+    research = execute_research_run(research_payload)
+    return {
+        "experiment_id": experiment_id,
+        "proposal": proposal,
+        "research": research,
     }
 
 
