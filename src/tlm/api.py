@@ -267,6 +267,10 @@ def create_app():
     def experiments_iterations(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "research.iterate", payload)
 
+    @app.post("/api/monitor/once")
+    def monitor_once(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "monitor.once", payload)
+
     @app.get("/api/experiments/{experiment_id}")
     def experiments_get(
         experiment_id: str,

@@ -27,6 +27,7 @@ from .events import (
     write_event_context_parquet,
 )
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
+from .monitor import build_monitor_report, write_monitor_outputs
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_quality_report
 from .research import load_leaderboard_report, run_budgeted_research, write_research_result
@@ -508,6 +509,25 @@ def cmd_events_build_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_monitor_once(args: argparse.Namespace) -> int:
+    data_root = Path(args.data_root)
+    day = parse_date(args.date)
+    calendar_events = []
+    if args.calendar:
+        calendar_events = load_event_calendar(Path(args.calendar))["events"]
+    payload = build_monitor_report(
+        symbol=args.symbol,
+        timeframe=args.timeframe,
+        bar_files=[bar_path(data_root, args.symbol, args.timeframe, day)],
+        events=calendar_events,
+        proximity_points=args.proximity_points,
+    )
+    outputs = write_monitor_outputs(Path(args.output_dir), payload)
+    payload["outputs"] = outputs
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tlm")
     parser.add_argument("--config-dir", default="configs")
@@ -665,6 +685,17 @@ def build_parser() -> argparse.ArgumentParser:
     events_context.add_argument("--timeframe", default="5m")
     events_context.add_argument("--output")
     events_context.set_defaults(func=cmd_events_build_context)
+
+    monitor = subparsers.add_parser("monitor")
+    monitor_subparsers = monitor.add_subparsers(dest="monitor_command", required=True)
+    monitor_once = monitor_subparsers.add_parser("once")
+    monitor_once.add_argument("--symbol", required=True)
+    monitor_once.add_argument("--date", required=True)
+    monitor_once.add_argument("--timeframe", default="5m")
+    monitor_once.add_argument("--calendar")
+    monitor_once.add_argument("--proximity-points", type=float, default=2.0)
+    monitor_once.add_argument("--output-dir", default="data/runtime/reports")
+    monitor_once.set_defaults(func=cmd_monitor_once)
 
     return parser
 

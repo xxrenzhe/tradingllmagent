@@ -16,6 +16,7 @@ from .config import get_cost_model, get_symbol
 from .dukascopy import download_hour, iter_hours, parse_bi5_file
 from .experiments import record_audit_event, record_experiment, record_trial
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
+from .monitor import build_monitor_report, write_monitor_outputs
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import run_budgeted_research, write_research_result
 from .storage import (
@@ -89,6 +90,8 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_research_propose(payload)
     if task_type == "research.iterate":
         return execute_research_iterate(payload)
+    if task_type == "monitor.once":
+        return execute_monitor_once(payload)
     raise ValueError(f"Unsupported task_type: {task_type}")
 
 
@@ -251,6 +254,22 @@ def execute_nt_export_signal(payload: dict[str, Any]) -> dict[str, Any]:
         "content": content,
         "line_count": len([line for line in content.splitlines() if line.strip()]),
     }
+
+
+def execute_monitor_once(payload: dict[str, Any]) -> dict[str, Any]:
+    data_root = Path(payload.get("data_root", "data"))
+    symbol = _required(payload, "symbol")
+    timeframe = str(payload.get("timeframe", "5m"))
+    day = parse_date(_required(payload, "date"))
+    report = build_monitor_report(
+        symbol=symbol,
+        timeframe=timeframe,
+        bar_files=[bar_path(data_root, symbol, timeframe, day)],
+        proximity_points=float(payload.get("proximity_points", 2.0)),
+    )
+    outputs = write_monitor_outputs(Path(payload.get("output_dir", "data/runtime/reports")), report)
+    report["outputs"] = outputs
+    return report
 
 
 def execute_research_propose(payload: dict[str, Any]) -> dict[str, Any]:
