@@ -271,6 +271,16 @@ class TaskStoreTests(unittest.TestCase):
             completed["result"]["by_family"],
             {"opening_range_breakout": 1, "trend_pullback": 1},
         )
+        family_report = completed["result"]["family_weight_report"]
+        self.assertEqual(family_report["status"], "computed_v1")
+        self.assertEqual(set(family_report["next_weights"]), {"opening_range_breakout", "trend_pullback"})
+        self.assertTrue(
+            all(weight >= family_report["min_weight"] for weight in family_report["next_weights"].values())
+        )
+        self.assertEqual(
+            {row["strategy_family"]: row["completed_trials"] for row in family_report["families"]},
+            {"opening_range_breakout": 1, "trend_pullback": 1},
+        )
         self.assertEqual(len(completed["result"]["result_paths"]), 2)
         self.assertTrue(artifacts["trades"])
         self.assertTrue(artifacts["distributions"]["by_direction"])

@@ -259,9 +259,23 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("llm_parameters must be an object")
     result_paths = []
     by_family: dict[str, int] = {}
+    family_outcomes: dict[str, dict[str, Any]] = {}
     for spec in specs:
         family_trials = _family_trial_quota(payload, spec.strategy_family)
+        outcome = family_outcomes.setdefault(
+            spec.strategy_family,
+            {
+                "strategy_family": spec.strategy_family,
+                "quota": 0,
+                "completed_trials": 0,
+                "passed_trials": 0,
+                "failed_trials": 0,
+                "failure_reasons": {},
+            },
+        )
+        outcome["quota"] += max(family_trials, 0)
         if family_trials <= 0:
+            outcome["skipped_by_quota"] = True
             continue
         symbol = get_symbol(payload.get("symbol", spec.symbol), config_dir)
         cost_model = get_cost_model(spec.cost_model, config_dir)
@@ -297,6 +311,15 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
             llm_parameters=llm_parameters,
         )
         by_family[spec.strategy_family] = by_family.get(spec.strategy_family, 0) + len(results)
+        outcome["completed_trials"] += len(results)
+        for result in results:
+            if result.gates["passed"]:
+                outcome["passed_trials"] += 1
+            else:
+                outcome["failed_trials"] += 1
+                for reason in result.gates["reasons"]:
+                    reasons = outcome["failure_reasons"]
+                    reasons[reason] = reasons.get(reason, 0) + 1
         for result in results:
             output_path = experiments_root / result.experiment_id / "leaderboard.json"
             write_research_result(output_path, result)
@@ -304,8 +327,57 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "trials": sum(by_family.values()),
         "by_family": by_family,
+        "family_weight_report": build_family_weight_report(family_outcomes),
         "result_paths": result_paths,
         "deduplication_report": deduplication_report,
+    }
+
+
+def build_family_weight_report(
+    family_outcomes: dict[str, dict[str, Any]],
+    min_weight: float = 0.2,
+    failure_weight_penalty: float = 0.8,
+) -> dict[str, Any]:
+    families = []
+    next_weights = {}
+    for family in sorted(family_outcomes):
+        outcome = family_outcomes[family]
+        completed = int(outcome.get("completed_trials", 0))
+        failed = int(outcome.get("failed_trials", 0))
+        passed = int(outcome.get("passed_trials", 0))
+        failure_ratio = failed / completed if completed else None
+        next_weight = (
+            1.0
+            if failure_ratio is None
+            else max(min_weight, 1.0 - failure_weight_penalty * failure_ratio)
+        )
+        if completed == 0:
+            status = "skipped_by_quota" if outcome.get("skipped_by_quota") else "no_trials"
+        elif failed == 0:
+            status = "passing"
+        elif passed == 0:
+            status = "failing"
+        else:
+            status = "mixed"
+        row = {
+            "strategy_family": family,
+            "status": status,
+            "quota": int(outcome.get("quota", 0)),
+            "completed_trials": completed,
+            "passed_trials": passed,
+            "failed_trials": failed,
+            "failure_ratio": failure_ratio,
+            "next_weight": next_weight,
+            "failure_reasons": dict(sorted(outcome.get("failure_reasons", {}).items())),
+        }
+        families.append(row)
+        next_weights[family] = next_weight
+    return {
+        "status": "computed_v1",
+        "min_weight": min_weight,
+        "failure_weight_penalty": failure_weight_penalty,
+        "families": families,
+        "next_weights": next_weights,
     }
 
 
