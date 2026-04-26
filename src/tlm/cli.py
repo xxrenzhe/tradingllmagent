@@ -20,6 +20,12 @@ from .experiments import (
     record_experiment,
     record_trial,
 )
+from .events import (
+    build_event_context_rows,
+    load_event_calendar,
+    validate_event_calendar,
+    write_event_context_parquet,
+)
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_quality_report
@@ -27,6 +33,7 @@ from .research import load_leaderboard_report, run_budgeted_research, write_rese
 from .storage import (
     bar_path,
     compute_data_version_hash,
+    event_context_path,
     normalized_tick_path,
     quality_path,
     write_json,
@@ -439,6 +446,68 @@ def cmd_nt_export_signal(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_events_validate(args: argparse.Namespace) -> int:
+    print(json.dumps(validate_event_calendar(Path(args.calendar)), indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_events_list(args: argparse.Namespace) -> int:
+    calendar = load_event_calendar(Path(args.calendar))
+    date_from = parse_date(args.date_from) if args.date_from else None
+    date_to = parse_date(args.date_to) if args.date_to else None
+    rows = []
+    for event in calendar["events"]:
+        event_day = event.timestamp_utc.date()
+        if date_from and event_day < date_from:
+            continue
+        if date_to and event_day > date_to:
+            continue
+        if args.symbol and args.symbol not in event.affected_symbols and "*" not in event.affected_symbols:
+            continue
+        rows.append(event.to_dict())
+    print(
+        json.dumps(
+            {
+                "calendar_id": calendar["calendar_id"],
+                "event_calendar_hash": calendar["event_calendar_hash"],
+                "events": rows,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def cmd_events_build_context(args: argparse.Namespace) -> int:
+    calendar = load_event_calendar(Path(args.calendar))
+    data_root = Path(args.data_root)
+    date_from = parse_date(args.date_from)
+    date_to = parse_date(args.date_to)
+    outputs = []
+    total_rows = 0
+    for day in iter_dates(date_from, date_to):
+        files = [bar_path(data_root, args.symbol, args.timeframe, day)]
+        contexts = build_event_context_rows(args.symbol, files, calendar["events"])
+        output = Path(args.output) if args.output else event_context_path(data_root, args.symbol, day)
+        write_event_context_parquet(output, contexts)
+        total_rows += len(contexts)
+        outputs.append({"path": str(output), "rows": len(contexts), "day": day.isoformat()})
+    print(
+        json.dumps(
+            {
+                "calendar_id": calendar["calendar_id"],
+                "event_calendar_hash": calendar["event_calendar_hash"],
+                "rows": total_rows,
+                "outputs": outputs,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tlm")
     parser.add_argument("--config-dir", default="configs")
@@ -574,6 +643,28 @@ def build_parser() -> argparse.ArgumentParser:
     export_signal.add_argument("--instrument", required=True)
     export_signal.add_argument("--output")
     export_signal.set_defaults(func=cmd_nt_export_signal)
+
+    events = subparsers.add_parser("events")
+    events_subparsers = events.add_subparsers(dest="events_command", required=True)
+    events_validate = events_subparsers.add_parser("validate")
+    events_validate.add_argument("--calendar", required=True)
+    events_validate.set_defaults(func=cmd_events_validate)
+
+    events_list = events_subparsers.add_parser("list")
+    events_list.add_argument("--calendar", required=True)
+    events_list.add_argument("--symbol")
+    events_list.add_argument("--from", dest="date_from")
+    events_list.add_argument("--to", dest="date_to")
+    events_list.set_defaults(func=cmd_events_list)
+
+    events_context = events_subparsers.add_parser("build-context")
+    events_context.add_argument("--calendar", required=True)
+    events_context.add_argument("--symbol", required=True)
+    events_context.add_argument("--from", dest="date_from", required=True)
+    events_context.add_argument("--to", dest="date_to", required=True)
+    events_context.add_argument("--timeframe", default="5m")
+    events_context.add_argument("--output")
+    events_context.set_defaults(func=cmd_events_build_context)
 
     return parser
 

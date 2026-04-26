@@ -90,6 +90,7 @@ class StrategySpec:
     entry: dict[str, Any]
     exit: dict[str, Any]
     risk: dict[str, Any]
+    event_policy: dict[str, Any]
     anti_martingale_constraints: dict[str, Any]
     parameters: dict[str, Any]
     cost_model: str
@@ -163,6 +164,7 @@ def parse_strategy_spec(payload: dict[str, Any]) -> StrategySpec:
     entry = _require_object(payload["entry"], "entry")
     exit_spec = _require_object(payload["exit"], "exit")
     risk = _require_object(payload["risk"], "risk")
+    event_policy = _optional_object(payload.get("event_policy"), "event_policy")
     anti_martingale = _require_object(
         payload["anti_martingale_constraints"], "anti_martingale_constraints"
     )
@@ -174,6 +176,7 @@ def parse_strategy_spec(payload: dict[str, Any]) -> StrategySpec:
     _validate_parameters(parameters)
     _validate_exit(exit_spec)
     _validate_risk(risk)
+    _validate_event_policy(event_policy)
     _validate_controlled_grid(family, indicators, exit_spec, risk, anti_martingale)
 
     return StrategySpec(
@@ -190,6 +193,7 @@ def parse_strategy_spec(payload: dict[str, Any]) -> StrategySpec:
         entry=entry,
         exit=exit_spec,
         risk=risk,
+        event_policy=event_policy,
         anti_martingale_constraints=anti_martingale,
         parameters=parameters,
         cost_model=str(payload["cost_model"]),
@@ -201,6 +205,12 @@ def _require_object(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise StrategySpecError(f"{name} must be an object")
     return value
+
+
+def _optional_object(value: Any, name: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    return _require_object(value, name)
 
 
 def _optional_module_id(payload: dict[str, Any]) -> str | None:
@@ -321,6 +331,17 @@ def _validate_risk(risk: dict[str, Any]) -> None:
     sizing_type = sizing.get("type")
     if sizing_type not in ALLOWED_POSITION_SIZING_TYPES:
         raise StrategySpecError(f"risk.position_sizing uses unsupported type: {sizing_type}")
+
+
+def _validate_event_policy(event_policy: dict[str, Any]) -> None:
+    if not event_policy:
+        return
+    for key in ["calendar_ref", "policy_ref"]:
+        if key in event_policy and not str(event_policy[key]).strip():
+            raise StrategySpecError(f"event_policy.{key} must be non-empty when provided")
+    for key in ["pre_event_blackout_minutes", "post_event_blackout_minutes"]:
+        if key in event_policy and int(event_policy[key]) < 0:
+            raise StrategySpecError(f"event_policy.{key} must be non-negative")
 
 
 def _validate_controlled_grid(

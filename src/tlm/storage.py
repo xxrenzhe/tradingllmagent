@@ -35,6 +35,10 @@ def quality_path(data_root: Path, symbol: str, date_from: str, date_to: str) -> 
     return data_root / "quality" / symbol / f"{date_from}_{date_to}.json"
 
 
+def event_context_path(data_root: Path, symbol: str, day: date) -> Path:
+    return data_root / "events" / "context" / symbol / f"date={day.isoformat()}" / "part-000.parquet"
+
+
 def _write_parquet(
     path: Path,
     table_name: str,
