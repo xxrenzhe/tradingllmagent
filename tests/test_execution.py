@@ -6,7 +6,13 @@ import unittest
 from pathlib import Path
 
 from tlm.api import build_execution_intent_response
-from tlm.execution import build_gateway_command, create_execution_intent, evaluate_risk, submit_paper_shadow
+from tlm.execution import (
+    build_gateway_command,
+    create_execution_intent,
+    evaluate_live_readiness,
+    evaluate_risk,
+    submit_paper_shadow,
+)
 
 
 def sample_intent_payload() -> dict:
@@ -104,6 +110,45 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertEqual(response["audit_path"], str(audit_path))
         self.assertEqual(events[0]["event_type"], "paper_shadow_intent")
         self.assertEqual(events[0]["risk"]["decision"], "risk_approved")
+
+    def test_live_readiness_blocks_without_external_validation(self) -> None:
+        micro_live = evaluate_live_readiness(
+            "micro_live",
+            {
+                "trade_count": 20,
+                "manual_approval_audited": True,
+                "broker_side_protection": True,
+                "unresolved_incident_count": 0,
+            },
+        )
+        controlled_live = evaluate_live_readiness(
+            "controlled_live",
+            {
+                "sample_trades": 100,
+                "strategy_profile_whitelisted": True,
+                "kill_switch_verified": True,
+                "high_risk_drift_count": 0,
+            },
+        )
+
+        self.assertFalse(micro_live["passed"])
+        self.assertIn("external_nt8_validated", micro_live["reasons"])
+        self.assertFalse(controlled_live["passed"])
+        self.assertIn("external_broker_validated", controlled_live["reasons"])
+
+    def test_live_readiness_passes_when_all_gates_are_met(self) -> None:
+        result = evaluate_live_readiness(
+            "paper_shadow",
+            {
+                "trading_days": 10,
+                "replay_consistent": True,
+                "p95_spread_slippage_drift": 0.5,
+                "max_allowed_drift": 1.0,
+            },
+        )
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["decision"], "ready")
 
 
 if __name__ == "__main__":

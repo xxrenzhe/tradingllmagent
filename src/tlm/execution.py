@@ -11,6 +11,7 @@ from uuid import uuid4
 ALLOWED_ACTIONS = {"buy", "sell", "sell_short", "buy_to_cover"}
 ALLOWED_MODES = {"offline_export", "nt8_sim", "paper_shadow", "micro_live", "live"}
 ENTRY_ACTIONS = {"buy", "sell_short"}
+READINESS_STAGES = {"paper_shadow", "nt8_sim", "micro_live", "controlled_live"}
 
 
 @dataclass(frozen=True)
@@ -229,5 +230,72 @@ def submit_paper_shadow(payload: dict[str, Any], audit_path: Path) -> dict[str, 
     return {**response, "audit_path": str(audit_path)}
 
 
+def evaluate_live_readiness(stage: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    if stage not in READINESS_STAGES:
+        raise ValueError(f"Unsupported readiness stage: {stage}")
+    reasons: list[str] = []
+    if stage == "paper_shadow":
+        _min_gate(reasons, evidence, "trading_days", 10)
+        _bool_gate(reasons, evidence, "replay_consistent")
+        _max_gate(reasons, evidence, "p95_spread_slippage_drift", evidence.get("max_allowed_drift"))
+    elif stage == "nt8_sim":
+        _min_any_gate(reasons, evidence, [("trading_days", 5), ("sim_commands", 200)])
+        _bool_gate(reasons, evidence, "disconnect_reconnect_validated")
+        _bool_gate(reasons, evidence, "idempotency_validated")
+        _bool_gate(reasons, evidence, "flatten_validated")
+        _max_gate(reasons, evidence, "reconcile_drift_count", 0)
+    elif stage == "micro_live":
+        _bool_gate(reasons, evidence, "external_nt8_validated")
+        _min_any_gate(reasons, evidence, [("trade_count", 20), ("trading_days", 10)])
+        _bool_gate(reasons, evidence, "manual_approval_audited")
+        _bool_gate(reasons, evidence, "broker_side_protection")
+        _max_gate(reasons, evidence, "unresolved_incident_count", 0)
+    elif stage == "controlled_live":
+        _bool_gate(reasons, evidence, "external_broker_validated")
+        _min_any_gate(reasons, evidence, [("sample_trades", 100), ("trading_days", 30)])
+        _bool_gate(reasons, evidence, "strategy_profile_whitelisted")
+        _bool_gate(reasons, evidence, "kill_switch_verified")
+        _max_gate(reasons, evidence, "high_risk_drift_count", 0)
+    return {
+        "stage": stage,
+        "passed": not reasons,
+        "decision": "ready" if not reasons else "blocked",
+        "reasons": reasons,
+        "evidence": evidence,
+        "checked_at": datetime.now(UTC).isoformat(),
+    }
+
+
 def _optional_float(value: Any) -> float | None:
     return None if value is None else float(value)
+
+
+def _bool_gate(reasons: list[str], evidence: dict[str, Any], key: str) -> None:
+    if evidence.get(key) is not True:
+        reasons.append(key)
+
+
+def _min_gate(reasons: list[str], evidence: dict[str, Any], key: str, minimum: int | float) -> None:
+    if float(evidence.get(key, 0)) < minimum:
+        reasons.append(key)
+
+
+def _max_gate(
+    reasons: list[str],
+    evidence: dict[str, Any],
+    key: str,
+    maximum: int | float | None,
+) -> None:
+    if maximum is None:
+        reasons.append(f"{key}_threshold_missing")
+    elif float(evidence.get(key, maximum + 1)) > float(maximum):
+        reasons.append(key)
+
+
+def _min_any_gate(
+    reasons: list[str],
+    evidence: dict[str, Any],
+    gates: list[tuple[str, int | float]],
+) -> None:
+    if not any(float(evidence.get(key, 0)) >= minimum for key, minimum in gates):
+        reasons.append("_or_".join(key for key, _ in gates))
