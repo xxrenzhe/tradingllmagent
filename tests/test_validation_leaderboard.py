@@ -246,6 +246,8 @@ class RollingValidationTests(unittest.TestCase):
                 final_holdout_days=5,
                 min_folds=1,
                 random_seed=123,
+                llm_model="local-test-model",
+                llm_parameters={"temperature": 0, "candidate_count": 1},
             )
             output = experiments_root / "exp_test" / "leaderboard.json"
             write_research_result(output, result)
@@ -256,7 +258,17 @@ class RollingValidationTests(unittest.TestCase):
         self.assertEqual(rows[0]["execution_mode"], "bar")
         self.assertTrue(rows[0]["data_version_hash"])
         self.assertEqual(rows[0]["snapshot"]["random_seed"], 123)
+        self.assertEqual(rows[0]["snapshot"]["experiment_id"], "exp_test")
+        self.assertEqual(rows[0]["snapshot"]["strategy_spec_hash"], rows[0]["strategy_spec_hash"])
+        self.assertEqual(rows[0]["snapshot"]["prompt_hash"], result.prompt_hash)
+        self.assertEqual(rows[0]["snapshot"]["data_version_hash"], rows[0]["data_version_hash"])
+        self.assertEqual(rows[0]["snapshot"]["llm_model"], "local-test-model")
+        self.assertEqual(
+            rows[0]["snapshot"]["llm_parameters"],
+            {"temperature": 0, "candidate_count": 1},
+        )
         self.assertTrue(rows[0]["snapshot"]["code_version"])
+        self.assertIn("config_snapshot", rows[0]["snapshot"])
         self.assertTrue(rows[0]["snapshot"]["config_snapshot_hash"])
         self.assertTrue(rows[0]["snapshot"]["fold_definition_hash"])
         self.assertTrue(rows[0]["snapshot"]["cost_model_hash"])
@@ -269,6 +281,16 @@ class RollingValidationTests(unittest.TestCase):
         self.assertIn("sharpe_validation", rows[0])
         self.assertIn("validation_to_test_sharpe_decay", rows[0])
         self.assertIn("test_to_holdout_sharpe_decay", rows[0])
+        self.assertIn("overfitting_report", rows[0])
+        self.assertEqual(rows[0]["overfitting_report"]["trial_count"], 1)
+        self.assertEqual(rows[0]["overfitting_report"]["fold_count"], len(result.validation_plan.folds))
+        self.assertEqual(rows[0]["overfitting_report"]["pbo_status"], "not_computed_v1")
+        self.assertIn("cost_sensitivity_report", rows[0])
+        self.assertEqual(rows[0]["cost_sensitivity_report"]["baseline_round_trip_cost"], 15.0)
+        self.assertEqual(
+            rows[0]["cost_sensitivity_report"]["stress_scenarios"][1]["name"],
+            "plus_1_tick_slippage_per_side",
+        )
         self.assertFalse(rows[0]["overlapping_test_folds"])
         self.assertEqual(
             rows[0]["non_overlap_test_fold_indexes"],
@@ -289,6 +311,10 @@ class RollingValidationTests(unittest.TestCase):
             result.aggregate_test_metrics.trade_count,
         )
         self.assertEqual(result.snapshot["random_seed"], 123)
+        self.assertEqual(result.overfitting_report["parameter_combination_count"], 1)
+        self.assertIn(result.overfitting_report["risk_level"], {"low", "medium", "high"})
+        self.assertEqual(result.cost_sensitivity_report["method"], "deterministic_trade_pnl_adjustment")
+        self.assertEqual(len(result.cost_sensitivity_report["stress_scenarios"]), 4)
         self.assertTrue(result.final_holdout_data_version_hash)
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])
         self.assertTrue(result.fold_results[0]["validation_data_version_hash"])
@@ -524,6 +550,7 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(all(row["trial_count"] == 2 for row in rows))
         self.assertTrue(all(row["parameter_grid_hash"] for row in rows))
         self.assertTrue(all(row["parameter_combination_count"] == 2 for row in rows))
+        self.assertTrue(all(row["overfitting_report"]["trial_count"] == 2 for row in rows))
         self.assertFalse(any(row["parameter_budget_exceeded"] for row in rows))
 
 

@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from statistics import median
 from typing import Sequence
 
 from .backtest import (
@@ -65,6 +66,8 @@ class ResearchRunResult:
     non_overlap_test_metrics: BacktestMetrics
     validation_to_test_sharpe_decay: float | None
     test_to_holdout_sharpe_decay: float | None
+    overfitting_report: dict
+    cost_sensitivity_report: dict
     final_holdout_data_version_hash: str
     final_holdout_metrics: BacktestMetrics
     gates: dict
@@ -98,6 +101,8 @@ class ResearchRunResult:
             "non_overlap_test_metrics": self.non_overlap_test_metrics.to_dict(),
             "validation_to_test_sharpe_decay": self.validation_to_test_sharpe_decay,
             "test_to_holdout_sharpe_decay": self.test_to_holdout_sharpe_decay,
+            "overfitting_report": self.overfitting_report,
+            "cost_sensitivity_report": self.cost_sensitivity_report,
             "final_holdout_data_version_hash": self.final_holdout_data_version_hash,
             "final_holdout_metrics": self.final_holdout_metrics.to_dict(),
             "gates": self.gates,
@@ -125,6 +130,8 @@ def run_research_bar_validation(
     cost_model: CostModelConfig | None = None,
     config_dir: Path = Path("configs"),
     random_seed: int = 0,
+    llm_model: str = "local-deterministic-template",
+    llm_parameters: dict | None = None,
 ) -> ResearchRunResult:
     grid_metadata = grid_metadata or parameter_grid_metadata(spec, max_trials=1)
     if execution_mode not in {"bar", "tick"}:
@@ -150,11 +157,19 @@ def run_research_bar_validation(
         final_holdout_days=final_holdout_days,
         min_folds=min_folds,
     )
+    current_strategy_spec_hash = strategy_spec_hash(spec)
+    current_prompt_hash = prompt_hash(spec)
     snapshot = research_snapshot(
         plan=plan,
         cost_model=active_cost_model,
         config_dir=config_dir,
         random_seed=random_seed,
+        experiment_id=experiment_id,
+        strategy_spec_hash=current_strategy_spec_hash,
+        prompt_hash=current_prompt_hash,
+        data_version_hash=data_version_hash,
+        llm_model=llm_model,
+        llm_parameters=llm_parameters,
     )
     fold_results: list[dict] = []
     fold_test_metrics: list[BacktestMetrics] = []
@@ -273,6 +288,7 @@ def run_research_bar_validation(
         aggregate_test_metrics.sharpe,
         holdout.metrics.sharpe,
     )
+    holdout_days = (plan.final_holdout.end - plan.final_holdout.start).days + 1
     gates = evaluate_hard_gates(
         aggregate_test_metrics,
         fold_test_metrics,
@@ -280,6 +296,24 @@ def run_research_bar_validation(
         validation_metrics=aggregate_validation_metrics,
         positive_year_ratio=positive_year_ratio,
         round_trip_cost=round_trip_cost,
+    )
+    overfitting_report = build_overfitting_report(
+        grid_metadata=grid_metadata,
+        fold_test_metrics=fold_test_metrics,
+        aggregate_validation_metrics=aggregate_validation_metrics,
+        aggregate_test_metrics=aggregate_test_metrics,
+        final_holdout_metrics=holdout.metrics,
+        positive_year_ratio=positive_year_ratio,
+        validation_to_test_sharpe_decay=validation_to_test_decay,
+        test_to_holdout_sharpe_decay=test_to_holdout_decay,
+    )
+    cost_sensitivity_report = build_cost_sensitivity_report(
+        test_trades=all_test_trades,
+        holdout_trades=holdout.trades,
+        cost_model=active_cost_model,
+        starting_equity=starting_equity,
+        test_days=aggregate_days,
+        holdout_days=holdout_days,
     )
     score = robustness_score(
         aggregate_test_metrics,
@@ -299,8 +333,8 @@ def run_research_bar_validation(
         snapshot=snapshot,
         cost_model=active_cost_model.to_dict(),
         strategy_name=spec.name,
-        strategy_spec_hash=strategy_spec_hash(spec),
-        prompt_hash=prompt_hash(spec),
+        strategy_spec_hash=current_strategy_spec_hash,
+        prompt_hash=current_prompt_hash,
         variant_parameters=spec.raw.get("variant_parameters", {}),
         parameter_grid=grid_metadata.to_dict(),
         trial_count=grid_metadata.selected_combinations,
@@ -319,6 +353,8 @@ def run_research_bar_validation(
         non_overlap_test_metrics=non_overlap_test_metrics,
         validation_to_test_sharpe_decay=validation_to_test_decay,
         test_to_holdout_sharpe_decay=test_to_holdout_decay,
+        overfitting_report=overfitting_report,
+        cost_sensitivity_report=cost_sensitivity_report,
         final_holdout_data_version_hash=holdout.data_version_hash,
         final_holdout_metrics=holdout.metrics,
         gates=gates.to_dict(),
@@ -348,6 +384,8 @@ def run_budgeted_research(
     cost_model: CostModelConfig | None = None,
     config_dir: Path = Path("configs"),
     random_seed: int = 0,
+    llm_model: str = "local-deterministic-template",
+    llm_parameters: dict | None = None,
 ) -> list[ResearchRunResult]:
     if execution_mode not in {"bar", "tick"}:
         raise ValueError(f"Unsupported execution_mode: {execution_mode}")
@@ -386,6 +424,8 @@ def run_budgeted_research(
                 cost_model=cost_model,
                 config_dir=config_dir,
                 random_seed=random_seed,
+                llm_model=llm_model,
+                llm_parameters=llm_parameters,
             )
         )
     return results
@@ -477,6 +517,8 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "yearly_results": payload.get("yearly_results", []),
                 "validation_to_test_sharpe_decay": payload.get("validation_to_test_sharpe_decay"),
                 "test_to_holdout_sharpe_decay": payload.get("test_to_holdout_sharpe_decay"),
+                "overfitting_report": payload.get("overfitting_report", {}),
+                "cost_sensitivity_report": payload.get("cost_sensitivity_report", {}),
                 "overlapping_test_folds": payload.get("overlapping_test_folds", False),
                 "non_overlap_test_fold_indexes": payload.get("non_overlap_test_fold_indexes", []),
                 "passed": payload["gates"]["passed"],
@@ -575,3 +617,154 @@ def calculate_round_trip_cost(cost_model: CostModelConfig) -> float:
         * cost_model.point_value
     )
     return cost_model.round_trip_fees_usd + slippage_cost
+
+
+def build_overfitting_report(
+    grid_metadata: ParameterGridMetadata,
+    fold_test_metrics: Sequence[BacktestMetrics],
+    aggregate_validation_metrics: BacktestMetrics,
+    aggregate_test_metrics: BacktestMetrics,
+    final_holdout_metrics: BacktestMetrics,
+    positive_year_ratio: float,
+    validation_to_test_sharpe_decay: float | None,
+    test_to_holdout_sharpe_decay: float | None,
+    max_sharpe_decay: float = 0.5,
+) -> dict:
+    fold_sharpes = [metric.sharpe for metric in fold_test_metrics if metric.sharpe is not None]
+    positive_test_fold_ratio = (
+        sum(1 for metric in fold_test_metrics if metric.net_pnl > 0) / len(fold_test_metrics)
+        if fold_test_metrics
+        else 0.0
+    )
+    reasons = []
+    if aggregate_validation_metrics.sharpe is None or aggregate_validation_metrics.sharpe <= 0:
+        reasons.append("validation_sharpe_non_positive")
+    if validation_to_test_sharpe_decay is not None and validation_to_test_sharpe_decay > max_sharpe_decay:
+        reasons.append("validation_to_test_sharpe_decay")
+    if test_to_holdout_sharpe_decay is not None and test_to_holdout_sharpe_decay > max_sharpe_decay:
+        reasons.append("test_to_holdout_sharpe_decay")
+    if aggregate_test_metrics.sharpe is not None and final_holdout_metrics.sharpe is not None:
+        if final_holdout_metrics.sharpe < 0.7 * aggregate_test_metrics.sharpe:
+            reasons.append("final_holdout_sharpe_decay")
+    if positive_test_fold_ratio < 0.6:
+        reasons.append("positive_test_fold_ratio")
+    if positive_year_ratio < 0.6:
+        reasons.append("positive_year_ratio")
+    if grid_metadata.budget_exceeded:
+        reasons.append("parameter_budget_exceeded")
+    if grid_metadata.high_risk_budget:
+        reasons.append("high_risk_parameter_budget")
+
+    if grid_metadata.high_risk_budget or "validation_sharpe_non_positive" in reasons:
+        risk_level = "high"
+    elif reasons:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
+
+    return {
+        "risk_level": risk_level,
+        "reasons": reasons,
+        "trial_count": grid_metadata.selected_combinations,
+        "parameter_combination_count": grid_metadata.total_combinations,
+        "parameter_budget_exceeded": grid_metadata.budget_exceeded,
+        "high_risk_parameter_budget": grid_metadata.high_risk_budget,
+        "default_parameter_budget": grid_metadata.default_budget,
+        "fold_count": len(fold_test_metrics),
+        "positive_test_fold_ratio": positive_test_fold_ratio,
+        "median_test_fold_sharpe": median(fold_sharpes) if fold_sharpes else None,
+        "validation_sharpe": aggregate_validation_metrics.sharpe,
+        "test_sharpe": aggregate_test_metrics.sharpe,
+        "final_holdout_sharpe": final_holdout_metrics.sharpe,
+        "validation_to_test_sharpe_decay": validation_to_test_sharpe_decay,
+        "test_to_holdout_sharpe_decay": test_to_holdout_sharpe_decay,
+        "pbo_status": "not_computed_v1",
+        "pbo_note": (
+            "V1 records trial count, fold count, and out-of-sample performance; "
+            "full Probability of Backtest Overfitting estimation is deferred."
+        ),
+    }
+
+
+def build_cost_sensitivity_report(
+    test_trades: Sequence[Trade],
+    holdout_trades: Sequence[Trade],
+    cost_model: CostModelConfig,
+    starting_equity: float,
+    test_days: int,
+    holdout_days: int,
+) -> dict:
+    extra_slippage_round_trip = 2 * cost_model.tick_size * cost_model.point_value
+    baseline_round_trip_cost = calculate_round_trip_cost(cost_model)
+    scenarios = [
+        {
+            "name": "baseline",
+            "extra_round_trip_cost": 0.0,
+        },
+        {
+            "name": "plus_1_tick_slippage_per_side",
+            "extra_round_trip_cost": extra_slippage_round_trip,
+        },
+        {
+            "name": "double_fees",
+            "extra_round_trip_cost": cost_model.round_trip_fees_usd,
+        },
+        {
+            "name": "plus_1_tick_slippage_per_side_and_double_fees",
+            "extra_round_trip_cost": extra_slippage_round_trip + cost_model.round_trip_fees_usd,
+        },
+    ]
+    scenario_reports = []
+    for scenario in scenarios:
+        extra_cost = float(scenario["extra_round_trip_cost"])
+        test_metrics = calculate_stressed_trade_metrics(
+            test_trades,
+            extra_cost,
+            starting_equity,
+            test_days,
+        )
+        holdout_metrics = calculate_stressed_trade_metrics(
+            holdout_trades,
+            extra_cost,
+            starting_equity,
+            holdout_days,
+        )
+        scenario_reports.append(
+            {
+                **scenario,
+                "total_round_trip_cost": baseline_round_trip_cost + extra_cost,
+                "test_metrics": test_metrics.to_dict(),
+                "final_holdout_metrics": holdout_metrics.to_dict(),
+                "survives": test_metrics.net_pnl > 0 and holdout_metrics.net_pnl > 0,
+            }
+        )
+
+    return {
+        "baseline_round_trip_cost": baseline_round_trip_cost,
+        "stress_scenarios": scenario_reports,
+        "worst_case_survives": scenario_reports[-1]["survives"],
+        "max_extra_round_trip_cost_before_test_pnl_zero": max_extra_cost_before_pnl_zero(test_trades),
+        "method": "deterministic_trade_pnl_adjustment",
+    }
+
+
+def calculate_stressed_trade_metrics(
+    trades: Sequence[Trade],
+    extra_round_trip_cost: float,
+    starting_equity: float,
+    calendar_days: int,
+) -> BacktestMetrics:
+    equity = [starting_equity]
+    pnls = []
+    for trade in trades:
+        pnl = trade.net_pnl - extra_round_trip_cost * trade.contracts
+        pnls.append(pnl)
+        equity.append(equity[-1] + pnl)
+    return calculate_metrics(pnls, equity, starting_equity, calendar_days)
+
+
+def max_extra_cost_before_pnl_zero(trades: Sequence[Trade]) -> float | None:
+    total_contract_trips = sum(trade.contracts for trade in trades)
+    if total_contract_trips <= 0:
+        return None
+    return sum(trade.net_pnl for trade in trades) / total_contract_trips

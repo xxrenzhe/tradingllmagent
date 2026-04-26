@@ -42,6 +42,16 @@ def parse_date(value: str) -> date:
     return date.fromisoformat(value)
 
 
+def parse_json_object(value: str) -> dict:
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise argparse.ArgumentTypeError("value must be a JSON object") from exc
+    if not isinstance(payload, dict):
+        raise argparse.ArgumentTypeError("value must be a JSON object")
+    return payload
+
+
 def day_bounds(value: date) -> tuple[datetime, datetime]:
     start = datetime.combine(value, time.min, tzinfo=UTC)
     return start, start + timedelta(days=1)
@@ -226,6 +236,8 @@ def cmd_research_run(args: argparse.Namespace) -> int:
             "date_to": date_to.isoformat(),
             "execution_mode": args.execution_mode,
             "max_trials": args.max_trials,
+            "llm_model": args.llm_model,
+            "llm_parameters": args.llm_parameters,
             "seed_spec": str(Path(args.spec)),
         },
     )
@@ -251,6 +263,8 @@ def cmd_research_run(args: argparse.Namespace) -> int:
         cost_model=cost_model,
         config_dir=Path(args.config_dir),
         random_seed=args.random_seed,
+        llm_model=args.llm_model,
+        llm_parameters=args.llm_parameters,
     )
     for result in results:
         output_path = Path(args.experiments_root) / result.experiment_id / "leaderboard.json"
@@ -471,6 +485,8 @@ def build_parser() -> argparse.ArgumentParser:
     research_run.add_argument("--max-trials", type=int, default=1)
     research_run.add_argument("--execution-mode", choices=["bar", "tick"], default="bar")
     research_run.add_argument("--random-seed", type=int, default=0)
+    research_run.add_argument("--llm-model", default="local-deterministic-template")
+    research_run.add_argument("--llm-parameters", type=parse_json_object, default={})
     research_run.add_argument(
         "--max-parameter-combinations",
         type=int,

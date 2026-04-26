@@ -253,6 +253,9 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
     date_from = parse_date(_required(payload, "date_from", "from"))
     date_to = parse_date(_required(payload, "date_to", "to"))
     experiment_id = payload.get("experiment_id") or f"research_{date_from}_{date_to}"
+    llm_parameters = payload.get("llm_parameters", {})
+    if not isinstance(llm_parameters, dict):
+        raise ValueError("llm_parameters must be an object")
     result_paths = []
     by_family: dict[str, int] = {}
     for spec in specs:
@@ -288,6 +291,8 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
             cost_model=cost_model,
             config_dir=config_dir,
             random_seed=int(payload.get("random_seed", 0)),
+            llm_model=str(payload.get("llm_model", "local-deterministic-template")),
+            llm_parameters=llm_parameters,
         )
         by_family[spec.strategy_family] = by_family.get(spec.strategy_family, 0) + len(results)
         for result in results:

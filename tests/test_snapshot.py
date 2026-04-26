@@ -7,7 +7,13 @@ from pathlib import Path
 
 from tlm.backtest import default_cost_model
 from tlm.config import SymbolConfig
-from tlm.snapshot import config_snapshot_hash, cost_model_hash, fold_definition_hash, research_snapshot
+from tlm.snapshot import (
+    config_snapshot,
+    config_snapshot_hash,
+    cost_model_hash,
+    fold_definition_hash,
+    research_snapshot,
+)
 from tlm.validation import generate_rolling_folds
 
 
@@ -46,12 +52,42 @@ class SnapshotTests(unittest.TestCase):
             (config_dir / "symbols.yaml").write_text('{"symbols": {}}\n', encoding="utf-8")
             (config_dir / "costs.yaml").write_text('{"cost_models": {}}\n', encoding="utf-8")
             expected_config_hash = config_snapshot_hash(config_dir)
-            first = research_snapshot(plan, cost_model, config_dir=config_dir, random_seed=7)
-            second = research_snapshot(plan, cost_model, config_dir=config_dir, random_seed=7)
+            expected_config = config_snapshot(config_dir)
+            first = research_snapshot(
+                plan,
+                cost_model,
+                config_dir=config_dir,
+                random_seed=7,
+                experiment_id="exp_001",
+                strategy_spec_hash="spec_hash",
+                prompt_hash="prompt_hash",
+                data_version_hash="data_hash",
+                llm_model="local-test-model",
+                llm_parameters={"temperature": 0, "max_tokens": 512},
+            )
+            second = research_snapshot(
+                plan,
+                cost_model,
+                config_dir=config_dir,
+                random_seed=7,
+                experiment_id="exp_001",
+                strategy_spec_hash="spec_hash",
+                prompt_hash="prompt_hash",
+                data_version_hash="data_hash",
+                llm_model="local-test-model",
+                llm_parameters={"temperature": 0, "max_tokens": 512},
+            )
 
         self.assertEqual(first, second)
         self.assertEqual(first["fold_definition_hash"], fold_definition_hash(plan))
         self.assertEqual(first["cost_model_hash"], cost_model_hash(cost_model))
+        self.assertEqual(first["experiment_id"], "exp_001")
+        self.assertEqual(first["strategy_spec_hash"], "spec_hash")
+        self.assertEqual(first["prompt_hash"], "prompt_hash")
+        self.assertEqual(first["data_version_hash"], "data_hash")
+        self.assertEqual(first["llm_model"], "local-test-model")
+        self.assertEqual(first["llm_parameters"], {"temperature": 0, "max_tokens": 512})
+        self.assertEqual(first["config_snapshot"], expected_config)
         self.assertEqual(first["config_snapshot_hash"], expected_config_hash)
 
 

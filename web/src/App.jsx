@@ -9,7 +9,9 @@ const DEFAULT_FORMS = {
   spec: "strategies/example_opening_range_breakout.yaml",
   experimentId: "nq_research_local",
   maxTrials: 3,
-  executionMode: "bar"
+  executionMode: "bar",
+  llmModel: "local-deterministic-template",
+  llmParameters: "{\"temperature\":0}"
 };
 
 function today() {
@@ -210,6 +212,8 @@ export default function App() {
             <TextField label="Strategy Spec(s)" className="wide" value={forms.spec} onChange={(value) => updateForm("spec", value)} />
             <TextField label="Experiment ID" value={forms.experimentId} onChange={(value) => updateForm("experimentId", value)} />
             <TextField label="Max Trials" type="number" value={forms.maxTrials} onChange={(value) => updateForm("maxTrials", value)} />
+            <TextField label="LLM Model" value={forms.llmModel} onChange={(value) => updateForm("llmModel", value)} />
+            <TextField label="LLM Parameters" value={forms.llmParameters} onChange={(value) => updateForm("llmParameters", value)} />
             <label className="field">
               <span>Execution Mode</span>
               <select value={forms.executionMode} onChange={(event) => updateForm("executionMode", event.target.value)}>
@@ -376,12 +380,26 @@ function researchPayload(forms) {
     experiment_id: forms.experimentId,
     max_trials: Number(forms.maxTrials || 1),
     max_trials_per_family: Number(forms.maxTrials || 1),
-    execution_mode: forms.executionMode
+    execution_mode: forms.executionMode,
+    llm_model: forms.llmModel,
+    llm_parameters: parseJsonObject(forms.llmParameters, "LLM Parameters")
   };
   if (specs.length > 1) {
     payload.specs = specs;
   } else {
     payload.spec = specs[0] || forms.spec;
+  }
+  return payload;
+}
+
+function parseJsonObject(value, label) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return {};
+  }
+  const payload = JSON.parse(trimmed);
+  if (!payload || Array.isArray(payload) || typeof payload !== "object") {
+    throw new Error(`${label} must be a JSON object`);
   }
   return payload;
 }
@@ -484,34 +502,75 @@ function LeaderboardTable({ rows }) {
             <th>Experiment</th>
             <th>Strategy</th>
             <th>Gate</th>
+            <th>Overfit Risk</th>
+            <th>Trials/Folds</th>
             <th>Score</th>
             <th>Test Sharpe</th>
             <th>Annual Trades</th>
             <th>Test PnL</th>
             <th>Holdout PnL</th>
+            <th>Cost Stress</th>
+            <th>Snapshot</th>
             <th>Reject Reasons</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.experiment_id}>
-              <td>{row.experiment_id}</td>
-              <td>{row.strategy_name}</td>
-              <td>
-                <span className={`status-pill ${row.passed ? "completed" : "failed"}`}>{row.passed ? "passed" : "rejected"}</span>
-              </td>
-              <td>{formatNumber(row.robustness_score, 3)}</td>
-              <td>{formatNumber(row.sharpe_test)}</td>
-              <td>{formatCompact(row.annual_trades_test)}</td>
-              <td>{formatNumber(row.net_pnl_test)}</td>
-              <td>{formatNumber(row.net_pnl_holdout)}</td>
-              <td>{(row.reasons ?? []).join(", ") || "-"}</td>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const overfitting = row.overfitting_report ?? {};
+            const costSensitivity = row.cost_sensitivity_report ?? {};
+            const costStressKnown = typeof costSensitivity.worst_case_survives === "boolean";
+            return (
+              <tr key={row.experiment_id}>
+                <td>{row.experiment_id}</td>
+                <td>{row.strategy_name}</td>
+                <td>
+                  <span className={`status-pill ${row.passed ? "completed" : "failed"}`}>{row.passed ? "passed" : "rejected"}</span>
+                </td>
+                <td>
+                  <span className={`status-pill ${riskStatusClass(overfitting.risk_level)}`}>{overfitting.risk_level ?? "unknown"}</span>
+                  <div className="table-detail">{(overfitting.reasons ?? []).slice(0, 2).join(", ") || "no risk flags"}</div>
+                </td>
+                <td>
+                  {formatCompact(overfitting.trial_count ?? row.trial_count)} / {formatCompact(overfitting.fold_count)}
+                  <div className="table-detail">{overfitting.pbo_status ?? "pbo unknown"}</div>
+                </td>
+                <td>{formatNumber(row.robustness_score, 3)}</td>
+                <td>{formatNumber(row.sharpe_test)}</td>
+                <td>{formatCompact(row.annual_trades_test)}</td>
+                <td>{formatNumber(row.net_pnl_test)}</td>
+                <td>{formatNumber(row.net_pnl_holdout)}</td>
+                <td>
+                  <span className={`status-pill ${costStressKnown ? (costSensitivity.worst_case_survives ? "completed" : "failed") : "running"}`}>
+                    {costStressKnown ? (costSensitivity.worst_case_survives ? "survives" : "fails") : "unknown"}
+                  </span>
+                  <div className="table-detail">base rt {formatNumber(costSensitivity.baseline_round_trip_cost)}</div>
+                </td>
+                <td>
+                  {shortHash(row.data_version_hash)}
+                  <div className="table-detail">{row.snapshot?.llm_model ?? "no llm model"}</div>
+                </td>
+                <td>{(row.reasons ?? []).join(", ") || "-"}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
+}
+
+function riskStatusClass(level) {
+  if (level === "low") {
+    return "completed";
+  }
+  if (level === "medium") {
+    return "running";
+  }
+  return "failed";
+}
+
+function shortHash(value) {
+  return value ? String(value).slice(0, 10) : "-";
 }
 
 function JsonBlock({ payload }) {
