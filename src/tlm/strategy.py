@@ -80,6 +80,7 @@ class StrategySpec:
     schema_version: int
     name: str
     strategy_family: str
+    module_id: str | None
     market_hypothesis: str
     symbol: str
     timeframe: str
@@ -145,6 +146,7 @@ def parse_strategy_spec(payload: dict[str, Any]) -> StrategySpec:
     hypothesis = str(payload["market_hypothesis"]).strip()
     if len(hypothesis) < 20:
         raise StrategySpecError("market_hypothesis must be specific and non-empty")
+    module_id = _optional_module_id(payload)
 
     direction = str(payload["direction"])
     if direction not in ALLOWED_DIRECTIONS:
@@ -178,6 +180,7 @@ def parse_strategy_spec(payload: dict[str, Any]) -> StrategySpec:
         schema_version=int(payload["schema_version"]),
         name=str(payload["name"]),
         strategy_family=family,
+        module_id=module_id,
         market_hypothesis=hypothesis,
         symbol=str(payload["symbol"]),
         timeframe=str(payload["timeframe"]),
@@ -198,6 +201,18 @@ def _require_object(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise StrategySpecError(f"{name} must be an object")
     return value
+
+
+def _optional_module_id(payload: dict[str, Any]) -> str | None:
+    value = payload.get("module_id")
+    if value is None and isinstance(payload.get("module"), dict):
+        value = payload["module"].get("module_id") or payload["module"].get("id")
+    if value is None:
+        return None
+    module_id = str(value).strip()
+    if not module_id:
+        raise StrategySpecError("module_id must be non-empty when provided")
+    return module_id
 
 
 def _validate_anti_martingale(

@@ -270,6 +270,13 @@ class RollingValidationTests(unittest.TestCase):
             manifest = json.loads((output.parent / "manifest.json").read_text(encoding="utf-8"))
             run_manifest = json.loads((output.parent / "run_manifest.json").read_text(encoding="utf-8"))
             persisted_spec = json.loads((output.parent / "strategy_spec.json").read_text(encoding="utf-8"))
+            module_memory = [
+                json.loads(line)
+                for line in (output.parent / "module_performance.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
             con = duckdb.connect(":memory:")
             try:
                 trade_rows = con.execute(
@@ -312,6 +319,8 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(artifact_payload["distributions"]["by_direction"])
         self.assertTrue(artifact_payload["distributions"]["by_holding_minutes"])
         self.assertEqual(manifest["experiment_id"], "exp_test")
+        self.assertEqual(manifest["module_id"], "opening_range_breakout")
+        self.assertEqual(manifest["module"]["family"], "opening_range_breakout")
         self.assertEqual(run_manifest, manifest)
         self.assertEqual(persisted_spec["name"], result.strategy_name)
         self.assertEqual(manifest["artifacts"]["strategy_spec"]["path"], "strategy_spec.json")
@@ -381,6 +390,13 @@ class RollingValidationTests(unittest.TestCase):
         self.assertFalse(rows[0]["tick_replay_report"]["strict_tick_replay_gap"])
         self.assertEqual(rows[0]["promotion_report"]["stage"], "direct_bar")
         self.assertEqual(rows[0]["strategy_card"]["name"], result.strategy_name)
+        self.assertEqual(rows[0]["module_id"], "opening_range_breakout")
+        self.assertEqual(rows[0]["module"]["minimum_sample_size"], 100)
+        self.assertEqual(rows[0]["strategy_card"]["module_id"], "opening_range_breakout")
+        self.assertEqual(rows[0]["strategy_card"]["timeframe"], "1m")
+        self.assertEqual(module_memory[0]["module_id"], "opening_range_breakout")
+        self.assertEqual(module_memory[0]["strategy_spec_hash"], result.strategy_spec_hash)
+        self.assertEqual(module_memory[0]["trade_count"], result.aggregate_test_metrics.trade_count)
         self.assertTrue(rows[0]["hard_gate_report"])
         self.assertEqual(rows[0]["hard_gate_report"][0]["name"], "annual_trades_test")
         self.assertIn("threshold", rows[0]["hard_gate_report"][0])

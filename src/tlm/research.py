@@ -22,9 +22,14 @@ from .cli_dates import iter_dates
 from .config import CostModelConfig, SymbolConfig
 from .leaderboard import calculate_sharpe_decay, evaluate_hard_gates, robustness_score
 from .metrics import BacktestMetrics, calculate_metrics
+from .modules import (
+    build_module_performance_record,
+    module_summary_for_spec,
+    write_module_performance_memory,
+)
 from .snapshot import research_snapshot
 from .storage import bar_path, normalized_tick_path
-from .strategy import StrategySpec
+from .strategy import StrategySpec, parse_strategy_spec
 from .variants import (
     DEFAULT_PARAMETER_BUDGET,
     ParameterGridMetadata,
@@ -107,6 +112,7 @@ class ResearchRunResult:
             "snapshot": self.snapshot,
             "cost_model": self.cost_model,
             "strategy_name": self.strategy_name,
+            "module_id": self.strategy_card.get("module_id"),
             "strategy_spec_hash": self.strategy_spec_hash,
             "strategy_spec": self.strategy_spec,
             "prompt_hash": self.prompt_hash,
@@ -707,8 +713,10 @@ def with_promotion_outputs(result: ResearchRunResult, promotion_report: dict) ->
         result_status="qualified" if result.gates["passed"] else "rejected",
         spec_name=current_card.get("name", result.strategy_name),
         strategy_family=current_card.get("strategy_family"),
+        timeframe=current_card.get("timeframe"),
         symbol=current_card.get("symbol"),
         market_hypothesis=current_card.get("market_hypothesis"),
+        module=current_card.get("module"),
         execution_mode=result.execution_mode,
         aggregate_validation_metrics=result.aggregate_validation_metrics,
         aggregate_test_metrics=result.aggregate_test_metrics,
@@ -841,13 +849,19 @@ def build_strategy_card(
     spec: StrategySpec | None = None,
     spec_name: str | None = None,
     strategy_family: str | None = None,
+    timeframe: str | None = None,
     symbol: str | None = None,
     market_hypothesis: str | None = None,
+    module: dict | None = None,
 ) -> dict:
+    module_summary = module or (module_summary_for_spec(spec) if spec else {})
     return {
         "status": result_status,
         "name": spec.name if spec else spec_name,
         "strategy_family": spec.strategy_family if spec else strategy_family,
+        "timeframe": spec.timeframe if spec else timeframe,
+        "module": module_summary,
+        "module_id": module_summary.get("module_id"),
         "symbol": spec.symbol if spec else symbol,
         "market_hypothesis": spec.market_hypothesis if spec else market_hypothesis,
         "execution_mode": execution_mode,
@@ -1157,6 +1171,8 @@ def write_research_artifacts(
         "execution_mode": result.execution_mode,
         "data_version_hash": result.data_version_hash,
         "strategy_name": result.strategy_name,
+        "module_id": result.strategy_card.get("module_id"),
+        "module": result.strategy_card.get("module", {}),
         "strategy_spec_hash": result.strategy_spec_hash,
         "prompt_hash": result.prompt_hash,
         "snapshot": result.snapshot,
@@ -1195,6 +1211,23 @@ def write_research_artifacts(
     artifact_paths["strategy_spec"].write_text(
         json.dumps(result.strategy_spec, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+    )
+    write_module_performance_memory(
+        experiment_dir / "module_performance.jsonl",
+        [
+            build_module_performance_record(
+                experiment_id=result.experiment_id,
+                spec=parse_strategy_spec(result.strategy_spec),
+                execution_mode=result.execution_mode,
+                strategy_spec_hash=result.strategy_spec_hash,
+                variant_parameters=result.variant_parameters,
+                aggregate_test_metrics=result.aggregate_test_metrics,
+                final_holdout_metrics=result.final_holdout_metrics,
+                gates=result.gates,
+                robustness_score=result.robustness_score,
+                parameter_stability_report=result.parameter_stability_report,
+            )
+        ],
     )
     (experiment_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
@@ -1497,6 +1530,9 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "snapshot": payload.get("snapshot", {}),
                 "cost_model": payload.get("cost_model", {}),
                 "strategy_name": payload["strategy_name"],
+                "module_id": payload.get("module_id")
+                or payload.get("strategy_card", {}).get("module_id"),
+                "module": payload.get("module") or payload.get("strategy_card", {}).get("module", {}),
                 "strategy_spec_hash": payload.get("strategy_spec_hash"),
                 "variant_parameters": payload.get("variant_parameters", {}),
                 "trial_count": payload.get("trial_count", 1),
