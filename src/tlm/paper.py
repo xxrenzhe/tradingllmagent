@@ -178,6 +178,12 @@ def export_ninjatrader_csv(
         "quantity",
         "order_type",
         "price",
+        "time_in_force",
+        "stop_loss",
+        "take_profit",
+        "max_loss",
+        "offline_only",
+        "risk_review_required",
         "signal_name",
         "source_trade_id",
     ]
@@ -207,11 +213,15 @@ def export_ninjatrader_oif(
                         row["quantity"],
                         row["order_type"],
                         row["price"],
-                        "0",
-                        "DAY",
-                        "",
+                        row["stop_loss"],
+                        row["time_in_force"],
+                        row["take_profit"],
                         row["signal_name"],
-                        row["source_trade_id"],
+                        (
+                            f"{row['source_trade_id']}|offline_only={row['offline_only']}"
+                            f"|risk_review_required={row['risk_review_required']}"
+                            f"|max_loss={row['max_loss']}"
+                        ),
                     ]
                 )
             )
@@ -228,6 +238,15 @@ def _signal_rows(
     entry_action = "BUY" if trade["side"] == "long" else "SELLSHORT"
     exit_action = "SELL" if trade["side"] == "long" else "BUYTOCOVER"
     source_trade_id = f"trade_{index:06d}"
+    risk_fields = _trade_risk_fields(trade)
+    risk_payload = {
+        "time_in_force": "DAY",
+        "stop_loss": _risk_value(risk_fields["stop_loss"]),
+        "take_profit": _risk_value(risk_fields["take_profit"]),
+        "max_loss": _risk_value(risk_fields["max_loss"]),
+        "offline_only": "true",
+        "risk_review_required": "true",
+    }
     return [
         {
             "time": trade["entry_time"],
@@ -239,6 +258,7 @@ def _signal_rows(
             "price": "0",
             "signal_name": trade.get("entry_reason", "entry"),
             "source_trade_id": source_trade_id,
+            **risk_payload,
         },
         {
             "time": trade["exit_time"],
@@ -250,5 +270,12 @@ def _signal_rows(
             "price": "0",
             "signal_name": trade["exit_reason"],
             "source_trade_id": source_trade_id,
+            **risk_payload,
         },
     ]
+
+
+def _risk_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)

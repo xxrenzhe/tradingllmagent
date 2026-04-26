@@ -31,6 +31,9 @@ def sample_result() -> dict:
                 "net_pnl": 45.0,
                 "entry_reason": "close_above_opening_range_high",
                 "exit_reason": "take_profit",
+                "stop_loss": 101.0,
+                "take_profit": 107.2,
+                "max_loss": 65.0,
             }
         ],
         "metrics": {},
@@ -71,8 +74,14 @@ class PaperReplayTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["action"], "BUY")
+        self.assertEqual(rows[0]["stop_loss"], "101.0")
+        self.assertEqual(rows[0]["take_profit"], "107.2")
+        self.assertEqual(rows[0]["offline_only"], "true")
+        self.assertEqual(rows[0]["risk_review_required"], "true")
         self.assertEqual(rows[1]["action"], "SELL")
         self.assertIn("PLACE;Sim101;NQ 06-26;BUY;1;MARKET", oif_output)
+        self.assertIn("offline_only=true", oif_output)
+        self.assertIn("risk_review_required=true", oif_output)
         self.assertIn("PLACE;Sim101;NQ 06-26;SELL;1;MARKET", oif_output)
 
     def test_cli_paper_replay_and_nt_export_write_outputs(self) -> None:
@@ -121,6 +130,7 @@ class PaperReplayTests(unittest.TestCase):
         self.assertEqual(len(replay_payload["positions"]), 1)
         self.assertEqual(loaded["symbol"], "NQmain")
         self.assertIn("close_above_opening_range_high", signal_output)
+        self.assertIn("risk_review_required", signal_output)
 
 
 if __name__ == "__main__":
