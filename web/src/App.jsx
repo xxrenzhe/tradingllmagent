@@ -30,6 +30,8 @@ export default function App() {
   const [taskEvents, setTaskEvents] = useState([]);
   const [experimentId, setExperimentId] = useState("");
   const [experiment, setExperiment] = useState(null);
+  const [selectedArtifactId, setSelectedArtifactId] = useState("");
+  const [artifactDetail, setArtifactDetail] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
@@ -161,6 +163,20 @@ export default function App() {
     setExperiment(payload);
     setAuditLogs(auditPayload.audit_logs ?? []);
     return { task_id: id };
+  }
+
+  async function loadResearchArtifacts(id) {
+    const experimentKey = id.trim();
+    if (!experimentKey) {
+      throw new Error("experiment_id is required");
+    }
+    const payload = await apiRequest(
+      apiBase,
+      `/api/experiments/${encodeURIComponent(experimentKey)}/artifacts`
+    );
+    setSelectedArtifactId(experimentKey);
+    setArtifactDetail(payload);
+    return { task_id: `artifacts loaded: ${experimentKey}` };
   }
 
   const visibleRows = (deferredFilter.onlyPassed ? leaderboard.leaderboard : leaderboard.rows).filter((row) => {
@@ -309,7 +325,22 @@ export default function App() {
             Refresh
           </ActionButton>
         </div>
-        <LeaderboardTable rows={visibleRows} />
+        <LeaderboardTable
+          rows={visibleRows}
+          selectedExperimentId={selectedArtifactId}
+          onInspect={(id) => runAction("Artifacts", () => loadResearchArtifacts(id))}
+        />
+      </Panel>
+
+      <Panel title="Strategy Replay Detail" kicker={selectedArtifactId || "Select a leaderboard row"}>
+        {artifactDetail ? (
+          <ArtifactDashboard detail={artifactDetail} />
+        ) : (
+          <EmptyState
+            title="No strategy artifacts loaded"
+            text="Inspect a leaderboard row to load trades, equity, fold metrics, and distribution charts."
+          />
+        )}
       </Panel>
 
       <section className="workbench-grid">
@@ -497,7 +528,7 @@ function TaskTable({ tasks, selectedTaskId, onSelect, onCancel, onRun }) {
   );
 }
 
-function LeaderboardTable({ rows }) {
+function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
   if (!rows.length) {
     return <EmptyState title="No leaderboard rows" text="Run research after data and bars exist, then refresh the report." />;
   }
@@ -529,8 +560,13 @@ function LeaderboardTable({ rows }) {
             const parameterStability = row.parameter_stability_report ?? {};
             const costStressKnown = typeof costSensitivity.worst_case_survives === "boolean";
             return (
-              <tr key={row.experiment_id}>
-                <td>{row.experiment_id}</td>
+              <tr key={row.experiment_id} className={selectedExperimentId === row.experiment_id ? "selected" : ""}>
+                <td>
+                  <button className="link-button" type="button" onClick={() => onInspect(row.experiment_id)}>
+                    {row.experiment_id}
+                  </button>
+                  <div className="table-detail">inspect artifacts</div>
+                </td>
                 <td>{row.strategy_name}</td>
                 <td>
                   <span className={`status-pill ${row.passed ? "completed" : "failed"}`}>{row.passed ? "passed" : "rejected"}</span>
@@ -570,6 +606,179 @@ function LeaderboardTable({ rows }) {
               </tr>
             );
           })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ArtifactDashboard({ detail }) {
+  const distributions = detail.distributions ?? {};
+  const trades = detail.trades ?? [];
+  const foldMetrics = detail.fold_metrics ?? [];
+  return (
+    <div className="artifact-dashboard">
+      <div className="artifact-summary">
+        <Metric label="Artifact Trades" value={formatCompact(trades.length)} detail={detail.manifest?.execution_mode ?? "mode unknown"} />
+        <Metric label="Equity Points" value={formatCompact((detail.equity ?? []).length)} detail="trade-level curve" />
+        <Metric label="Metric Splits" value={formatCompact(foldMetrics.length)} detail="train / validation / test / holdout" />
+        <Metric label="Schema" value={`v${detail.manifest?.schema_version ?? "-"}`} detail={shortHash(detail.manifest?.data_version_hash)} />
+      </div>
+      <div className="chart-grid">
+        <section className="chart-card wide-chart">
+          <div className="chart-heading">
+            <h3>Equity Curve</h3>
+            <span>All split curves, trade-level replay</span>
+          </div>
+          <EquityChart rows={detail.equity ?? []} />
+        </section>
+        <section className="chart-card">
+          <div className="chart-heading">
+            <h3>Replay Tape</h3>
+            <span>Recent trade outcomes</span>
+          </div>
+          <ReplayTimeline trades={trades} />
+        </section>
+      </div>
+      <TradeDistributionGrid distributions={distributions} />
+      <SplitMetricsTable rows={foldMetrics} />
+    </div>
+  );
+}
+
+function EquityChart({ rows }) {
+  const points = rows.filter((row) => typeof row.equity === "number");
+  if (!points.length) {
+    return <EmptyState title="No equity rows" text="Run research again to write equity.parquet." />;
+  }
+  const values = points.map((row) => Number(row.equity));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const width = 720;
+  const height = 220;
+  const polyline = points
+    .map((row, index) => {
+      const x = points.length === 1 ? 0 : (index / (points.length - 1)) * width;
+      const y = height - ((Number(row.equity) - min) / span) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  return (
+    <div className="equity-chart" aria-label="Equity curve">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img">
+        <title>Equity curve</title>
+        <path d={`M0 ${height} H${width}`} />
+        <polyline points={polyline} />
+      </svg>
+      <div className="chart-axis">
+        <span>{formatNumber(min)}</span>
+        <span>{formatNumber(max)}</span>
+      </div>
+    </div>
+  );
+}
+
+function ReplayTimeline({ trades }) {
+  if (!trades.length) {
+    return <EmptyState title="No trades" text="The selected strategy produced no persisted trade rows." />;
+  }
+  const recentTrades = trades.slice(-80);
+  const maxAbsPnl = Math.max(...recentTrades.map((trade) => Math.abs(Number(trade.net_pnl) || 0)), 1);
+  return (
+    <div className="replay-tape" aria-label="Trade replay timeline">
+      {recentTrades.map((trade, index) => {
+        const pnl = Number(trade.net_pnl) || 0;
+        const width = `${Math.max(6, (Math.abs(pnl) / maxAbsPnl) * 100)}%`;
+        return (
+          <article key={`${trade.split}-${trade.fold_index}-${trade.trade_index}-${index}`} className={`replay-row ${pnl >= 0 ? "gain" : "loss"}`}>
+            <span>{trade.split}</span>
+            <div className="replay-bar">
+              <i style={{ width }} />
+            </div>
+            <strong>{formatNumber(pnl)}</strong>
+            <small>{trade.side} · {String(trade.exit_time ?? "").slice(0, 16)}</small>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function TradeDistributionGrid({ distributions }) {
+  const groups = [
+    ["Year", distributions.by_year ?? []],
+    ["Month", distributions.by_month ?? []],
+    ["Hour", distributions.by_hour ?? []],
+    ["Direction", distributions.by_direction ?? []],
+    ["Holding", distributions.by_holding_minutes ?? []]
+  ];
+  return (
+    <div className="distribution-grid">
+      {groups.map(([title, rows]) => (
+        <section className="chart-card" key={title}>
+          <div className="chart-heading">
+            <h3>{title}</h3>
+            <span>count and net PnL</span>
+          </div>
+          <DistributionBars rows={rows} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function DistributionBars({ rows }) {
+  if (!rows.length) {
+    return <EmptyState title="No distribution" text="No trades are available for this bucket." />;
+  }
+  const maxCount = Math.max(...rows.map((row) => Number(row.trade_count) || 0), 1);
+  return (
+    <div className="distribution-bars">
+      {rows.map((row) => (
+        <article key={row.bucket}>
+          <span>{row.bucket}</span>
+          <div>
+            <i style={{ width: `${Math.max(4, (Number(row.trade_count) / maxCount) * 100)}%` }} />
+          </div>
+          <strong>{formatCompact(row.trade_count)}</strong>
+          <small className={Number(row.net_pnl) >= 0 ? "positive" : "negative"}>{formatNumber(row.net_pnl)}</small>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function SplitMetricsTable({ rows }) {
+  if (!rows.length) {
+    return <EmptyState title="No fold metrics" text="fold_metrics.parquet was not found for this experiment." />;
+  }
+  return (
+    <div className="table-wrap split-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Split</th>
+            <th>Fold</th>
+            <th>Trades</th>
+            <th>Sharpe</th>
+            <th>Net PnL</th>
+            <th>Max DD</th>
+            <th>Annual Trades</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={`${row.split}-${row.fold_index}-${index}`}>
+              <td>{row.split}</td>
+              <td>{row.fold_index ?? "final"}</td>
+              <td>{formatCompact(row.trade_count)}</td>
+              <td>{formatNumber(row.sharpe)}</td>
+              <td>{formatNumber(row.net_pnl)}</td>
+              <td>{formatNumber(row.max_drawdown)}</td>
+              <td>{formatCompact(row.annual_trades)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

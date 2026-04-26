@@ -200,6 +200,13 @@ select {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.artifact-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
 .metric-card {
   display: grid;
   gap: 8px;
@@ -375,6 +382,162 @@ tr.selected td {
   max-width: 220px;
 }
 
+.artifact-dashboard {
+  display: grid;
+  gap: 18px;
+}
+
+.chart-grid,
+.distribution-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.chart-grid {
+  grid-template-columns: minmax(0, 1.4fr) minmax(340px, 0.6fr);
+}
+
+.distribution-grid {
+  grid-template-columns: repeat(5, minmax(180px, 1fr));
+}
+
+.chart-card {
+  min-width: 0;
+  border: 1px solid rgba(222, 211, 189, 0.78);
+  border-radius: 22px;
+  background: rgba(255, 253, 248, 0.58);
+  padding: 16px;
+}
+
+.wide-chart {
+  min-height: 340px;
+}
+
+.chart-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.chart-heading h3 {
+  margin: 0;
+  font-family: "Fraunces", "Georgia", serif;
+  font-size: 1.18rem;
+}
+
+.chart-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.equity-chart svg {
+  width: 100%;
+  min-height: 240px;
+  overflow: visible;
+}
+
+.equity-chart path {
+  fill: none;
+  stroke: rgba(104, 116, 109, 0.28);
+  stroke-width: 2;
+}
+
+.equity-chart polyline {
+  fill: none;
+  stroke: var(--signal);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5;
+  filter: drop-shadow(0 10px 12px rgba(11, 111, 91, 0.18));
+}
+
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-family: "Azeret Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.replay-tape,
+.distribution-bars {
+  display: grid;
+  gap: 10px;
+  max-height: 300px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.replay-row,
+.distribution-bars article {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+}
+
+.replay-row {
+  grid-template-columns: 82px minmax(80px, 1fr) 86px;
+}
+
+.replay-row small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.replay-row span,
+.distribution-bars span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.replay-row strong,
+.distribution-bars strong,
+.distribution-bars small {
+  font-family: "Azeret Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.replay-bar,
+.distribution-bars div {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(222, 211, 189, 0.62);
+}
+
+.replay-bar i,
+.distribution-bars i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--signal);
+}
+
+.replay-row.loss .replay-bar i {
+  background: var(--danger);
+}
+
+.distribution-bars article {
+  grid-template-columns: 70px minmax(64px, 1fr) 44px 74px;
+}
+
+.distribution-bars small.positive {
+  color: var(--signal-strong);
+}
+
+.distribution-bars small.negative {
+  color: var(--danger);
+}
+
+.split-table table {
+  min-width: 820px;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -509,7 +672,10 @@ pre {
   .hero-panel,
   .workbench-grid,
   .metric-grid,
-  .quality-grid {
+  .quality-grid,
+  .artifact-summary,
+  .chart-grid,
+  .distribution-grid {
     grid-template-columns: 1fr;
   }
 

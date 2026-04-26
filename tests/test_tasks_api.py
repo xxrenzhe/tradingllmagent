@@ -8,7 +8,12 @@ from pathlib import Path
 
 import duckdb
 
-from tlm.api import build_nt_export_signal_response, build_paper_replay_response, create_app
+from tlm.api import (
+    build_experiment_artifacts_response,
+    build_nt_export_signal_response,
+    build_paper_replay_response,
+    create_app,
+)
 from tlm.dukascopy import Tick
 from tlm.storage import normalized_tick_path, write_ticks_parquet
 from tlm.tasks import (
@@ -255,6 +260,10 @@ class TaskStoreTests(unittest.TestCase):
                 task_id="task_research_portfolio",
             )
             completed = run_task(db_path, "task_research_portfolio")
+            artifacts = build_experiment_artifacts_response(
+                experiments_root,
+                "portfolio_opening_range_breakout_trial_0000",
+            )
 
         self.assertEqual(completed["status"], "completed")
         self.assertEqual(completed["result"]["trials"], 2)
@@ -263,6 +272,8 @@ class TaskStoreTests(unittest.TestCase):
             {"opening_range_breakout": 1, "trend_pullback": 1},
         )
         self.assertEqual(len(completed["result"]["result_paths"]), 2)
+        self.assertTrue(artifacts["trades"])
+        self.assertTrue(artifacts["distributions"]["by_direction"])
 
 
 class APIImportTests(unittest.TestCase):
@@ -300,6 +311,7 @@ class APIImportTests(unittest.TestCase):
 
         self.assertIn("/api/backtests/tick", paths)
         self.assertIn("/api/experiments/{experiment_id}/audit-logs", paths)
+        self.assertIn("/api/experiments/{experiment_id}/artifacts", paths)
 
 
 if __name__ == "__main__":

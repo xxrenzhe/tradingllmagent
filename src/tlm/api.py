@@ -9,7 +9,7 @@ from time import sleep
 from .config import load_symbols
 from .experiments import load_experiment_audit_logs, load_experiment_summary
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
-from .research import load_leaderboard_report
+from .research import load_leaderboard_report, load_research_artifacts
 from .strategy import StrategySpecError, load_strategy_spec
 from .tasks import (
     TERMINAL_STATUSES,
@@ -87,6 +87,14 @@ def build_leaderboard_response(experiments_root: Path, experiment_id: str | None
             else "No qualified strategies found under the current out-of-sample gates."
         )
     return report
+
+
+def build_experiment_artifacts_response(
+    experiments_root: Path,
+    experiment_id: str,
+    row_limit: int = 2_000,
+) -> dict:
+    return load_research_artifacts(experiments_root, experiment_id, row_limit=row_limit)
 
 
 def create_app():
@@ -276,6 +284,21 @@ def create_app():
                 )
             }
         except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/experiments/{experiment_id}/artifacts")
+    def experiments_artifacts(
+        experiment_id: str,
+        experiments_root: str = "experiments",
+        row_limit: int = 2_000,
+    ) -> dict:
+        try:
+            return build_experiment_artifacts_response(
+                Path(experiments_root),
+                experiment_id,
+                row_limit=row_limit,
+            )
+        except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/reports/leaderboard")

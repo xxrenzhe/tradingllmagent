@@ -654,6 +654,132 @@ def write_research_artifacts(
     )
 
 
+def load_research_artifacts(
+    experiments_root: Path,
+    experiment_id: str,
+    row_limit: int = 2_000,
+) -> dict:
+    experiment_dir = experiments_root / experiment_id
+    manifest_path = experiment_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"Artifact manifest not found for experiment: {experiment_id}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    trades = _read_parquet_dicts(
+        experiment_dir / "trades.parquet",
+        "ORDER BY exit_time, split, fold_index, trade_index",
+        row_limit,
+    )
+    equity = _read_parquet_dicts(
+        experiment_dir / "equity.parquet",
+        "ORDER BY split, fold_index, sequence",
+        row_limit,
+    )
+    fold_metrics = _read_parquet_dicts(
+        experiment_dir / "fold_metrics.parquet",
+        "ORDER BY split, fold_index",
+        row_limit,
+    )
+    return {
+        "experiment_id": experiment_id,
+        "manifest": manifest,
+        "trades": [_json_ready_row(row) for row in trades],
+        "equity": [_json_ready_row(row) for row in equity],
+        "fold_metrics": [_json_ready_row(row) for row in fold_metrics],
+        "distributions": build_trade_distributions(trades),
+    }
+
+
+def build_trade_distributions(trades: Sequence[dict]) -> dict:
+    distributions = {
+        "by_year": {},
+        "by_month": {},
+        "by_hour": {},
+        "by_direction": {},
+        "by_holding_minutes": {},
+    }
+    for trade in trades:
+        exit_time = trade.get("exit_time")
+        entry_time = trade.get("entry_time")
+        net_pnl = float(trade.get("net_pnl") or 0)
+        if exit_time:
+            distributions["by_year"] = _add_distribution_row(
+                distributions["by_year"],
+                f"{exit_time.year}",
+                net_pnl,
+            )
+            distributions["by_month"] = _add_distribution_row(
+                distributions["by_month"],
+                exit_time.strftime("%Y-%m"),
+                net_pnl,
+            )
+            distributions["by_hour"] = _add_distribution_row(
+                distributions["by_hour"],
+                f"{exit_time.hour:02d}:00",
+                net_pnl,
+            )
+        distributions["by_direction"] = _add_distribution_row(
+            distributions["by_direction"],
+            str(trade.get("side") or "unknown"),
+            net_pnl,
+        )
+        if entry_time and exit_time:
+            holding_minutes = max((exit_time - entry_time).total_seconds() / 60, 0)
+            distributions["by_holding_minutes"] = _add_distribution_row(
+                distributions["by_holding_minutes"],
+                holding_duration_bucket(holding_minutes),
+                net_pnl,
+            )
+    return {
+        name: [
+            {"bucket": bucket, "trade_count": row["trade_count"], "net_pnl": row["net_pnl"]}
+            for bucket, row in sorted(values.items())
+        ]
+        for name, values in distributions.items()
+    }
+
+
+def holding_duration_bucket(minutes: float) -> str:
+    if minutes < 5:
+        return "00-05m"
+    if minutes < 15:
+        return "05-15m"
+    if minutes < 60:
+        return "15-60m"
+    return "60m+"
+
+
+def _add_distribution_row(rows: dict, bucket: str, net_pnl: float) -> dict:
+    row = rows.setdefault(bucket, {"trade_count": 0, "net_pnl": 0.0})
+    row["trade_count"] += 1
+    row["net_pnl"] += net_pnl
+    return rows
+
+
+def _read_parquet_dicts(path: Path, order_by: str, row_limit: int) -> list[dict]:
+    if not path.exists():
+        return []
+    con = duckdb.connect(":memory:")
+    try:
+        rows = con.execute(
+            f"SELECT * FROM read_parquet(?) {order_by} LIMIT ?",
+            [str(path), max(row_limit, 0)],
+        ).fetchall()
+        columns = [column[0] for column in con.description]
+    finally:
+        con.close()
+    return [dict(zip(columns, row, strict=True)) for row in rows]
+
+
+def _json_ready_row(row: dict) -> dict:
+    return {key: _json_ready_value(value) for key, value in row.items()}
+
+
+def _json_ready_value(value: object) -> object:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
 def _write_research_trades(path: Path, result: ResearchRunResult) -> int:
     rows = []
     for artifact in result.split_artifacts:

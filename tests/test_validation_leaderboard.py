@@ -21,6 +21,7 @@ from tlm.research import (
     estimate_indicator_warmup_days,
     load_leaderboard,
     load_leaderboard_report,
+    load_research_artifacts,
     run_budgeted_research,
     run_research_bar_validation,
     trim_backtest_result,
@@ -263,6 +264,7 @@ class RollingValidationTests(unittest.TestCase):
             output = experiments_root / "exp_test" / "leaderboard.json"
             write_research_result(output, result)
             rows = load_leaderboard(experiments_root)
+            artifact_payload = load_research_artifacts(experiments_root, "exp_test")
             manifest = json.loads((output.parent / "manifest.json").read_text(encoding="utf-8"))
             con = duckdb.connect(":memory:")
             try:
@@ -296,6 +298,15 @@ class RollingValidationTests(unittest.TestCase):
                 con.close()
 
         self.assertEqual(len(rows), 1)
+        self.assertEqual(artifact_payload["experiment_id"], "exp_test")
+        self.assertEqual(artifact_payload["manifest"]["schema_version"], 1)
+        self.assertEqual(len(artifact_payload["fold_metrics"]), len(result.split_artifacts))
+        self.assertTrue(artifact_payload["trades"])
+        self.assertTrue(artifact_payload["equity"])
+        self.assertTrue(artifact_payload["distributions"]["by_year"])
+        self.assertTrue(artifact_payload["distributions"]["by_hour"])
+        self.assertTrue(artifact_payload["distributions"]["by_direction"])
+        self.assertTrue(artifact_payload["distributions"]["by_holding_minutes"])
         self.assertEqual(manifest["experiment_id"], "exp_test")
         self.assertEqual(manifest["leaderboard_path"], "leaderboard.json")
         self.assertEqual(manifest["artifacts"]["fold_metrics"]["row_count"], len(result.split_artifacts))
