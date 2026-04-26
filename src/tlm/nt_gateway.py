@@ -1,0 +1,230 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
+from uuid import uuid4
+
+
+SUPPORTED_COMMANDS = {
+    "marketOrder",
+    "marketBatch",
+    "cancelOrders",
+    "flatten",
+    "flattenBatch",
+    "closeQty",
+    "bracket",
+}
+
+
+@dataclass
+class SimOrder:
+    order_id: str
+    account: str
+    instrument: str
+    action: str
+    quantity: int
+    status: str
+    name: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "order_id": self.order_id,
+            "account": self.account,
+            "instrument": self.instrument,
+            "action": self.action,
+            "quantity": self.quantity,
+            "status": self.status,
+            "name": self.name,
+        }
+
+
+@dataclass
+class Nt8SimGateway:
+    accounts: list[str] = field(default_factory=lambda: ["Sim101"])
+    instruments: list[str] = field(default_factory=lambda: ["NQ 06-26"])
+    orders: dict[str, SimOrder] = field(default_factory=dict)
+    positions: dict[tuple[str, str], int] = field(default_factory=dict)
+    brackets: list[dict[str, Any]] = field(default_factory=list)
+
+    def health(self) -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "mode": "nt8_sim",
+            "read_only": False,
+            "accounts": self.accounts,
+            "instruments": self.instruments,
+            "order_count": len(self.orders),
+            "position_count": len([qty for qty in self.positions.values() if qty]),
+            "checked_at": datetime.now(UTC).isoformat(),
+        }
+
+    def execute(self, command: dict[str, Any]) -> dict[str, Any]:
+        command_type = str(command.get("type", ""))
+        if command_type not in SUPPORTED_COMMANDS:
+            return self._ack(command, "rejected", [f"unsupported_command:{command_type}"])
+        handler = getattr(self, f"_handle_{command_type}")
+        try:
+            return handler(command)
+        except ValueError as exc:
+            return self._ack(command, "rejected", [str(exc)])
+
+    def _handle_marketOrder(self, command: dict[str, Any]) -> dict[str, Any]:
+        account = self._required_account(command)
+        instrument = self._required_instrument(command)
+        action = str(command.get("action"))
+        qty = self._positive_qty(command.get("qty", command.get("quantity")))
+        order = self._fill_order(account, instrument, action, qty, command.get("namePrefix"))
+        return self._ack(command, "filled", [], orders=[order.to_dict()])
+
+    def _handle_marketBatch(self, command: dict[str, Any]) -> dict[str, Any]:
+        accounts = command.get("accounts") or []
+        items = command.get("items") or []
+        orders = []
+        errors = []
+        for account in accounts:
+            if account not in self.accounts:
+                errors.append(f"account_not_allowed:{account}")
+                continue
+            for item in items:
+                try:
+                    instrument = self._required_instrument(item)
+                    action = str(item.get("action"))
+                    qty = self._positive_qty(item.get("qty", item.get("quantity")))
+                    orders.append(
+                        self._fill_order(str(account), instrument, action, qty, item.get("namePrefix")).to_dict()
+                    )
+                except ValueError as exc:
+                    errors.append(str(exc))
+        return self._ack(command, "partial" if errors and orders else "filled", errors, orders=orders)
+
+    def _handle_cancelOrders(self, command: dict[str, Any]) -> dict[str, Any]:
+        order_id = command.get("orderId") or command.get("order_id")
+        name_prefix = command.get("namePrefix") or command.get("name_prefix")
+        cancelled = []
+        for order in self.orders.values():
+            if order.status == "cancelled":
+                continue
+            if order_id and order.order_id == order_id:
+                order.status = "cancelled"
+                cancelled.append(order.to_dict())
+            elif name_prefix and order.name.startswith(str(name_prefix)):
+                order.status = "cancelled"
+                cancelled.append(order.to_dict())
+        return self._ack(command, "cancelled", [], orders=cancelled)
+
+    def _handle_flatten(self, command: dict[str, Any]) -> dict[str, Any]:
+        account = self._required_account(command)
+        instrument = self._required_instrument(command)
+        self.positions[(account, instrument)] = 0
+        for order in self.orders.values():
+            if order.account == account and order.instrument == instrument and order.status != "filled":
+                order.status = "cancelled"
+        return self._ack(command, "flattened", [])
+
+    def _handle_flattenBatch(self, command: dict[str, Any]) -> dict[str, Any]:
+        accounts = command.get("accounts") or []
+        for account in accounts:
+            for key in list(self.positions):
+                if key[0] == account:
+                    self.positions[key] = 0
+        return self._ack(command, "flattened", [])
+
+    def _handle_closeQty(self, command: dict[str, Any]) -> dict[str, Any]:
+        account = self._required_account(command)
+        instrument = self._required_instrument(command)
+        qty = self._positive_qty(command.get("qty", command.get("quantity")))
+        key = (account, instrument)
+        current = self.positions.get(key, 0)
+        if current > 0:
+            self.positions[key] = max(0, current - qty)
+        elif current < 0:
+            self.positions[key] = min(0, current + qty)
+        return self._ack(command, "closed", [])
+
+    def _handle_bracket(self, command: dict[str, Any]) -> dict[str, Any]:
+        account = self._required_account(command)
+        instrument = self._required_instrument(command)
+        if command.get("stop") is None or command.get("limit") is None:
+            return self._ack(command, "rejected", ["stop_and_limit_required"])
+        bracket = {
+            "bracket_id": f"bracket_{uuid4().hex}",
+            "account": account,
+            "instrument": instrument,
+            "stop": float(command["stop"]),
+            "limit": float(command["limit"]),
+            "oco": True,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+        self.brackets.append(bracket)
+        return self._ack(command, "accepted", [], brackets=[bracket])
+
+    def _fill_order(
+        self,
+        account: str,
+        instrument: str,
+        action: str,
+        qty: int,
+        name_prefix: Any = None,
+    ) -> SimOrder:
+        if action not in {"buy", "sell", "sell_short", "buy_to_cover", "BUY", "SELL", "SELLSHORT", "BUYTOCOVER"}:
+            raise ValueError(f"unsupported_action:{action}")
+        signed = qty if action.lower() in {"buy", "buytocover"} else -qty
+        if action.lower() == "sell":
+            signed = -qty
+        if action.lower() == "sell_short":
+            signed = -qty
+        key = (account, instrument)
+        self.positions[key] = self.positions.get(key, 0) + signed
+        order = SimOrder(
+            order_id=f"order_{uuid4().hex}",
+            account=account,
+            instrument=instrument,
+            action=action,
+            quantity=qty,
+            status="filled",
+            name=f"{name_prefix or 'sim'}_{len(self.orders) + 1}",
+        )
+        self.orders[order.order_id] = order
+        return order
+
+    def _required_account(self, payload: dict[str, Any]) -> str:
+        account = str(payload.get("account", "")).strip()
+        if account not in self.accounts:
+            raise ValueError(f"account_not_allowed:{account}")
+        return account
+
+    def _required_instrument(self, payload: dict[str, Any]) -> str:
+        instrument = str(payload.get("instrument", "")).strip()
+        if instrument not in self.instruments:
+            raise ValueError(f"instrument_not_allowed:{instrument}")
+        return instrument
+
+    def _positive_qty(self, value: Any) -> int:
+        qty = int(value or 0)
+        if qty <= 0:
+            raise ValueError("qty_must_be_positive")
+        return qty
+
+    def _ack(
+        self,
+        command: dict[str, Any],
+        status: str,
+        errors: list[str],
+        *,
+        orders: list[dict[str, Any]] | None = None,
+        brackets: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "command_id": command.get("command_id") or f"cmd_{uuid4().hex}",
+            "correlation_id": command.get("correlation_id"),
+            "status": status,
+            "errors": errors,
+            "orders": orders or [],
+            "brackets": brackets or [],
+            "positions": [
+                {"account": account, "instrument": instrument, "quantity": quantity}
+                for (account, instrument), quantity in sorted(self.positions.items())
+            ],
+            "acknowledged_at": datetime.now(UTC).isoformat(),
+        }

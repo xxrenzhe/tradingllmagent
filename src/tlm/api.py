@@ -9,6 +9,7 @@ from time import sleep
 from .config import load_symbols
 from .experiments import load_experiment_audit_logs, load_experiment_summary
 from .execution import build_execution_intent_response, submit_paper_shadow
+from .nt_gateway import Nt8SimGateway
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import load_leaderboard_report, load_research_artifacts
 from .strategy import StrategySpecError, load_strategy_spec
@@ -107,6 +108,8 @@ def create_app():
         raise RuntimeError(
             "FastAPI is not installed. Install the API extras before running the server."
         ) from exc
+
+    nt8_gateway = Nt8SimGateway()
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -288,6 +291,22 @@ def create_app():
             return submit_paper_shadow(payload, Path(audit_path))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/gateways/nt8/health")
+    def nt8_health() -> dict:
+        return nt8_gateway.health()
+
+    @app.get("/api/gateways/nt8/accounts")
+    def nt8_accounts() -> dict:
+        return {"accounts": nt8_gateway.accounts}
+
+    @app.get("/api/gateways/nt8/instruments")
+    def nt8_instruments() -> dict:
+        return {"instruments": nt8_gateway.instruments}
+
+    @app.post("/api/gateways/nt8/commands")
+    def nt8_commands(payload: dict = Body(...)) -> dict:
+        return nt8_gateway.execute(payload)
 
     @app.get("/api/experiments/{experiment_id}")
     def experiments_get(

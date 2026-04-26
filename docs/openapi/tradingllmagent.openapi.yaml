@@ -1,0 +1,42 @@
+openapi: 3.1.0
+info:
+  title: Trading LLM Agent Execution Gateway
+  version: 0.1.0
+paths:
+  /api/execution/intents:
+    post:
+      summary: Build an execution intent and deterministic risk decision.
+      responses:
+        "200":
+          description: Execution intent with risk result.
+  /api/execution/paper-shadow:
+    post:
+      summary: Persist a paper-shadow execution intent audit event.
+      responses:
+        "200":
+          description: Paper shadow audit result.
+  /api/gateways/nt8/health:
+    get:
+      summary: Check NT8 sim gateway health.
+      responses:
+        "200":
+          description: Gateway health.
+  /api/gateways/nt8/accounts:
+    get:
+      summary: List available NT8 sim accounts.
+      responses:
+        "200":
+          description: Account list.
+  /api/gateways/nt8/instruments:
+    get:
+      summary: List available NT8 sim instruments.
+      responses:
+        "200":
+          description: Instrument list.
+  /api/gateways/nt8/commands:
+    post:
+      summary: Submit an NT8 sim gateway command.
+      description: Supports marketOrder, marketBatch, cancelOrders, flatten, flattenBatch, closeQty, and bracket.
+      responses:
+        "200":
+          description: Gateway ACK/NACK.
