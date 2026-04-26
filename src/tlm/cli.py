@@ -257,6 +257,7 @@ def cmd_research_run(args: argparse.Namespace) -> int:
         embargo_days=args.embargo_days,
         final_holdout_days=args.final_holdout_days,
         min_folds=args.min_folds,
+        indicator_warmup_days=args.indicator_warmup_days,
         max_parameter_combinations=args.max_parameter_combinations,
         allow_high_parameter_budget=args.allow_high_parameter_budget,
         execution_mode=args.execution_mode,
@@ -501,6 +502,7 @@ def build_parser() -> argparse.ArgumentParser:
     research_run.add_argument("--embargo-days", type=int, default=5)
     research_run.add_argument("--final-holdout-days", type=int, default=365)
     research_run.add_argument("--min-folds", type=int, default=1)
+    research_run.add_argument("--indicator-warmup-days", type=int)
     research_run.set_defaults(func=cmd_research_run)
 
     propose = research_subparsers.add_parser("propose")

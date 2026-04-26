@@ -285,6 +285,7 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
             embargo_days=int(payload.get("embargo_days", 5)),
             final_holdout_days=int(payload.get("final_holdout_days", 365)),
             min_folds=int(payload.get("min_folds", 1)),
+            indicator_warmup_days=optional_int(payload.get("indicator_warmup_days")),
             max_parameter_combinations=int(payload.get("max_parameter_combinations", 50)),
             allow_high_parameter_budget=bool(payload.get("allow_high_parameter_budget", False)),
             execution_mode=payload.get("execution_mode", "bar"),
@@ -318,6 +319,12 @@ def _family_trial_quota(payload: dict[str, Any], strategy_family: str) -> int:
     if "max_trials_per_family" in payload:
         return int(payload["max_trials_per_family"])
     return int(payload.get("max_trials", 1))
+
+
+def optional_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    return int(value)
 
 
 def _required(payload: dict[str, Any], key: str, *aliases: str) -> str:

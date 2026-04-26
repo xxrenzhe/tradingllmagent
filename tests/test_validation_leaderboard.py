@@ -9,16 +9,19 @@ from contextlib import redirect_stdout
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from tlm.backtest import BacktestResult, Trade
 from tlm.cli import main
 from tlm.config import SymbolConfig
 from tlm.dukascopy import Tick
 from tlm.leaderboard import evaluate_hard_gates, robustness_score
 from tlm.metrics import calculate_metrics
 from tlm.research import (
+    estimate_indicator_warmup_days,
     load_leaderboard,
     load_leaderboard_report,
     run_budgeted_research,
     run_research_bar_validation,
+    trim_backtest_result,
     write_research_result,
 )
 from tlm.storage import bar_path, normalized_tick_path, write_bars_parquet, write_ticks_parquet
@@ -107,12 +110,18 @@ class RollingValidationTests(unittest.TestCase):
             embargo_days=5,
             final_holdout_days=60,
             min_folds=3,
+            indicator_warmup_days=3,
         )
 
         self.assertGreaterEqual(len(plan.folds), 3)
         first = plan.folds[0]
         self.assertEqual((first.validation.start - first.train.end).days, 6)
         self.assertEqual((first.test.start - first.validation.end).days, 6)
+        self.assertEqual(first.train.warmup_start, date(2020, 1, 1))
+        self.assertEqual(first.validation.warmup_start, first.validation.start - timedelta(days=3))
+        self.assertEqual(plan.indicator_warmup_days, 3)
+        self.assertEqual(plan.to_dict()["indicator_warmup_days"], 3)
+        self.assertIn("warmup_start", plan.to_dict()["folds"][0]["validation"])
         self.assertEqual(plan.final_holdout.end, date(2021, 12, 31))
         self.assertFalse(plan.to_dict()["overlapping_test_folds"])
         self.assertEqual(
@@ -319,6 +328,99 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(result.fold_results[0]["train_data_version_hash"])
         self.assertTrue(result.fold_results[0]["validation_data_version_hash"])
         self.assertTrue(result.fold_results[0]["test_data_version_hash"])
+
+    def test_indicator_warmup_days_are_recorded_and_excluded_from_metrics(self) -> None:
+        spec = parse_strategy_spec(trend_pullback_spec())
+        self.assertEqual(estimate_indicator_warmup_days(spec), 1)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            for offset in range(45):
+                write_breakout_day(data_root, date(2025, 1, 1) + timedelta(days=offset))
+
+            result = run_research_bar_validation(
+                spec=spec,
+                symbol_config=symbol_config(),
+                data_root=data_root,
+                experiment_id="exp_warmup",
+                date_from=date(2025, 1, 1),
+                date_to=date(2025, 2, 14),
+                train_days=5,
+                validation_days=5,
+                test_days=5,
+                step_days=5,
+                embargo_days=1,
+                final_holdout_days=5,
+                min_folds=1,
+                indicator_warmup_days=2,
+            )
+
+        first_fold = result.validation_plan.folds[0]
+        self.assertEqual(result.validation_plan.indicator_warmup_days, 2)
+        self.assertEqual(first_fold.validation.warmup_start, first_fold.validation.start - timedelta(days=2))
+        self.assertEqual(
+            result.fold_results[0]["fold"]["validation"]["warmup_start"],
+            first_fold.validation.warmup_start.isoformat(),
+        )
+        for fold_result in result.fold_results:
+            for split in ("train", "validation", "test"):
+                split_range = fold_result["fold"][split]
+                metrics = fold_result[f"{split}_metrics"]
+                self.assertLessEqual(
+                    metrics["trade_count"],
+                    ((date.fromisoformat(split_range["end"]) - date.fromisoformat(split_range["start"])).days + 1)
+                    * spec.risk["max_trades_per_day"],
+                )
+
+    def test_trim_backtest_result_removes_warmup_trades(self) -> None:
+        warmup_trade = Trade(
+            symbol="NQmain",
+            side="long",
+            entry_time=datetime(2025, 1, 1, 13, 30),
+            exit_time=datetime(2025, 1, 1, 13, 35),
+            entry_price=100,
+            exit_price=101,
+            contracts=1,
+            gross_pnl=20,
+            fees=0,
+            slippage_cost=0,
+            net_pnl=20,
+            entry_reason="warmup",
+            exit_reason="warmup",
+        )
+        evaluation_trade = Trade(
+            symbol="NQmain",
+            side="long",
+            entry_time=datetime(2025, 1, 2, 13, 30),
+            exit_time=datetime(2025, 1, 2, 13, 35),
+            entry_price=100,
+            exit_price=102,
+            contracts=1,
+            gross_pnl=40,
+            fees=0,
+            slippage_cost=0,
+            net_pnl=40,
+            entry_reason="evaluation",
+            exit_reason="evaluation",
+        )
+        result = BacktestResult(
+            strategy_name="warmup_test",
+            symbol="NQmain",
+            data_version_hash="hash",
+            cost_model={},
+            trades=[warmup_trade, evaluation_trade],
+            metrics=calculate_metrics([20, 40], [100_000, 100_020, 100_060], 100_000, 2),
+        )
+
+        trimmed = trim_backtest_result(
+            result,
+            start=date(2025, 1, 2),
+            end=date(2025, 1, 2),
+            starting_equity=100_000,
+        )
+
+        self.assertEqual([trade.entry_reason for trade in trimmed.trades], ["evaluation"])
+        self.assertEqual(trimmed.metrics.trade_count, 1)
+        self.assertEqual(trimmed.metrics.net_pnl, 40)
 
     def test_leaderboard_report_splits_passed_and_rejected_rows(self) -> None:
         spec = parse_strategy_spec(base_spec())

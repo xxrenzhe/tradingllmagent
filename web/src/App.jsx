@@ -10,6 +10,7 @@ const DEFAULT_FORMS = {
   experimentId: "nq_research_local",
   maxTrials: 3,
   executionMode: "bar",
+  indicatorWarmupDays: "",
   llmModel: "local-deterministic-template",
   llmParameters: "{\"temperature\":0}"
 };
@@ -212,6 +213,7 @@ export default function App() {
             <TextField label="Strategy Spec(s)" className="wide" value={forms.spec} onChange={(value) => updateForm("spec", value)} />
             <TextField label="Experiment ID" value={forms.experimentId} onChange={(value) => updateForm("experimentId", value)} />
             <TextField label="Max Trials" type="number" value={forms.maxTrials} onChange={(value) => updateForm("maxTrials", value)} />
+            <TextField label="Warmup Days" type="number" value={forms.indicatorWarmupDays} onChange={(value) => updateForm("indicatorWarmupDays", value)} />
             <TextField label="LLM Model" value={forms.llmModel} onChange={(value) => updateForm("llmModel", value)} />
             <TextField label="LLM Parameters" value={forms.llmParameters} onChange={(value) => updateForm("llmParameters", value)} />
             <label className="field">
@@ -381,6 +383,7 @@ function researchPayload(forms) {
     max_trials: Number(forms.maxTrials || 1),
     max_trials_per_family: Number(forms.maxTrials || 1),
     execution_mode: forms.executionMode,
+    indicator_warmup_days: optionalNumber(forms.indicatorWarmupDays),
     llm_model: forms.llmModel,
     llm_parameters: parseJsonObject(forms.llmParameters, "LLM Parameters")
   };
@@ -390,6 +393,10 @@ function researchPayload(forms) {
     payload.spec = specs[0] || forms.spec;
   }
   return payload;
+}
+
+function optionalNumber(value) {
+  return value === "" || value === null || value === undefined ? null : Number(value);
 }
 
 function parseJsonObject(value, label) {

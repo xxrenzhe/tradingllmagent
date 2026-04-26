@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from statistics import median
 from typing import Sequence
@@ -125,6 +125,7 @@ def run_research_bar_validation(
     embargo_days: int = 5,
     final_holdout_days: int = 365,
     min_folds: int = 1,
+    indicator_warmup_days: int | None = None,
     grid_metadata: ParameterGridMetadata | None = None,
     execution_mode: str = "bar",
     cost_model: CostModelConfig | None = None,
@@ -137,11 +138,16 @@ def run_research_bar_validation(
     if execution_mode not in {"bar", "tick"}:
         raise ValueError(f"Unsupported execution_mode: {execution_mode}")
     active_cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
+    warmup_days = (
+        estimate_indicator_warmup_days(spec)
+        if indicator_warmup_days is None
+        else indicator_warmup_days
+    )
     data_version_hash = _range_data_version_hash(
         spec,
         symbol_config,
         data_root,
-        date_from,
+        max(date_from - timedelta(days=warmup_days), date_from),
         date_to,
         execution_mode,
         active_cost_model,
@@ -156,6 +162,7 @@ def run_research_bar_validation(
         embargo_days=embargo_days,
         final_holdout_days=final_holdout_days,
         min_folds=min_folds,
+        indicator_warmup_days=warmup_days,
     )
     current_strategy_spec_hash = strategy_spec_hash(spec)
     current_prompt_hash = prompt_hash(spec)
@@ -185,6 +192,7 @@ def run_research_bar_validation(
             spec,
             symbol_config,
             data_root,
+            fold.train.warmup_start or fold.train.start,
             fold.train.start,
             fold.train.end,
             starting_equity,
@@ -195,6 +203,7 @@ def run_research_bar_validation(
             spec,
             symbol_config,
             data_root,
+            fold.validation.warmup_start or fold.validation.start,
             fold.validation.start,
             fold.validation.end,
             starting_equity,
@@ -205,6 +214,7 @@ def run_research_bar_validation(
             spec,
             symbol_config,
             data_root,
+            fold.test.warmup_start or fold.test.start,
             fold.test.start,
             fold.test.end,
             starting_equity,
@@ -273,6 +283,7 @@ def run_research_bar_validation(
         spec,
         symbol_config,
         data_root,
+        plan.final_holdout.warmup_start or plan.final_holdout.start,
         plan.final_holdout.start,
         plan.final_holdout.end,
         starting_equity,
@@ -378,6 +389,7 @@ def run_budgeted_research(
     embargo_days: int = 5,
     final_holdout_days: int = 365,
     min_folds: int = 1,
+    indicator_warmup_days: int | None = None,
     max_parameter_combinations: int = DEFAULT_PARAMETER_BUDGET,
     allow_high_parameter_budget: bool = False,
     execution_mode: str = "bar",
@@ -419,6 +431,7 @@ def run_budgeted_research(
                 embargo_days=embargo_days,
                 final_holdout_days=final_holdout_days,
                 min_folds=min_folds,
+                indicator_warmup_days=indicator_warmup_days,
                 grid_metadata=grid_metadata,
                 execution_mode=execution_mode,
                 cost_model=cost_model,
@@ -435,6 +448,7 @@ def _run_range(
     spec: StrategySpec,
     symbol_config: SymbolConfig,
     data_root: Path,
+    warmup_start: date,
     start: date,
     end: date,
     starting_equity: float,
@@ -442,24 +456,59 @@ def _run_range(
     cost_model: CostModelConfig | None,
 ) -> BacktestResult:
     if execution_mode == "bar":
-        files = [bar_path(data_root, spec.symbol, spec.timeframe, day) for day in iter_dates(start, end)]
-        return run_bar_backtest(
-            spec,
-            symbol_config,
-            files,
+        files = [bar_path(data_root, spec.symbol, spec.timeframe, day) for day in iter_dates(warmup_start, end)]
+        return trim_backtest_result(
+            run_bar_backtest(
+                spec,
+                symbol_config,
+                files,
+                starting_equity=starting_equity,
+                cost_model=cost_model,
+            ),
+            start=start,
+            end=end,
             starting_equity=starting_equity,
-            cost_model=cost_model,
         )
     if execution_mode == "tick":
-        files = [normalized_tick_path(data_root, spec.symbol, day) for day in iter_dates(start, end)]
-        return run_tick_backtest(
-            spec,
-            symbol_config,
-            files,
+        files = [normalized_tick_path(data_root, spec.symbol, day) for day in iter_dates(warmup_start, end)]
+        return trim_backtest_result(
+            run_tick_backtest(
+                spec,
+                symbol_config,
+                files,
+                starting_equity=starting_equity,
+                cost_model=cost_model,
+            ),
+            start=start,
+            end=end,
             starting_equity=starting_equity,
-            cost_model=cost_model,
         )
     raise ValueError(f"Unsupported execution_mode: {execution_mode}")
+
+
+def trim_backtest_result(
+    result: BacktestResult,
+    start: date,
+    end: date,
+    starting_equity: float,
+) -> BacktestResult:
+    trades = [
+        trade
+        for trade in result.trades
+        if start <= trade.entry_time.date() and trade.exit_time.date() <= end
+    ]
+    return BacktestResult(
+        result.strategy_name,
+        result.symbol,
+        result.data_version_hash,
+        result.cost_model,
+        trades,
+        calculate_trade_metrics(
+            trades,
+            starting_equity,
+            (end - start).days + 1,
+        ),
+    )
 
 
 def _range_data_version_hash(
@@ -617,6 +666,20 @@ def calculate_round_trip_cost(cost_model: CostModelConfig) -> float:
         * cost_model.point_value
     )
     return cost_model.round_trip_fees_usd + slippage_cost
+
+
+def estimate_indicator_warmup_days(spec: StrategySpec, bars_per_day: int = 390) -> int:
+    max_lookback = 0
+    for config in spec.indicators.values():
+        if not isinstance(config, dict):
+            continue
+        for key in ("window", "lookback", "lookback_minutes"):
+            value = config.get(key)
+            if isinstance(value, int | float):
+                max_lookback = max(max_lookback, int(value))
+    if max_lookback <= 1:
+        return 0
+    return max(1, (max_lookback + bars_per_day - 1) // bars_per_day)
 
 
 def build_overfitting_report(
