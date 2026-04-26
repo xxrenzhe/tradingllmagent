@@ -368,6 +368,8 @@ class RollingValidationTests(unittest.TestCase):
         self.assertIn("trial_count_penalty", rows[0]["overfitting_report"])
         self.assertIn("cost_sensitivity_report", rows[0])
         self.assertEqual(rows[0]["cost_sensitivity_report"]["baseline_round_trip_cost"], 15.0)
+        self.assertEqual(rows[0]["tick_replay_report"]["status"], "not_applicable")
+        self.assertFalse(rows[0]["tick_replay_report"]["strict_tick_replay_gap"])
         self.assertEqual(rows[0]["promotion_report"]["stage"], "direct_bar")
         self.assertEqual(rows[0]["strategy_card"]["name"], result.strategy_name)
         self.assertTrue(rows[0]["hard_gate_report"])
@@ -639,8 +641,39 @@ class RollingValidationTests(unittest.TestCase):
         self.assertTrue(result.data_version_hash)
         self.assertTrue(result.snapshot["fold_definition_hash"])
         self.assertGreater(result.aggregate_test_metrics.trade_count, 0)
+        self.assertEqual(result.tick_replay_report["status"], "native_tick_replay")
+        self.assertTrue(result.tick_replay_report["native_tick_replay"])
         self.assertEqual(rows[0]["execution_mode"], "tick")
+        self.assertEqual(rows[0]["tick_replay_report"]["status"], "native_tick_replay")
         self.assertTrue(rows[0]["data_version_hash"])
+
+    def test_tick_replay_report_flags_bar_from_tick_fallback(self) -> None:
+        spec = parse_strategy_spec(trend_pullback_spec())
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            for offset in range(40):
+                write_breakout_ticks(data_root, date(2025, 1, 1) + timedelta(days=offset))
+
+            result = run_research_bar_validation(
+                spec=spec,
+                symbol_config=symbol_config(),
+                data_root=data_root,
+                experiment_id="exp_tick_fallback",
+                date_from=date(2025, 1, 1),
+                date_to=date(2025, 2, 9),
+                train_days=5,
+                validation_days=5,
+                test_days=5,
+                step_days=5,
+                embargo_days=1,
+                final_holdout_days=5,
+                min_folds=1,
+                execution_mode="tick",
+            )
+
+        self.assertEqual(result.tick_replay_report["status"], "bar_from_tick_fallback")
+        self.assertTrue(result.tick_replay_report["strict_tick_replay_gap"])
+        self.assertFalse(result.tick_replay_report["native_tick_replay"])
 
     def test_bar_then_tick_promotes_candidate_and_records_strategy_card(self) -> None:
         spec = parse_strategy_spec(base_spec())

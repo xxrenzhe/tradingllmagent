@@ -238,6 +238,7 @@ def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
         "overfitting_report": result.get("overfitting_report", {}),
         "cost_sensitivity_report": result.get("cost_sensitivity_report", {}),
         "parameter_stability_report": result.get("parameter_stability_report", {}),
+        "tick_replay_report": result.get("tick_replay_report", {}),
         "promotion_report": result.get("promotion_report", {}),
         "strategy_card": result.get("strategy_card", {}),
         "hard_gate_report": result.get("hard_gate_report", []),

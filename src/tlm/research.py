@@ -86,6 +86,7 @@ class ResearchRunResult:
     overfitting_report: dict
     cost_sensitivity_report: dict
     parameter_stability_report: dict
+    tick_replay_report: dict
     final_holdout_data_version_hash: str
     final_holdout_metrics: BacktestMetrics
     gates: dict
@@ -131,6 +132,7 @@ class ResearchRunResult:
             "overfitting_report": self.overfitting_report,
             "cost_sensitivity_report": self.cost_sensitivity_report,
             "parameter_stability_report": self.parameter_stability_report,
+            "tick_replay_report": self.tick_replay_report,
             "final_holdout_data_version_hash": self.final_holdout_data_version_hash,
             "final_holdout_metrics": self.final_holdout_metrics.to_dict(),
             "gates": self.gates,
@@ -487,6 +489,7 @@ def run_research_bar_validation(
         overfitting_report=overfitting_report,
         cost_sensitivity_report=cost_sensitivity_report,
         parameter_stability_report=single_trial_parameter_stability_report(grid_metadata),
+        tick_replay_report=build_tick_replay_report(spec, execution_mode),
         final_holdout_data_version_hash=holdout.data_version_hash,
         final_holdout_metrics=holdout.metrics,
         gates=gates_payload,
@@ -734,6 +737,31 @@ def build_direct_promotion_report(execution_mode: str) -> dict:
         "bar_summary": None,
         "tick_summary": None,
         "final_holdout_used_for_promotion": False,
+    }
+
+
+def build_tick_replay_report(spec: StrategySpec, execution_mode: str) -> dict:
+    native_tick_families = {"opening_range_breakout"}
+    if execution_mode == "bar":
+        status = "not_applicable"
+        method = "bar_backtest"
+        native_tick_replay = False
+    elif spec.strategy_family in native_tick_families:
+        status = "native_tick_replay"
+        method = "bid_ask_tick_replay"
+        native_tick_replay = True
+    else:
+        status = "bar_from_tick_fallback"
+        method = "minute_bars_from_ticks"
+        native_tick_replay = False
+    return {
+        "status": status,
+        "execution_mode": execution_mode,
+        "strategy_family": spec.strategy_family,
+        "native_tick_replay": native_tick_replay,
+        "method": method,
+        "native_tick_families": sorted(native_tick_families),
+        "strict_tick_replay_gap": execution_mode == "tick" and not native_tick_replay,
     }
 
 
@@ -1471,6 +1499,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "overfitting_report": payload.get("overfitting_report", {}),
                 "cost_sensitivity_report": payload.get("cost_sensitivity_report", {}),
                 "parameter_stability_report": payload.get("parameter_stability_report", {}),
+                "tick_replay_report": payload.get("tick_replay_report", {}),
                 "promotion_report": payload.get("promotion_report", {}),
                 "strategy_card": payload.get("strategy_card", {}),
                 "hard_gate_report": payload.get("hard_gate_report", []),
