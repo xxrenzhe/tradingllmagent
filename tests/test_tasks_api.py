@@ -275,6 +275,57 @@ class TaskStoreTests(unittest.TestCase):
         self.assertTrue(artifacts["trades"])
         self.assertTrue(artifacts["distributions"]["by_direction"])
 
+    def test_run_task_deduplicates_duplicate_research_specs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            experiments_root = root / "experiments"
+            db_path = root / "tasks.sqlite3"
+            first_path = root / "opening_first.json"
+            duplicate_path = root / "opening_duplicate.json"
+            first_payload = base_spec()
+            duplicate_payload = base_spec()
+            duplicate_payload["name"] = "same_logic_different_name"
+            first_path.write_text(json.dumps(first_payload), encoding="utf-8")
+            duplicate_path.write_text(json.dumps(duplicate_payload), encoding="utf-8")
+            for offset in range(40):
+                write_breakout_day(data_root, datetime(2025, 1, 1).date() + timedelta(days=offset))
+            create_task(
+                db_path,
+                "research.run",
+                {
+                    "specs": [str(first_path), str(duplicate_path)],
+                    "date_from": "2025-01-01",
+                    "date_to": "2025-02-09",
+                    "experiment_id": "dedup",
+                    "data_root": str(data_root),
+                    "experiments_root": str(experiments_root),
+                    "max_trials_per_family": 1,
+                    "train_days": 5,
+                    "validation_days": 5,
+                    "test_days": 5,
+                    "step_days": 5,
+                    "embargo_days": 1,
+                    "final_holdout_days": 5,
+                    "min_folds": 1,
+                },
+                task_id="task_research_dedup",
+            )
+            completed = run_task(db_path, "task_research_dedup")
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["result"]["trials"], 1)
+        self.assertEqual(len(completed["result"]["result_paths"]), 1)
+        report = completed["result"]["deduplication_report"]
+        self.assertEqual(report["input_specs"], 2)
+        self.assertEqual(report["unique_specs"], 1)
+        self.assertEqual(report["skipped_specs"], 1)
+        self.assertEqual(report["skipped"][0]["strategy_name"], "same_logic_different_name")
+        self.assertEqual(report["skipped"][0]["strategy_family"], "opening_range_breakout")
+        self.assertEqual(report["skipped"][0]["reason"], "duplicate_strategy_logic")
+        self.assertTrue(report["skipped"][0]["strategy_logic_hash"])
+        self.assertEqual(report["skipped"][0]["duplicate_of"], first_payload["name"])
+
 
 class APIImportTests(unittest.TestCase):
     def test_api_module_imports_without_fastapi_installed(self) -> None:

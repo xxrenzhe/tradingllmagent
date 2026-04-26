@@ -24,6 +24,7 @@ from .storage import (
 )
 from .strategy import load_strategy_spec
 from .tasks import append_task_log, claim_queued_task, get_task, next_queued_task, update_task
+from .variants import strategy_logic_hash
 
 
 def run_task(task_db: Path, task_id: str) -> dict[str, Any]:
@@ -246,7 +247,7 @@ def execute_nt_export_signal(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
-    specs = _research_specs(payload)
+    specs, deduplication_report = deduplicate_research_specs(_research_specs(payload))
     config_dir = Path(payload.get("config_dir", "configs"))
     data_root = Path(payload.get("data_root", "data"))
     experiments_root = Path(payload.get("experiments_root", "experiments"))
@@ -300,7 +301,12 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
             output_path = experiments_root / result.experiment_id / "leaderboard.json"
             write_research_result(output_path, result)
             result_paths.append(str(output_path))
-    return {"trials": sum(by_family.values()), "by_family": by_family, "result_paths": result_paths}
+    return {
+        "trials": sum(by_family.values()),
+        "by_family": by_family,
+        "result_paths": result_paths,
+        "deduplication_report": deduplication_report,
+    }
 
 
 def _research_specs(payload: dict[str, Any]) -> list[Any]:
@@ -310,6 +316,34 @@ def _research_specs(payload: dict[str, Any]) -> list[Any]:
             raise ValueError("specs must be a non-empty list")
         return [load_strategy_spec(Path(str(path))) for path in paths]
     return [load_strategy_spec(Path(_required(payload, "spec")))]
+
+
+def deduplicate_research_specs(specs: list[Any]) -> tuple[list[Any], dict[str, Any]]:
+    unique_specs = []
+    skipped = []
+    seen: dict[str, Any] = {}
+    for spec in specs:
+        digest = strategy_logic_hash(spec)
+        duplicate_of = seen.get(digest)
+        if duplicate_of is not None:
+            skipped.append(
+                {
+                    "strategy_name": spec.name,
+                    "strategy_family": spec.strategy_family,
+                    "strategy_logic_hash": digest,
+                    "duplicate_of": duplicate_of.name,
+                    "reason": "duplicate_strategy_logic",
+                }
+            )
+            continue
+        seen[digest] = spec
+        unique_specs.append(spec)
+    return unique_specs, {
+        "input_specs": len(specs),
+        "unique_specs": len(unique_specs),
+        "skipped_specs": len(skipped),
+        "skipped": skipped,
+    }
 
 
 def _family_trial_quota(payload: dict[str, Any], strategy_family: str) -> int:
