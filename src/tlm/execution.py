@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
+import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +14,93 @@ ALLOWED_ACTIONS = {"buy", "sell", "sell_short", "buy_to_cover"}
 ALLOWED_MODES = {"offline_export", "nt8_sim", "paper_shadow", "micro_live", "live"}
 ENTRY_ACTIONS = {"buy", "sell_short"}
 READINESS_STAGES = {"paper_shadow", "nt8_sim", "micro_live", "controlled_live"}
+EXECUTION_INTENT_STATUSES = {
+    "created",
+    "risk_rejected",
+    "risk_approved",
+    "pending_human_approval",
+    "human_rejected",
+    "approved",
+    "submitted",
+    "accepted",
+    "partially_filled",
+    "filled",
+    "cancel_requested",
+    "cancelled",
+    "failed",
+    "reconciled",
+}
+TERMINAL_INTENT_STATUSES = {"risk_rejected", "human_rejected", "filled", "cancelled", "failed", "reconciled"}
+EXECUTION_STATUS_TRANSITIONS = {
+    "created": {"risk_rejected", "risk_approved"},
+    "risk_rejected": set(),
+    "risk_approved": {"pending_human_approval", "approved"},
+    "pending_human_approval": {"human_rejected", "approved"},
+    "human_rejected": set(),
+    "approved": {"submitted"},
+    "submitted": {"accepted", "failed"},
+    "accepted": {"partially_filled", "filled", "cancel_requested", "failed"},
+    "partially_filled": {"filled", "cancel_requested", "failed"},
+    "filled": {"reconciled"},
+    "cancel_requested": {"cancelled", "failed"},
+    "cancelled": {"reconciled"},
+    "failed": set(),
+    "reconciled": set(),
+}
+GATEWAY_DRIVEN_STATUSES = {"accepted", "partially_filled", "filled", "cancelled", "failed", "reconciled"}
+GATEWAY_SOURCE_EVENTS = {"gateway_update", "order_update", "reconciliation"}
+
+EXECUTION_STORE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS execution_intents (
+    intent_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS risk_decisions (
+    risk_decision_id TEXT PRIMARY KEY,
+    intent_id TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS human_approvals (
+    approval_id TEXT PRIMARY KEY,
+    intent_id TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    approver TEXT NOT NULL,
+    reason TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gateway_commands (
+    command_id TEXT PRIMARY KEY,
+    intent_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS order_updates (
+    update_id TEXT PRIMARY KEY,
+    intent_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS execution_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    intent_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    from_status TEXT,
+    to_status TEXT,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+"""
 
 
 @dataclass(frozen=True)
@@ -375,6 +463,220 @@ def evaluate_live_readiness(stage: str, evidence: dict[str, Any]) -> dict[str, A
         "evidence": evidence,
         "checked_at": datetime.now(UTC).isoformat(),
     }
+
+
+def connect_execution_store(path: Path) -> sqlite3.Connection:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path)
+    connection.execute("PRAGMA foreign_keys = ON")
+    connection.executescript(EXECUTION_STORE_SCHEMA)
+    return connection
+
+
+def create_execution_state_record(
+    path: Path,
+    intent: ExecutionIntent,
+    risk: dict[str, Any],
+) -> dict[str, Any]:
+    now = datetime.now(UTC).isoformat()
+    status = "risk_approved" if risk.get("passed") else "risk_rejected"
+    intent_payload = intent.to_dict()
+    intent_payload["status"] = status
+    with connect_execution_store(path) as connection:
+        connection.execute(
+            """
+            INSERT INTO execution_intents (intent_id, status, payload_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (intent.intent_id, status, json.dumps(intent_payload, sort_keys=True, default=str), now, now),
+        )
+        connection.execute(
+            """
+            INSERT INTO risk_decisions (risk_decision_id, intent_id, decision, payload_json, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                risk["risk_decision_id"],
+                intent.intent_id,
+                risk["decision"],
+                json.dumps(risk, sort_keys=True, default=str),
+                now,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO execution_audit_events (intent_id, event_type, from_status, to_status, payload_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                intent.intent_id,
+                "risk_decision",
+                "created",
+                status,
+                json.dumps({"risk_decision_id": risk["risk_decision_id"]}, sort_keys=True),
+                now,
+            ),
+        )
+    return load_execution_state(path, intent.intent_id)
+
+
+def load_execution_state(path: Path, intent_id: str) -> dict[str, Any]:
+    with connect_execution_store(path) as connection:
+        row = connection.execute(
+            """
+            SELECT intent_id, status, payload_json, created_at, updated_at
+            FROM execution_intents WHERE intent_id = ?
+            """,
+            (intent_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown intent_id: {intent_id}")
+        risk_rows = connection.execute(
+            "SELECT payload_json FROM risk_decisions WHERE intent_id = ? ORDER BY created_at ASC",
+            (intent_id,),
+        ).fetchall()
+        approval_rows = connection.execute(
+            """
+            SELECT approval_id, decision, approver, reason, created_at
+            FROM human_approvals WHERE intent_id = ? ORDER BY created_at ASC
+            """,
+            (intent_id,),
+        ).fetchall()
+        audit_rows = connection.execute(
+            """
+            SELECT event_type, from_status, to_status, payload_json, created_at
+            FROM execution_audit_events WHERE intent_id = ? ORDER BY id ASC
+            """,
+            (intent_id,),
+        ).fetchall()
+    return {
+        "intent_id": row[0],
+        "status": row[1],
+        "intent": json.loads(row[2]),
+        "created_at": row[3],
+        "updated_at": row[4],
+        "risk_decisions": [json.loads(item[0]) for item in risk_rows],
+        "human_approvals": [
+            {
+                "approval_id": item[0],
+                "decision": item[1],
+                "approver": item[2],
+                "reason": item[3],
+                "created_at": item[4],
+            }
+            for item in approval_rows
+        ],
+        "audit_events": [
+            {
+                "event_type": item[0],
+                "from_status": item[1],
+                "to_status": item[2],
+                "payload": json.loads(item[3]),
+                "created_at": item[4],
+            }
+            for item in audit_rows
+        ],
+    }
+
+
+def transition_execution_state(
+    path: Path,
+    intent_id: str,
+    to_status: str,
+    *,
+    event_type: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = payload or {}
+    state = load_execution_state(path, intent_id)
+    from_status = state["status"]
+    validate_execution_transition(from_status, to_status, event_type, payload)
+    now = datetime.now(UTC).isoformat()
+    with connect_execution_store(path) as connection:
+        if to_status == "approved" and payload.get("approval_id"):
+            connection.execute(
+                """
+                INSERT INTO human_approvals (approval_id, intent_id, decision, approver, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    payload["approval_id"],
+                    intent_id,
+                    "approved",
+                    str(payload.get("approver", "unknown")),
+                    payload.get("reason"),
+                    now,
+                ),
+            )
+        if event_type == "gateway_command" and payload.get("command"):
+            command = payload["command"]
+            connection.execute(
+                """
+                INSERT INTO gateway_commands (command_id, intent_id, payload_json, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    command["command_id"],
+                    intent_id,
+                    json.dumps(command, sort_keys=True, default=str),
+                    now,
+                ),
+            )
+        if event_type in GATEWAY_SOURCE_EVENTS:
+            connection.execute(
+                """
+                INSERT INTO order_updates (update_id, intent_id, status, payload_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    str(payload.get("update_id") or f"upd_{uuid4().hex}"),
+                    intent_id,
+                    to_status,
+                    json.dumps(payload, sort_keys=True, default=str),
+                    now,
+                ),
+            )
+        connection.execute(
+            "UPDATE execution_intents SET status = ?, updated_at = ? WHERE intent_id = ?",
+            (to_status, now, intent_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO execution_audit_events (intent_id, event_type, from_status, to_status, payload_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                intent_id,
+                event_type,
+                from_status,
+                to_status,
+                json.dumps(payload, sort_keys=True, default=str),
+                now,
+            ),
+        )
+    return load_execution_state(path, intent_id)
+
+
+def validate_execution_transition(
+    from_status: str,
+    to_status: str,
+    event_type: str,
+    payload: dict[str, Any],
+) -> None:
+    if from_status not in EXECUTION_INTENT_STATUSES:
+        raise ValueError(f"Unsupported execution status: {from_status}")
+    if to_status not in EXECUTION_INTENT_STATUSES:
+        raise ValueError(f"Unsupported execution status: {to_status}")
+    if from_status in TERMINAL_INTENT_STATUSES and to_status != "reconciled":
+        raise ValueError(f"Cannot transition terminal intent from {from_status} to {to_status}")
+    if to_status not in EXECUTION_STATUS_TRANSITIONS[from_status]:
+        raise ValueError(f"Invalid execution transition: {from_status} -> {to_status}")
+    if to_status == "approved" and not (payload.get("approval_id") or payload.get("automation_profile_id")):
+        raise ValueError("approved status requires human approval or automation profile")
+    if to_status == "submitted" and event_type != "gateway_command":
+        raise ValueError("submitted status requires gateway_command event")
+    if to_status in GATEWAY_DRIVEN_STATUSES and event_type not in (GATEWAY_SOURCE_EVENTS | {"gateway_command"}):
+        raise ValueError(f"{to_status} status requires gateway/order/reconciliation event")
 
 
 def _optional_float(value: Any) -> float | None:

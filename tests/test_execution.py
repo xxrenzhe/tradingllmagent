@@ -9,9 +9,11 @@ from tlm.api import build_execution_intent_response
 from tlm.execution import (
     build_paper_shadow_run,
     build_gateway_command,
+    create_execution_state_record,
     create_execution_intent,
     evaluate_live_readiness,
     evaluate_risk,
+    transition_execution_state,
     submit_paper_shadow,
 )
 
@@ -101,6 +103,114 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertEqual(command["idempotency_key"], intent.idempotency_key)
         self.assertEqual(command["strategy_freeze_id"], "freeze_001")
         self.assertEqual(command["risk_decision_id"], risk["risk_decision_id"])
+
+    def test_execution_state_machine_requires_approval_before_submission(self) -> None:
+        payload = sample_intent_payload()
+        payload["intent_id"] = "intent_state"
+        intent = create_execution_intent(payload)
+        risk = evaluate_risk(intent, payload["risk_profile"])
+        command = build_gateway_command(intent, risk)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "execution.sqlite3"
+            state = create_execution_state_record(db_path, intent, risk)
+
+            with self.assertRaisesRegex(ValueError, "approved status requires"):
+                transition_execution_state(db_path, intent.intent_id, "approved", event_type="human_approval")
+            pending = transition_execution_state(
+                db_path,
+                intent.intent_id,
+                "pending_human_approval",
+                event_type="approval_required",
+            )
+            approved = transition_execution_state(
+                db_path,
+                intent.intent_id,
+                "approved",
+                event_type="human_approval",
+                payload={"approval_id": "approval_1", "approver": "operator", "reason": "paper sim"},
+            )
+            submitted = transition_execution_state(
+                db_path,
+                intent.intent_id,
+                "submitted",
+                event_type="gateway_command",
+                payload={"command": command},
+            )
+
+        self.assertEqual(state["status"], "risk_approved")
+        self.assertEqual(pending["status"], "pending_human_approval")
+        self.assertEqual(approved["human_approvals"][0]["approval_id"], "approval_1")
+        self.assertEqual(submitted["status"], "submitted")
+        self.assertEqual(submitted["audit_events"][-1]["event_type"], "gateway_command")
+
+    def test_execution_state_machine_enforces_terminal_and_gateway_updates(self) -> None:
+        payload = sample_intent_payload()
+        payload["intent_id"] = "intent_terminal"
+        payload["risk_profile"] = {**payload["risk_profile"], "event_blackout": True}
+        intent = create_execution_intent(payload)
+        risk = evaluate_risk(intent, payload["risk_profile"])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "execution.sqlite3"
+            rejected = create_execution_state_record(db_path, intent, risk)
+            with self.assertRaisesRegex(ValueError, "terminal intent"):
+                transition_execution_state(
+                    db_path,
+                    intent.intent_id,
+                    "approved",
+                    event_type="human_approval",
+                    payload={"approval_id": "approval_bad", "approver": "operator"},
+                )
+
+        self.assertEqual(rejected["status"], "risk_rejected")
+
+    def test_execution_filled_status_requires_gateway_or_order_update(self) -> None:
+        payload = sample_intent_payload()
+        payload["intent_id"] = "intent_fill"
+        intent = create_execution_intent(payload)
+        risk = evaluate_risk(intent, payload["risk_profile"])
+        command = build_gateway_command(intent, risk)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "execution.sqlite3"
+            create_execution_state_record(db_path, intent, risk)
+            transition_execution_state(
+                db_path,
+                intent.intent_id,
+                "approved",
+                event_type="automation_profile",
+                payload={"automation_profile_id": "paper_shadow_auto"},
+            )
+            transition_execution_state(
+                db_path,
+                intent.intent_id,
+                "submitted",
+                event_type="gateway_command",
+                payload={"command": command},
+            )
+            accepted = transition_execution_state(
+                db_path,
+                intent.intent_id,
+                "accepted",
+                event_type="gateway_update",
+                payload={"update_id": "update_accepted"},
+            )
+            with self.assertRaisesRegex(ValueError, "requires gateway/order/reconciliation"):
+                transition_execution_state(
+                    db_path,
+                    intent.intent_id,
+                    "filled",
+                    event_type="manual_override",
+                )
+            filled = transition_execution_state(
+                db_path,
+                intent.intent_id,
+                "filled",
+                event_type="order_update",
+                payload={"update_id": "update_filled", "filled_qty": 1},
+            )
+
+        self.assertEqual(accepted["status"], "accepted")
+        self.assertEqual(filled["status"], "filled")
 
     def test_paper_shadow_appends_audit_event(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
