@@ -28,6 +28,12 @@ from .events import (
 )
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .monitor import build_monitor_report, write_monitor_outputs
+from .modules import (
+    discover_module_memory_files,
+    load_module_performance_memory,
+    strategy_module_catalog,
+    summarize_module_performance,
+)
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_quality_report
 from .research import load_leaderboard_report, run_budgeted_research, write_research_result
@@ -180,6 +186,30 @@ def cmd_strategy_validate(args: argparse.Namespace) -> int:
                 "symbol": spec.symbol,
                 "strategy_family": spec.strategy_family,
                 "timeframe": spec.timeframe,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def cmd_modules_list(args: argparse.Namespace) -> int:
+    print(json.dumps({"modules": strategy_module_catalog()}, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_modules_summary(args: argparse.Namespace) -> int:
+    if args.memory:
+        memory_paths = [Path(path) for path in args.memory]
+    else:
+        memory_paths = discover_module_memory_files(Path(args.experiments_root))
+    records = load_module_performance_memory(memory_paths)
+    print(
+        json.dumps(
+            {
+                "memory_files": [str(path) for path in memory_paths],
+                **summarize_module_performance(records),
             },
             indent=2,
             sort_keys=True,
@@ -575,6 +605,15 @@ def build_parser() -> argparse.ArgumentParser:
     validate = strategy_subparsers.add_parser("validate")
     validate.add_argument("--spec", required=True)
     validate.set_defaults(func=cmd_strategy_validate)
+
+    modules = subparsers.add_parser("modules")
+    modules_subparsers = modules.add_subparsers(dest="modules_command", required=True)
+    modules_list = modules_subparsers.add_parser("list")
+    modules_list.set_defaults(func=cmd_modules_list)
+    modules_summary = modules_subparsers.add_parser("summary")
+    modules_summary.add_argument("--experiments-root", default="experiments")
+    modules_summary.add_argument("--memory", action="append")
+    modules_summary.set_defaults(func=cmd_modules_summary)
 
     backtest = subparsers.add_parser("backtest")
     backtest_subparsers = backtest.add_subparsers(dest="backtest_command", required=True)

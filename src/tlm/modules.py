@@ -168,3 +168,102 @@ def write_module_performance_memory(path: Path, records: Sequence[dict[str, Any]
         + ("\n" if records else ""),
         encoding="utf-8",
     )
+
+
+def load_module_performance_memory(paths: Sequence[Path]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for path in paths:
+        if not path.exists():
+            continue
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid module memory JSONL at {path}:{line_number}") from exc
+            if not isinstance(payload, dict):
+                raise ValueError(f"Module memory row must be an object at {path}:{line_number}")
+            records.append(payload)
+    return records
+
+
+def discover_module_memory_files(experiments_root: Path) -> list[Path]:
+    return sorted(experiments_root.glob("*/module_performance.jsonl"))
+
+
+def summarize_module_performance(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    modules: dict[str, dict[str, Any]] = {}
+    for record in records:
+        module_id = str(record.get("module_id") or "unknown")
+        row = modules.setdefault(
+            module_id,
+            {
+                "module_id": module_id,
+                "catalog": _catalog_payload(module_id),
+                "evaluated_records": 0,
+                "passed_records": 0,
+                "rejected_records": 0,
+                "total_trade_count": 0,
+                "best_robustness_score": None,
+                "best_experiment_id": None,
+                "positive_expectancy_records": 0,
+                "timeframes": [],
+                "rejection_reasons": {},
+                "parameter_stability_statuses": {},
+            },
+        )
+        row["evaluated_records"] += 1
+        if record.get("passed"):
+            row["passed_records"] += 1
+        else:
+            row["rejected_records"] += 1
+        row["total_trade_count"] += int(record.get("trade_count") or 0)
+        timeframe = record.get("timeframe")
+        if timeframe and timeframe not in row["timeframes"]:
+            row["timeframes"].append(timeframe)
+        expectancy = record.get("expectancy")
+        if expectancy is not None and float(expectancy) > 0:
+            row["positive_expectancy_records"] += 1
+        score = record.get("robustness_score")
+        if score is not None and (
+            row["best_robustness_score"] is None or float(score) > row["best_robustness_score"]
+        ):
+            row["best_robustness_score"] = float(score)
+            row["best_experiment_id"] = record.get("experiment_id")
+        for reason in record.get("rejection_reasons", []):
+            reasons = row["rejection_reasons"]
+            reasons[reason] = reasons.get(reason, 0) + 1
+        status = record.get("parameter_stability_status")
+        if status:
+            statuses = row["parameter_stability_statuses"]
+            statuses[status] = statuses.get(status, 0) + 1
+
+    ordered = sorted(
+        modules.values(),
+        key=lambda item: (
+            -item["passed_records"],
+            -(item["best_robustness_score"] or -1),
+            item["module_id"],
+        ),
+    )
+    for row in ordered:
+        row["timeframes"] = sorted(row["timeframes"])
+        evaluated = max(row["evaluated_records"], 1)
+        row["pass_rate"] = row["passed_records"] / evaluated
+        row["positive_expectancy_ratio"] = row["positive_expectancy_records"] / evaluated
+    return {
+        "schema_version": 1,
+        "evaluated_records": len(records),
+        "module_count": len(ordered),
+        "modules": ordered,
+    }
+
+
+def strategy_module_catalog() -> list[dict[str, Any]]:
+    return [module.to_dict() for module in DEFAULT_STRATEGY_MODULES.values()]
+
+
+def _catalog_payload(module_id: str) -> dict[str, Any] | None:
+    module = DEFAULT_STRATEGY_MODULES.get(module_id)
+    return module.to_dict() if module else None
