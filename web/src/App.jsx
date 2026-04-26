@@ -33,6 +33,14 @@ export default function App() {
   const [selectedArtifactId, setSelectedArtifactId] = useState("");
   const [artifactDetail, setArtifactDetail] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [paperForm, setPaperForm] = useState({
+    strategyId: "",
+    account: "Sim101",
+    instrument: "NQ 06-26",
+    format: "csv"
+  });
+  const [paperReplay, setPaperReplay] = useState(null);
+  const [ntExport, setNtExport] = useState(null);
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
   const [filters, setFilters] = useState({ minSharpe: "2", onlyPassed: false });
@@ -110,6 +118,10 @@ export default function App() {
     setForms((current) => ({ ...current, [key]: value }));
   }
 
+  function updatePaperForm(key, value) {
+    setPaperForm((current) => ({ ...current, [key]: value }));
+  }
+
   async function runAction(label, fn) {
     setIsPending(true);
     try {
@@ -132,6 +144,41 @@ export default function App() {
       method: "POST",
       body: JSON.stringify(payload)
     });
+  }
+
+  function selectedStrategyResultPath() {
+    return paperForm.strategyId || (selectedArtifactId ? `experiments/${selectedArtifactId}/leaderboard.json` : "");
+  }
+
+  async function runPaperReplay() {
+    const strategyId = selectedStrategyResultPath();
+    if (!strategyId) {
+      throw new Error("Select a leaderboard row or enter a strategy result path.");
+    }
+    const payload = await apiRequest(apiBase, "/api/paper/replay", {
+      method: "POST",
+      body: JSON.stringify({ strategy_id: strategyId })
+    });
+    setPaperReplay(payload);
+    return { task_id: "paper replay completed" };
+  }
+
+  async function runNtExport() {
+    const strategyId = selectedStrategyResultPath();
+    if (!strategyId) {
+      throw new Error("Select a leaderboard row or enter a strategy result path.");
+    }
+    const payload = await apiRequest(apiBase, "/api/paper/nt-export-signal", {
+      method: "POST",
+      body: JSON.stringify({
+        strategy_id: strategyId,
+        format: paperForm.format,
+        account: paperForm.account,
+        instrument: paperForm.instrument
+      })
+    });
+    setNtExport(payload);
+    return { task_id: "nt export generated" };
   }
 
   async function refreshQuality() {
@@ -382,15 +429,41 @@ export default function App() {
 
       <Panel title="Paper Replay Boundary" kicker="No live brokerage controls">
         <p className="body-copy">
-          Paper replay and NinjaTrader export are API-only safety actions. The UI shows the boundary instead of placing real orders:
-          use `/api/paper/replay` for simulated fills and `/api/paper/nt-export-signal` for offline CSV/OIF content.
+          Paper replay and NinjaTrader export stay offline. These controls call local simulation/export APIs only and never place live orders.
         </p>
+        <div className="form-grid compact-form">
+          <TextField
+            label="Strategy Result Path"
+            className="wide"
+            value={paperForm.strategyId}
+            onChange={(value) => updatePaperForm("strategyId", value)}
+          />
+          <TextField label="Account" value={paperForm.account} onChange={(value) => updatePaperForm("account", value)} />
+          <TextField label="Instrument" value={paperForm.instrument} onChange={(value) => updatePaperForm("instrument", value)} />
+          <label className="field">
+            <span>Export Format</span>
+            <select value={paperForm.format} onChange={(event) => updatePaperForm("format", event.target.value)}>
+              <option value="csv">csv</option>
+              <option value="oif">oif</option>
+            </select>
+          </label>
+        </div>
+        <div className="button-row">
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Paper replay", runPaperReplay)}>
+            Run Paper Replay
+          </ActionButton>
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("NT export", runNtExport)}>
+            Generate NT Export
+          </ActionButton>
+        </div>
         <div className="safety-strip">
           <span>Local replay</span>
           <span>Offline export</span>
           <span>No Alpaca live account</span>
           <span>No NinjaTrader live bridge</span>
         </div>
+        {paperReplay ? <JsonBlock payload={paperReplay} /> : null}
+        {ntExport ? <JsonBlock payload={ntExport} /> : null}
       </Panel>
     </main>
   );

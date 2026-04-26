@@ -269,6 +269,10 @@ select {
   grid-column: 1 / -1;
 }
 
+.compact-form {
+  margin-top: 16px;
+}
+
 .button-row,
 .toolbar,
 .inline-form,
