@@ -9,9 +9,12 @@ from pathlib import Path
 
 from tlm.cli import main
 from tlm.modules import (
+    build_module_registry,
     load_module_performance_memory,
+    module_can_enter_runtime,
     strategy_module_catalog,
     summarize_module_performance,
+    transition_module_status,
     write_module_performance_memory,
 )
 
@@ -61,6 +64,71 @@ class ModuleMemoryTests(unittest.TestCase):
         self.assertEqual(module["best_experiment_id"], "exp_a")
         self.assertEqual(module["rejection_reasons"], {"annual_trades_test": 1})
         self.assertEqual(module["timeframes"], ["15m", "5m"])
+
+    def test_module_registry_promotes_and_audits_memory_summary(self) -> None:
+        registry = build_module_registry(
+            [
+                {
+                    "experiment_id": "exp_a",
+                    "module_id": "opening_range_breakout",
+                    "timeframe": "5m",
+                    "trade_count": 140,
+                    "expectancy": 8.0,
+                    "passed": True,
+                    "robustness_score": 0.7,
+                    "rejection_reasons": [],
+                    "parameter_stability_status": "stable",
+                }
+            ]
+        )
+        module = next(row for row in registry["modules"] if row["module_id"] == "opening_range_breakout")
+
+        self.assertEqual(module["module_version"], "1.0.0")
+        self.assertEqual(module["status"], "freeze_confirmed")
+        self.assertTrue(module["promotion_gates"]["passed"])
+        self.assertTrue(module_can_enter_runtime(module))
+        self.assertEqual(module["audit_events"][0]["event_type"], "memory_summary_applied")
+        self.assertTrue(module["next_retest_due"])
+
+    def test_module_registry_retires_persistent_failures(self) -> None:
+        records = [
+            {
+                "experiment_id": f"exp_{index}",
+                "module_id": "trend_pullback",
+                "timeframe": "5m",
+                "trade_count": 10,
+                "expectancy": -5.0,
+                "passed": False,
+                "robustness_score": None,
+                "rejection_reasons": ["event_window_risk"],
+                "parameter_stability_status": "unstable",
+            }
+            for index in range(3)
+        ]
+
+        module = next(row for row in build_module_registry(records)["modules"] if row["module_id"] == "trend_pullback")
+
+        self.assertEqual(module["status"], "retired")
+        self.assertIn("persistent_out_of_sample_failure", module["retirement_reasons"])
+        self.assertIn("event_window_risk", module["retirement_reasons"])
+        self.assertFalse(module_can_enter_runtime(module))
+
+    def test_module_status_transition_rejects_invalid_jump(self) -> None:
+        entry = {
+            "module_id": "opening_range_breakout",
+            "module_version": "1.0.0",
+            "family": "opening_range_breakout",
+            "status": "testing",
+            "retirement_reasons": [],
+            "audit_events": [],
+        }
+
+        candidate = transition_module_status(entry, "candidate", reason="passed_initial_gate")
+
+        self.assertEqual(candidate["status"], "candidate")
+        self.assertEqual(candidate["audit_events"][0]["details"]["from_status"], "testing")
+        with self.assertRaisesRegex(ValueError, "Invalid module status transition"):
+            transition_module_status(entry, "paper_shadow", reason="skip_required_gates")
 
     def test_module_memory_roundtrip_and_cli_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -18,10 +19,14 @@ class StrategyModule:
     minimum_sample_size: int
     tags: list[str]
     known_failure_modes: list[str]
+    module_version: str = "1.0.0"
+    status: str = "testing"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "module_id": self.module_id,
+            "module_version": self.module_version,
+            "status": self.status,
             "family": self.family,
             "description": self.description,
             "supported_timeframes": self.supported_timeframes,
@@ -96,6 +101,53 @@ DEFAULT_STRATEGY_MODULES = {
         known_failure_modes=["event_driven_gap", "opening_spread", "mode_instability"],
     ),
 }
+
+
+MODULE_STATUSES = {
+    "draft",
+    "testing",
+    "candidate",
+    "freeze_confirmed",
+    "paper_shadow",
+    "retired",
+}
+
+ALLOWED_STATUS_TRANSITIONS = {
+    "draft": {"testing", "retired"},
+    "testing": {"candidate", "retired"},
+    "candidate": {"freeze_confirmed", "testing", "retired"},
+    "freeze_confirmed": {"paper_shadow", "retired"},
+    "paper_shadow": {"freeze_confirmed", "retired"},
+    "retired": set(),
+}
+
+RUNTIME_ALLOWED_STATUSES = {"candidate", "freeze_confirmed", "paper_shadow"}
+
+
+@dataclass(frozen=True)
+class ModuleRegistryEntry:
+    module_id: str
+    module_version: str
+    family: str
+    status: str
+    promotion_gates: dict[str, Any]
+    retirement_reasons: list[str]
+    last_retest_at: str | None
+    next_retest_due: str | None
+    audit_events: list[dict[str, Any]]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "module_id": self.module_id,
+            "module_version": self.module_version,
+            "family": self.family,
+            "status": self.status,
+            "promotion_gates": self.promotion_gates,
+            "retirement_reasons": self.retirement_reasons,
+            "last_retest_at": self.last_retest_at,
+            "next_retest_due": self.next_retest_due,
+            "audit_events": self.audit_events,
+        }
 
 
 def infer_module_id(spec: StrategySpec) -> str:
@@ -262,6 +314,207 @@ def summarize_module_performance(records: Sequence[dict[str, Any]]) -> dict[str,
 
 def strategy_module_catalog() -> list[dict[str, Any]]:
     return [module.to_dict() for module in DEFAULT_STRATEGY_MODULES.values()]
+
+
+def build_module_registry(
+    records: Sequence[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+    retest_days: int = 30,
+) -> dict[str, Any]:
+    now = now or datetime.now(UTC)
+    summary = summarize_module_performance(records)
+    entries = []
+    seen = set()
+    for row in summary["modules"]:
+        module_id = row["module_id"]
+        seen.add(module_id)
+        entries.append(module_registry_entry_from_summary(row, now=now, retest_days=retest_days))
+    for module_id, module in DEFAULT_STRATEGY_MODULES.items():
+        if module_id in seen:
+            continue
+        entries.append(
+            ModuleRegistryEntry(
+                module_id=module_id,
+                module_version=module.module_version,
+                family=module.family,
+                status="testing",
+                promotion_gates={"status": "not_evaluated"},
+                retirement_reasons=[],
+                last_retest_at=None,
+                next_retest_due=None,
+                audit_events=[
+                    module_audit_event(
+                        module_id,
+                        "registry_initialized",
+                        "testing",
+                        {"reason": "catalog_module_without_memory"},
+                        now,
+                    )
+                ],
+            ).to_dict()
+        )
+    return {
+        "schema_version": 1,
+        "generated_at": now.isoformat(),
+        "module_count": len(entries),
+        "modules": sorted(entries, key=lambda item: item["module_id"]),
+    }
+
+
+def module_registry_entry_from_summary(
+    row: dict[str, Any],
+    *,
+    now: datetime,
+    retest_days: int,
+) -> dict[str, Any]:
+    module_id = row["module_id"]
+    catalog = row.get("catalog") or {}
+    gates = module_promotion_gates(row)
+    retirement_reasons = module_retirement_reasons(row)
+    if retirement_reasons:
+        status = "retired"
+    elif gates["passed"]:
+        status = "freeze_confirmed"
+    elif row.get("passed_records", 0) > 0:
+        status = "candidate"
+    else:
+        status = "testing"
+    last_retest_at = now.isoformat()
+    next_retest_due = (now + timedelta(days=retest_days)).isoformat() if status != "retired" else None
+    return ModuleRegistryEntry(
+        module_id=module_id,
+        module_version=str(catalog.get("module_version") or "1.0.0"),
+        family=str((catalog or {}).get("family") or module_id),
+        status=status,
+        promotion_gates=gates,
+        retirement_reasons=retirement_reasons,
+        last_retest_at=last_retest_at,
+        next_retest_due=next_retest_due,
+        audit_events=[
+            module_audit_event(
+                module_id,
+                "memory_summary_applied",
+                status,
+                {
+                    "evaluated_records": row["evaluated_records"],
+                    "passed_records": row["passed_records"],
+                    "pass_rate": row["pass_rate"],
+                    "retirement_reasons": retirement_reasons,
+                },
+                now,
+            )
+        ],
+    ).to_dict()
+
+
+def module_promotion_gates(row: dict[str, Any]) -> dict[str, Any]:
+    evaluated = int(row.get("evaluated_records") or 0)
+    passed = int(row.get("passed_records") or 0)
+    total_trade_count = int(row.get("total_trade_count") or 0)
+    positive_expectancy_ratio = float(row.get("positive_expectancy_ratio") or 0)
+    robustness_score = row.get("best_robustness_score")
+    minimum_sample_size = int((row.get("catalog") or {}).get("minimum_sample_size") or 75)
+    reasons = []
+    if evaluated <= 0:
+        reasons.append("no_evaluated_records")
+    if passed <= 0:
+        reasons.append("no_passing_records")
+    if total_trade_count < minimum_sample_size:
+        reasons.append("sample_size_below_module_minimum")
+    if positive_expectancy_ratio < 0.5:
+        reasons.append("positive_expectancy_ratio_below_threshold")
+    if robustness_score is None or float(robustness_score) < 0.5:
+        reasons.append("robustness_score_below_threshold")
+    return {
+        "passed": not reasons,
+        "reasons": reasons,
+        "minimum_sample_size": minimum_sample_size,
+        "total_trade_count": total_trade_count,
+        "positive_expectancy_ratio": positive_expectancy_ratio,
+        "best_robustness_score": robustness_score,
+    }
+
+
+def module_retirement_reasons(row: dict[str, Any]) -> list[str]:
+    reasons = []
+    rejection_reasons = row.get("rejection_reasons") or {}
+    if rejection_reasons.get("event_window_drawdown") or rejection_reasons.get("event_window_risk"):
+        reasons.append("event_window_risk")
+    if rejection_reasons.get("slippage_sensitivity") or rejection_reasons.get("cost_stress"):
+        reasons.append("slippage_sensitive")
+    if row.get("evaluated_records", 0) >= 3 and row.get("passed_records", 0) == 0:
+        reasons.append("persistent_out_of_sample_failure")
+    if row.get("total_trade_count", 0) < int((row.get("catalog") or {}).get("minimum_sample_size") or 75):
+        reasons.append("sample_size_insufficient")
+    return sorted(set(reasons))
+
+
+def transition_module_status(
+    entry: dict[str, Any],
+    new_status: str,
+    *,
+    reason: str,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    now = now or datetime.now(UTC)
+    current_status = str(entry.get("status", "draft"))
+    if new_status not in MODULE_STATUSES:
+        raise ValueError(f"Unsupported module status: {new_status}")
+    if new_status != current_status and new_status not in ALLOWED_STATUS_TRANSITIONS[current_status]:
+        raise ValueError(f"Invalid module status transition: {current_status} -> {new_status}")
+    updated = dict(entry)
+    updated["status"] = new_status
+    if new_status == "retired" and reason not in updated.get("retirement_reasons", []):
+        updated["retirement_reasons"] = list(updated.get("retirement_reasons", [])) + [reason]
+    updated["audit_events"] = list(updated.get("audit_events", [])) + [
+        module_audit_event(
+            str(entry["module_id"]),
+            "status_transition",
+            new_status,
+            {"from_status": current_status, "reason": reason},
+            now,
+        )
+    ]
+    return updated
+
+
+def module_can_enter_runtime(entry: dict[str, Any]) -> bool:
+    return str(entry.get("status")) in RUNTIME_ALLOWED_STATUSES
+
+
+def validate_freeze_confirmed_strategy_module(spec: StrategySpec, entry: dict[str, Any]) -> None:
+    if not infer_module_id(spec):
+        raise ValueError("freeze-confirmed strategy must declare module_id")
+    if str(entry.get("status")) == "retired":
+        raise ValueError("retired module cannot enter runtime monitor or execution intent")
+    if str(entry.get("module_id")) != infer_module_id(spec):
+        raise ValueError("strategy module_id does not match registry entry")
+
+
+def write_module_registry(path: Path, registry: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(registry, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+
+
+def load_module_registry(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def module_audit_event(
+    module_id: str,
+    event_type: str,
+    status: str,
+    details: dict[str, Any],
+    now: datetime,
+) -> dict[str, Any]:
+    return {
+        "module_id": module_id,
+        "event_type": event_type,
+        "status": status,
+        "details": details,
+        "recorded_at": now.isoformat(),
+    }
 
 
 def _catalog_payload(module_id: str) -> dict[str, Any] | None:
