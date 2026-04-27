@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from math import log, sqrt
 from pathlib import Path
 from statistics import median
-from typing import Sequence
+from typing import Any, Callable, Sequence
 
 import duckdb
 
@@ -29,7 +29,7 @@ from .modules import (
 )
 from .snapshot import research_snapshot
 from .storage import bar_path, normalized_tick_path
-from .strategy import StrategySpec, parse_strategy_spec
+from .strategy import StrategySpec, StrategySpecError, load_strategy_spec, parse_strategy_spec
 from .variants import (
     DEFAULT_PARAMETER_BUDGET,
     ParameterGridMetadata,
@@ -130,6 +130,7 @@ class ResearchRunResult:
             "round_trip_cost": self.round_trip_cost,
             "aggregate_validation_metrics": self.aggregate_validation_metrics.to_dict(),
             "aggregate_test_metrics": self.aggregate_test_metrics.to_dict(),
+            "win_probability_test": test_trade_win_rate(self),
             "overlapping_test_folds": self.overlapping_test_folds,
             "non_overlap_test_fold_indexes": self.non_overlap_test_fold_indexes,
             "non_overlap_test_metrics": self.non_overlap_test_metrics.to_dict(),
@@ -150,6 +151,300 @@ class ResearchRunResult:
             "next_round_suggestions": self.next_round_suggestions,
             "final_holdout_policy": self.final_holdout_policy,
         }
+
+
+@dataclass(frozen=True)
+class StrategyTargetCriteria:
+    min_annual_trades: float = 1000
+    min_sharpe: float = 2
+    min_win_probability: float = 0.53
+    split: str = "test"
+
+    def to_dict(self) -> dict:
+        return {
+            "min_annual_trades": self.min_annual_trades,
+            "min_sharpe": self.min_sharpe,
+            "min_win_probability": self.min_win_probability,
+            "split": self.split,
+        }
+
+
+@dataclass(frozen=True)
+class StrategyTargetEvaluation:
+    experiment_id: str
+    strategy_name: str
+    strategy_spec_hash: str
+    passed: bool
+    reasons: list[str]
+    metrics: dict
+    target: StrategyTargetCriteria
+
+    def to_dict(self) -> dict:
+        return {
+            "experiment_id": self.experiment_id,
+            "strategy_name": self.strategy_name,
+            "strategy_spec_hash": self.strategy_spec_hash,
+            "passed": self.passed,
+            "reasons": self.reasons,
+            "metrics": self.metrics,
+            "target": self.target.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
+class StrategyDiscoveryResult:
+    discovery_id: str
+    target: StrategyTargetCriteria
+    max_rounds: int
+    trials_per_round: int
+    target_count: int
+    completed_rounds: int
+    stop_reason: str
+    proposal_audits: list[dict]
+    attempts: list[StrategyTargetEvaluation]
+    results: list[ResearchRunResult]
+
+    @property
+    def qualified_attempts(self) -> list[StrategyTargetEvaluation]:
+        return [attempt for attempt in self.attempts if attempt.passed]
+
+    def to_dict(self) -> dict:
+        qualified = [attempt.to_dict() for attempt in self.qualified_attempts]
+        attempts = [attempt.to_dict() for attempt in self.attempts]
+        return {
+            "discovery_id": self.discovery_id,
+            "target": self.target.to_dict(),
+            "max_rounds": self.max_rounds,
+            "trials_per_round": self.trials_per_round,
+            "target_count": self.target_count,
+            "completed_rounds": self.completed_rounds,
+            "total_trials": len(self.results),
+            "qualified_count": len(qualified),
+            "stop_reason": self.stop_reason,
+            "conclusion": "target_found" if qualified else "target_not_found",
+            "proposal_audits": self.proposal_audits,
+            "attempts": attempts,
+            "qualified_strategies": qualified,
+            "result_experiment_ids": [result.experiment_id for result in self.results],
+        }
+
+
+ResearchRunner = Callable[..., list[ResearchRunResult]]
+
+
+def discover_strategy_seed_specs(
+    strategies_root: Path = Path("strategies"),
+    spec_paths: Sequence[str | Path] | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+    strategy_families: Sequence[str] | None = None,
+    limit: int | None = None,
+) -> tuple[list[StrategySpec], dict[str, Any]]:
+    families = set(strategy_families or [])
+    if spec_paths:
+        candidates = [Path(path) for path in spec_paths]
+    else:
+        candidates = sorted(
+            {
+                *strategies_root.glob("*.json"),
+                *strategies_root.glob("*.yaml"),
+            }
+        )
+    selected: list[StrategySpec] = []
+    skipped: list[dict[str, Any]] = []
+    for path in candidates:
+        try:
+            spec = load_strategy_spec(path)
+        except StrategySpecError as exc:
+            skipped.append({"path": str(path), "reason": str(exc)})
+            continue
+        if symbol and spec.symbol != symbol:
+            skipped.append({"path": str(path), "strategy_name": spec.name, "reason": "symbol_mismatch"})
+            continue
+        if timeframe and spec.timeframe != timeframe:
+            skipped.append({"path": str(path), "strategy_name": spec.name, "reason": "timeframe_mismatch"})
+            continue
+        if families and spec.strategy_family not in families:
+            skipped.append({"path": str(path), "strategy_name": spec.name, "reason": "family_mismatch"})
+            continue
+        selected.append(spec)
+        if limit is not None and len(selected) >= limit:
+            break
+    report = {
+        "strategies_root": str(strategies_root),
+        "candidate_count": len(candidates),
+        "selected_count": len(selected),
+        "selected": [
+            {
+                "strategy_name": spec.name,
+                "strategy_family": spec.strategy_family,
+                "symbol": spec.symbol,
+                "timeframe": spec.timeframe,
+            }
+            for spec in selected
+        ],
+        "skipped": skipped,
+    }
+    return selected, report
+
+
+def evaluate_strategy_target(
+    result: ResearchRunResult,
+    target: StrategyTargetCriteria | None = None,
+) -> StrategyTargetEvaluation:
+    target = target or StrategyTargetCriteria()
+    if target.split != "test":
+        raise ValueError(f"Unsupported target split: {target.split}")
+    metrics = result.aggregate_test_metrics
+    win_probability = test_trade_win_rate(result)
+    reasons = []
+    if metrics.annual_trades <= target.min_annual_trades:
+        reasons.append("annual_trades_below_target")
+    if metrics.sharpe is None or metrics.sharpe <= target.min_sharpe:
+        reasons.append("sharpe_below_target")
+    if win_probability is None or win_probability <= target.min_win_probability:
+        reasons.append("win_probability_below_target")
+    return StrategyTargetEvaluation(
+        experiment_id=result.experiment_id,
+        strategy_name=result.strategy_name,
+        strategy_spec_hash=result.strategy_spec_hash,
+        passed=not reasons,
+        reasons=reasons,
+        metrics={
+            "annual_trades": metrics.annual_trades,
+            "sharpe": metrics.sharpe,
+            "win_probability": win_probability,
+            "trade_count": metrics.trade_count,
+            "net_pnl": metrics.net_pnl,
+            "profit_factor": metrics.profit_factor,
+            "max_drawdown": metrics.max_drawdown,
+        },
+        target=target,
+    )
+
+
+def run_llm_target_discovery(
+    seed_spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    data_root: Path,
+    discovery_id: str,
+    date_from: date,
+    date_to: date,
+    max_rounds: int,
+    trials_per_round: int = 1,
+    target_count: int = 1,
+    target: StrategyTargetCriteria | None = None,
+    starting_equity: float = 100_000,
+    train_days: int = 730,
+    validation_days: int = 182,
+    test_days: int = 182,
+    step_days: int = 91,
+    embargo_days: int = 5,
+    final_holdout_days: int = 365,
+    min_folds: int = 1,
+    indicator_warmup_days: int | None = None,
+    max_parameter_combinations: int = DEFAULT_PARAMETER_BUDGET,
+    allow_high_parameter_budget: bool = False,
+    execution_mode: str = "bar",
+    cost_model: CostModelConfig | None = None,
+    config_dir: Path = Path("configs"),
+    random_seed: int = 0,
+    llm_model: str = "local-deterministic-template",
+    llm_parameters: dict | None = None,
+    llm_adapter: Any | None = None,
+    research_runner: ResearchRunner | None = None,
+) -> StrategyDiscoveryResult:
+    if max_rounds <= 0:
+        raise ValueError("max_rounds must be positive")
+    if trials_per_round <= 0:
+        raise ValueError("trials_per_round must be positive")
+    if target_count <= 0:
+        raise ValueError("target_count must be positive")
+    target = target or StrategyTargetCriteria()
+    runner = research_runner or run_budgeted_research
+    if llm_adapter is None:
+        from .llm import create_llm_adapter
+
+        llm_adapter = create_llm_adapter(llm_model, llm_parameters)
+
+    current_seed = seed_spec
+    feedback: list[dict[str, Any]] = []
+    proposal_audits: list[dict] = []
+    attempts: list[StrategyTargetEvaluation] = []
+    results: list[ResearchRunResult] = []
+    seen_strategy_hashes: set[str] = set()
+    completed_rounds = 0
+    stop_reason = "budget_exhausted"
+
+    for round_index in range(max_rounds):
+        proposal = llm_adapter.propose(current_seed, feedback=feedback)
+        proposal_audits.append(
+            {
+                **proposal.audit_record(),
+                "round_index": round_index,
+                "feedback_count": len(feedback),
+            }
+        )
+        proposed_hash = strategy_spec_hash(proposal.strategy)
+        if proposed_hash in seen_strategy_hashes:
+            completed_rounds += 1
+            continue
+        seen_strategy_hashes.add(proposed_hash)
+        round_results = runner(
+            seed_spec=proposal.strategy,
+            symbol_config=symbol_config,
+            data_root=data_root,
+            experiment_id=f"{discovery_id}_round_{round_index:04d}",
+            date_from=date_from,
+            date_to=date_to,
+            max_trials=trials_per_round,
+            starting_equity=starting_equity,
+            train_days=train_days,
+            validation_days=validation_days,
+            test_days=test_days,
+            step_days=step_days,
+            embargo_days=embargo_days,
+            final_holdout_days=final_holdout_days,
+            min_folds=min_folds,
+            indicator_warmup_days=indicator_warmup_days,
+            max_parameter_combinations=max_parameter_combinations,
+            allow_high_parameter_budget=allow_high_parameter_budget,
+            execution_mode=execution_mode,
+            cost_model=cost_model,
+            config_dir=config_dir,
+            random_seed=random_seed + round_index,
+            llm_model=llm_model,
+            llm_parameters=llm_parameters,
+        )
+        results.extend(round_results)
+        attempts.extend(evaluate_strategy_target(result, target) for result in round_results)
+
+        from .llm import train_validation_feedback
+
+        feedback.extend(train_validation_feedback(round_results))
+        current_seed = proposal.strategy
+        completed_rounds += 1
+        if len([attempt for attempt in attempts if attempt.passed]) >= target_count:
+            stop_reason = "target_found"
+            break
+
+    return StrategyDiscoveryResult(
+        discovery_id=discovery_id,
+        target=target,
+        max_rounds=max_rounds,
+        trials_per_round=trials_per_round,
+        target_count=target_count,
+        completed_rounds=completed_rounds,
+        stop_reason=stop_reason,
+        proposal_audits=proposal_audits,
+        attempts=attempts,
+        results=results,
+    )
+
+
+def write_strategy_discovery_result(path: Path, discovery: StrategyDiscoveryResult) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(discovery.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def run_research_bar_validation(
@@ -1579,6 +1874,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "net_pnl_test": payload["aggregate_test_metrics"]["net_pnl"],
                 "sharpe_test": payload["aggregate_test_metrics"]["sharpe"],
                 "annual_trades_test": payload["aggregate_test_metrics"]["annual_trades"],
+                "win_probability_test": payload.get("win_probability_test"),
                 "net_pnl_non_overlap_test": payload.get("non_overlap_test_metrics", {}).get("net_pnl"),
                 "sharpe_non_overlap_test": payload.get("non_overlap_test_metrics", {}).get("sharpe"),
                 "annual_trades_non_overlap_test": (
