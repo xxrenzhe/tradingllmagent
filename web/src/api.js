@@ -28,6 +28,7 @@ export const API_PATHS = {
   researchIterations: "/api/experiments/iterations",
   researchProposals: "/api/experiments/proposals",
   researchRuns: "/api/experiments/research-runs",
+  researchTargetDiscovery: "/api/experiments/target-discovery",
   taskCancel: (taskId) => `/api/tasks/${taskId}/cancel`,
   taskEvents: (taskId) => `/api/tasks/${taskId}/events`,
   taskRun: (taskId) => `/api/tasks/${taskId}/run`,

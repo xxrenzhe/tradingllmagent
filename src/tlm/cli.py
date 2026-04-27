@@ -38,7 +38,16 @@ from .modules import (
 )
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_quality_report
-from .research import load_leaderboard_report, run_budgeted_research, write_research_result
+from .research import (
+    StrategyTargetCriteria,
+    discover_strategy_seed_specs,
+    load_leaderboard_report,
+    run_budgeted_research,
+    run_llm_seed_pool_target_discovery,
+    run_llm_target_discovery,
+    write_research_result,
+    write_strategy_discovery_result,
+)
 from .storage import (
     bar_path,
     compute_data_version_hash,
@@ -420,7 +429,7 @@ def cmd_research_run(args: argparse.Namespace) -> int:
             "max_trials": args.max_trials,
             "llm_model": args.llm_model,
             "llm_parameters": args.llm_parameters,
-            "seed_spec": str(Path(args.spec)),
+            "seed_spec": str(Path(args.spec)) if args.spec else None,
         },
     )
     results = run_budgeted_research(
@@ -526,6 +535,161 @@ def cmd_research_propose(args: argparse.Namespace) -> int:
                 "prompt_hash": proposal.prompt_hash,
                 "response_hash": proposal.response_hash,
                 "feedback_count": len(feedback or []),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def cmd_research_discover_target(args: argparse.Namespace) -> int:
+    if args.spec:
+        spec = load_strategy_spec(Path(args.spec))
+        seed_specs = [spec]
+        seed_selection_report = {
+            "mode": "explicit_spec",
+            "candidate_count": 1,
+            "selected_count": 1,
+            "selected_paths": [str(Path(args.spec))],
+            "selected": [
+                {
+                    "strategy_name": spec.name,
+                    "strategy_family": spec.strategy_family,
+                    "symbol": spec.symbol,
+                    "timeframe": spec.timeframe,
+                }
+            ],
+            "skipped": [],
+        }
+    else:
+        seed_specs, seed_selection_report = discover_strategy_seed_specs(
+            strategies_root=Path(args.strategies_root),
+            spec_paths=args.specs,
+            symbol=args.symbol,
+            timeframe=args.timeframe,
+            strategy_families=args.strategy_families,
+            limit=args.max_seed_strategies,
+        )
+        if not seed_specs:
+            raise SystemExit("No strategy seed specs matched the discovery filters")
+        spec = seed_specs[0]
+    symbol = get_symbol(args.symbol or spec.symbol, Path(args.config_dir))
+    cost_model = get_cost_model(spec.cost_model, Path(args.config_dir))
+    date_from = parse_date(args.date_from)
+    date_to = parse_date(args.date_to)
+    discovery_id = args.experiment_id or f"{spec.name}_target_discovery_{date_from.isoformat()}_{date_to.isoformat()}"
+    target = StrategyTargetCriteria(
+        min_annual_trades=args.min_annual_trades,
+        min_sharpe=args.min_sharpe,
+        min_win_probability=args.min_win_probability,
+    )
+    discovery_kwargs = {
+        "symbol_config": symbol,
+        "data_root": Path(args.data_root),
+        "discovery_id": discovery_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "max_rounds": args.max_rounds,
+        "trials_per_round": args.trials_per_round,
+        "target_count": args.target_count,
+        "target": target,
+        "starting_equity": args.starting_equity,
+        "train_days": args.train_days,
+        "validation_days": args.validation_days,
+        "test_days": args.test_days,
+        "step_days": args.step_days,
+        "embargo_days": args.embargo_days,
+        "final_holdout_days": args.final_holdout_days,
+        "min_folds": args.min_folds,
+        "indicator_warmup_days": args.indicator_warmup_days,
+        "max_parameter_combinations": args.max_parameter_combinations,
+        "allow_high_parameter_budget": args.allow_high_parameter_budget,
+        "execution_mode": args.execution_mode,
+        "cost_model": cost_model,
+        "config_dir": Path(args.config_dir),
+        "random_seed": args.random_seed,
+        "llm_model": args.llm_model,
+        "llm_parameters": args.llm_parameters,
+    }
+    if args.spec:
+        discovery = run_llm_target_discovery(seed_spec=spec, **discovery_kwargs)
+    else:
+        discovery = run_llm_seed_pool_target_discovery(
+            seed_specs=seed_specs,
+            seed_selection_report=seed_selection_report,
+            **discovery_kwargs,
+        )
+    experiments_root = Path(args.experiments_root)
+    experiment_db = Path(args.experiment_db)
+    record_experiment(
+        experiment_db,
+        experiment_id=discovery_id,
+        symbol=args.symbol or spec.symbol,
+        status="running",
+        metadata={
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "execution_mode": args.execution_mode,
+            "target": target.to_dict(),
+            "max_rounds": args.max_rounds,
+            "trials_per_round": args.trials_per_round,
+            "target_count": args.target_count,
+            "llm_model": args.llm_model,
+            "llm_parameters": args.llm_parameters,
+            "seed_spec": str(Path(args.spec)),
+            "seed_selection_report": seed_selection_report,
+        },
+    )
+    for audit in discovery.proposal_audits:
+        append_audit_log(experiments_root / discovery_id / "llm_audit.jsonl", audit)
+        record_audit_event(
+            experiment_db,
+            experiment_id=discovery_id,
+            event_type="llm_target_discovery_proposal",
+            payload=audit,
+        )
+    result_paths = []
+    for result in discovery.results:
+        output_path = experiments_root / result.experiment_id / "leaderboard.json"
+        write_research_result(output_path, result)
+        record_trial(experiment_db, discovery_id, result)
+        evaluation = next(
+            attempt for attempt in discovery.attempts if attempt.experiment_id == result.experiment_id
+        )
+        record_audit_event(
+            experiment_db,
+            experiment_id=discovery_id,
+            trial_id=result.experiment_id,
+            event_type="target_discovery_trial_completed",
+            payload={
+                "trial_id": result.experiment_id,
+                "strategy_spec_hash": result.strategy_spec_hash,
+                "prompt_hash": result.prompt_hash,
+                "target_evaluation": evaluation.to_dict(),
+            },
+        )
+        result_paths.append(str(output_path))
+    summary_path = experiments_root / discovery_id / "target_discovery.json"
+    write_strategy_discovery_result(summary_path, discovery)
+    record_experiment(
+        experiment_db,
+        experiment_id=discovery_id,
+        symbol=args.symbol or spec.symbol,
+        status="completed",
+        metadata={
+            **discovery.to_dict(),
+            "result_paths": result_paths,
+            "summary_path": str(summary_path),
+        },
+    )
+    print(
+        json.dumps(
+            {
+                **discovery.to_dict(),
+                "result_paths": result_paths,
+                "summary_path": str(summary_path),
+                "seed_selection_report": seed_selection_report,
             },
             indent=2,
             sort_keys=True,
@@ -880,6 +1044,46 @@ def build_parser() -> argparse.ArgumentParser:
     propose.add_argument("--audit-log")
     propose.add_argument("--output")
     propose.set_defaults(func=cmd_research_propose)
+
+    discover = research_subparsers.add_parser("discover-target")
+    discover.add_argument("--spec")
+    discover.add_argument("--specs", nargs="*")
+    discover.add_argument("--strategies-root", default="strategies")
+    discover.add_argument("--strategy-families", nargs="*")
+    discover.add_argument("--max-seed-strategies", type=int)
+    discover.add_argument("--symbol")
+    discover.add_argument("--timeframe")
+    discover.add_argument("--from", dest="date_from", required=True)
+    discover.add_argument("--to", dest="date_to", required=True)
+    discover.add_argument("--experiment-id")
+    discover.add_argument("--experiments-root", default="experiments")
+    discover.add_argument("--experiment-db", default="experiments/research.sqlite3")
+    discover.add_argument("--max-rounds", type=int, default=10)
+    discover.add_argument("--trials-per-round", type=int, default=1)
+    discover.add_argument("--target-count", type=int, default=1)
+    discover.add_argument("--min-annual-trades", type=float, default=1000)
+    discover.add_argument("--min-sharpe", type=float, default=2)
+    discover.add_argument("--min-win-probability", type=float, default=0.53)
+    discover.add_argument("--execution-mode", choices=["bar", "tick", "bar_then_tick"], default="bar")
+    discover.add_argument("--random-seed", type=int, default=0)
+    discover.add_argument("--llm-model", default="local-deterministic-template")
+    discover.add_argument("--llm-parameters", type=parse_json_object, default={})
+    discover.add_argument(
+        "--max-parameter-combinations",
+        type=int,
+        default=DEFAULT_PARAMETER_BUDGET,
+    )
+    discover.add_argument("--allow-high-parameter-budget", action="store_true")
+    discover.add_argument("--starting-equity", type=float, default=100_000)
+    discover.add_argument("--train-days", type=int, default=730)
+    discover.add_argument("--validation-days", type=int, default=182)
+    discover.add_argument("--test-days", type=int, default=182)
+    discover.add_argument("--step-days", type=int, default=91)
+    discover.add_argument("--embargo-days", type=int, default=5)
+    discover.add_argument("--final-holdout-days", type=int, default=365)
+    discover.add_argument("--min-folds", type=int, default=1)
+    discover.add_argument("--indicator-warmup-days", type=int)
+    discover.set_defaults(func=cmd_research_discover_target)
 
     report = subparsers.add_parser("report")
     report_subparsers = report.add_subparsers(dest="report_command", required=True)

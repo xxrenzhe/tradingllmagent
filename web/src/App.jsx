@@ -9,6 +9,15 @@ const DEFAULT_FORMS = {
   spec: "strategies/example_opening_range_breakout.yaml",
   experimentId: "nq_research_local",
   maxTrials: 3,
+  maxRounds: 10,
+  trialsPerRound: 1,
+  targetCount: 1,
+  maxSeedStrategies: 6,
+  minAnnualTrades: 1000,
+  minSharpe: 2,
+  minWinProbability: 0.53,
+  targetSeedMode: "auto",
+  strategiesRoot: "strategies",
   executionMode: "bar",
   indicatorWarmupDays: "",
   llmModel: "local-deterministic-template",
@@ -528,9 +537,24 @@ export default function App() {
             <TextField label="Strategy Spec(s)" className="wide" value={forms.spec} onChange={(value) => updateForm("spec", value)} />
             <TextField label="Experiment ID" value={forms.experimentId} onChange={(value) => updateForm("experimentId", value)} />
             <TextField label="Max Trials" type="number" value={forms.maxTrials} onChange={(value) => updateForm("maxTrials", value)} />
+            <TextField label="Max Rounds" type="number" value={forms.maxRounds} onChange={(value) => updateForm("maxRounds", value)} />
+            <TextField label="Trials/Round" type="number" value={forms.trialsPerRound} onChange={(value) => updateForm("trialsPerRound", value)} />
+            <TextField label="Target Count" type="number" value={forms.targetCount} onChange={(value) => updateForm("targetCount", value)} />
+            <TextField label="Max Seeds" type="number" value={forms.maxSeedStrategies} onChange={(value) => updateForm("maxSeedStrategies", value)} />
+            <TextField label="Min Annual Trades" type="number" value={forms.minAnnualTrades} onChange={(value) => updateForm("minAnnualTrades", value)} />
+            <TextField label="Min Sharpe" type="number" value={forms.minSharpe} onChange={(value) => updateForm("minSharpe", value)} />
+            <TextField label="Min Win Probability" type="number" value={forms.minWinProbability} onChange={(value) => updateForm("minWinProbability", value)} />
+            <TextField label="Strategies Root" value={forms.strategiesRoot} onChange={(value) => updateForm("strategiesRoot", value)} />
             <TextField label="Warmup Days" type="number" value={forms.indicatorWarmupDays} onChange={(value) => updateForm("indicatorWarmupDays", value)} />
             <TextField label="LLM Model" value={forms.llmModel} onChange={(value) => updateForm("llmModel", value)} />
             <TextField label="LLM Parameters" value={forms.llmParameters} onChange={(value) => updateForm("llmParameters", value)} />
+            <label className="field">
+              <span>Seed Mode</span>
+              <select value={forms.targetSeedMode} onChange={(event) => updateForm("targetSeedMode", event.target.value)}>
+                <option value="auto">auto scan</option>
+                <option value="specs">listed specs</option>
+              </select>
+            </label>
             <label className="field">
               <span>Execution Mode</span>
               <select value={forms.executionMode} onChange={(event) => updateForm("executionMode", event.target.value)}>
@@ -549,6 +573,9 @@ export default function App() {
             </ActionButton>
             <ActionButton disabled={isPending} onClick={() => runAction("Research queued", () => createTask(API_PATHS.researchRuns, researchPayload(forms)))}>
               Run Research
+            </ActionButton>
+            <ActionButton disabled={isPending} onClick={() => runAction("Target discovery queued", () => createTask(API_PATHS.researchTargetDiscovery, targetDiscoveryPayload(forms)))}>
+              Target Discovery
             </ActionButton>
             <ActionButton disabled={isPending} onClick={() => runAction("Proposal queued", () => createTask(API_PATHS.researchProposals, proposalPayload(forms)))}>
               Generate Proposal
@@ -942,6 +969,40 @@ function researchPayload(forms) {
     payload.specs = specs;
   } else {
     payload.spec = specs[0] || forms.spec;
+  }
+  return payload;
+}
+
+function targetDiscoveryPayload(forms) {
+  const payload = {
+    symbol: forms.symbol,
+    timeframe: forms.timeframe,
+    strategies_root: forms.strategiesRoot,
+    date_from: forms.dateFrom,
+    date_to: forms.dateTo,
+    experiment_id: forms.experimentId,
+    max_rounds: Number(forms.maxRounds || 1),
+    trials_per_round: Number(forms.trialsPerRound || 1),
+    target_count: Number(forms.targetCount || 1),
+    max_seed_strategies: optionalNumber(forms.maxSeedStrategies),
+    min_annual_trades: Number(forms.minAnnualTrades || 1000),
+    min_sharpe: Number(forms.minSharpe || 2),
+    min_win_probability: Number(forms.minWinProbability || 0.53),
+    execution_mode: forms.executionMode,
+    indicator_warmup_days: optionalNumber(forms.indicatorWarmupDays),
+    llm_model: forms.llmModel,
+    llm_parameters: parseJsonObject(forms.llmParameters, "LLM Parameters")
+  };
+  if (forms.targetSeedMode === "specs") {
+    const specs = forms.spec
+      .split(/[,\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (specs.length > 1) {
+      payload.specs = specs;
+    } else if (specs[0]) {
+      payload.spec = specs[0];
+    }
   }
   return payload;
 }

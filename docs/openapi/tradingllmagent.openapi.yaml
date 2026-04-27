@@ -142,6 +142,18 @@ paths:
       responses:
         "200":
           description: Queued task.
+  /api/experiments/target-discovery:
+    post:
+      summary: Queue repeated LLM strategy discovery against explicit performance targets.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TargetDiscoveryRequest"
+      responses:
+        "200":
+          description: Queued task.
   /api/experiments/{experiment_id}:
     get:
       summary: Load experiment summary from SQLite.
@@ -462,6 +474,64 @@ components:
           type: integer
         max_trials_per_family:
           type: integer
+    TargetDiscoveryRequest:
+      type: object
+      required: [date_from, date_to]
+      properties:
+        spec:
+          type: string
+          description: Optional explicit seed spec. If omitted, the worker scans local seed strategies.
+        specs:
+          type: array
+          items:
+            type: string
+          description: Optional explicit seed spec list.
+        strategies_root:
+          type: string
+          default: strategies
+        symbol:
+          type: string
+        timeframe:
+          type: string
+        strategy_families:
+          type: array
+          items:
+            type: string
+        max_seed_strategies:
+          type: integer
+        experiment_id:
+          type: string
+        date_from:
+          type: string
+          format: date
+        date_to:
+          type: string
+          format: date
+        max_rounds:
+          type: integer
+          default: 10
+        trials_per_round:
+          type: integer
+          default: 1
+        target_count:
+          type: integer
+          default: 1
+        min_annual_trades:
+          type: number
+          default: 1000
+        min_sharpe:
+          type: number
+          default: 2
+        min_win_probability:
+          type: number
+          default: 0.53
+        execution_mode:
+          type: string
+          enum: [bar, tick, bar_then_tick]
+        llm_model:
+          type: string
+        llm_parameters:
+          type: object
     LeaderboardReport:
       type: object
       properties:
