@@ -385,6 +385,10 @@ ExecutionIntent 目前有基础状态和 risk gate，但还没有持久化状态
 | 数据质量和成本模型校准 | 已落地 | 新增 cost calibration sample、spread/slippage 分布、推荐成本模型、cost model version hash、data quality hash、CFD proxy vs CME executable warning artifact。 |
 | 真实外部验收阶段 | evidence gate 已落地，真实证据待外部产生 | 新增 external validation artifact，对 paper shadow、NT8 sim、micro-live、controlled-live 分别检查交易日/样本/覆盖窗口/断线重连/idempotency/flatten/broker stop/incident 等证据。缺证据默认 blocked。 |
 | Readiness API/UI 完整面 | 已落地 | API 增加 approval queue、external validation、cost calibration、gateway order updates、incident timeline；UI 增加 gateway state、approval queue、incident/order update、cost calibration 视图。 |
+| 事件风险指标细化 | 已落地 | `event_attribution` 增加 `event_dependency_ratio`、`non_event_sharpe`、`event_window_drawdown`、事件/非事件 metrics split，用于 leaderboard/report 后续消费。 |
+| Point-in-time actual/surprise 治理 | 已落地 | event calendar 支持 `forecast`、`previous`、`actual`、`surprise`、`actual_available_at`；事件发布前 context 屏蔽 actual/surprise，避免研究泄漏。 |
+| Risk profile registry | 已落地 | 新增可持久化 risk profile registry、profile 校验、命名 profile lookup、intent risk resolution 和 `/api/execution/risk-profiles` contract。 |
+| 前端 API path 封装 | 已落地 | WebUI endpoint 集中到 `API_PATHS`，页面不再散落手写 API path，降低 OpenAPI/client 漂移风险。 |
 
 本轮验证命令：
 
@@ -396,6 +400,6 @@ git diff --check
 
 本轮最终验证结果：
 
-- `PYTHONPATH=src:tests python3 -m unittest discover -s tests`：121 tests OK。
+- `PYTHONPATH=src:tests python3 -m unittest discover -s tests`：125 tests OK。
 - `npm run build`：Vite production build OK。
 - `git diff --check`：OK。
