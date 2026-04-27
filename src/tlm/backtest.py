@@ -175,6 +175,7 @@ def run_bar_backtest(
         equity.append(equity[-1] + pnl)
     days = len({bar["timestamp"].date() for bar in bars}) or 1
     metrics = calculate_metrics(trade_pnls, equity, starting_equity, days)
+    event_attribution = enrich_event_attribution(event_attribution, trades, starting_equity, days)
     data_version_hash = backtest_data_version_hash(
         bar_files,
         spec,
@@ -213,6 +214,7 @@ def run_tick_backtest(
         equity.append(equity[-1] + pnl)
     days = len({tick["timestamp"].date() for tick in ticks}) or 1
     metrics = calculate_metrics(trade_pnls, equity, starting_equity, days)
+    event_attribution = enrich_event_attribution(event_attribution, trades, starting_equity, days)
     data_version_hash = backtest_data_version_hash(
         tick_files,
         spec,
@@ -321,6 +323,62 @@ def empty_event_attribution() -> dict:
         "non_event_trade_count": 0,
         "blocked_trade_count": 0,
         "blocked_trades": [],
+        "event_dependency_ratio": 0.0,
+        "non_event_sharpe": None,
+        "event_window_drawdown": 0.0,
+        "event_window_metrics": empty_metric_payload(),
+        "non_event_metrics": empty_metric_payload(),
+    }
+
+
+def enrich_event_attribution(
+    attribution: dict,
+    trades: Sequence[Trade],
+    starting_equity: float,
+    calendar_days: int,
+) -> dict:
+    event_trades = [trade for trade in trades if trade.event_state_at_entry != "normal"]
+    non_event_trades = [trade for trade in trades if trade.event_state_at_entry == "normal"]
+    blocked_count = int(attribution.get("blocked_trade_count", 0))
+    total_candidates = len(trades) + blocked_count
+    event_candidates = len(event_trades) + blocked_count
+    event_metrics = metrics_payload(event_trades, starting_equity, calendar_days)
+    non_event_metrics = metrics_payload(non_event_trades, starting_equity, calendar_days)
+    return {
+        **attribution,
+        "event_dependency_ratio": event_candidates / total_candidates if total_candidates else 0.0,
+        "non_event_sharpe": non_event_metrics["sharpe"],
+        "event_window_drawdown": event_metrics["max_drawdown"],
+        "event_window_metrics": event_metrics,
+        "non_event_metrics": non_event_metrics,
+    }
+
+
+def metrics_payload(
+    trades: Sequence[Trade],
+    starting_equity: float,
+    calendar_days: int,
+) -> dict:
+    if not trades:
+        return empty_metric_payload()
+    trade_pnls = [trade.net_pnl for trade in trades]
+    equity = [starting_equity]
+    for pnl in trade_pnls:
+        equity.append(equity[-1] + pnl)
+    return calculate_metrics(trade_pnls, equity, starting_equity, calendar_days).to_dict()
+
+
+def empty_metric_payload() -> dict:
+    return {
+        "trade_count": 0,
+        "net_pnl": 0,
+        "gross_profit": 0,
+        "gross_loss": 0,
+        "profit_factor": None,
+        "sharpe": None,
+        "max_drawdown": 0.0,
+        "annual_trades": 0,
+        "avg_trade_net_pnl": None,
     }
 
 

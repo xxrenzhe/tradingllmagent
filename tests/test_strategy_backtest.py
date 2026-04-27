@@ -514,11 +514,66 @@ class BarBacktestTests(unittest.TestCase):
         self.assertEqual(result.metrics.trade_count, 0)
         self.assertTrue(result.event_attribution["event_context_applied"])
         self.assertEqual(result.event_attribution["blocked_trade_count"], 1)
+        self.assertEqual(result.event_attribution["event_dependency_ratio"], 1.0)
+        self.assertIsNone(result.event_attribution["non_event_sharpe"])
+        self.assertEqual(result.event_attribution["event_window_drawdown"], 0.0)
+        self.assertEqual(result.event_attribution["event_window_metrics"]["trade_count"], 0)
+        self.assertEqual(result.event_attribution["non_event_metrics"]["trade_count"], 0)
         blocked = result.event_attribution["blocked_trades"][0]
         self.assertEqual(blocked["event_state_at_entry"], "release_window")
         self.assertEqual(blocked["active_event_ids_at_entry"], ["cpi_test"])
         self.assertEqual(blocked["event_policy_action"], "block")
         self.assertEqual(blocked["blocked_or_delayed_reason"], "high_impact_release_window")
+
+    def test_event_attribution_splits_event_and_non_event_metrics(self) -> None:
+        start = datetime(2025, 1, 1, 13, 30)
+        spec = family_spec(
+            "time_of_day_edge",
+            {"time_of_day": {"type": "time_of_day", "entry_time": "13:32", "entry_side": "long"}},
+            {"entry_time": {"values": ["13:32"]}, "entry_side": {"values": ["long"]}},
+        )
+        spec["risk"]["max_trades_per_day"] = 2
+        rows = build_bar_rows(
+            start,
+            [
+                (100, 100.3, 99.8, 100.0),
+                (100, 100.3, 99.8, 100.0),
+                (100, 100.4, 99.8, 100.1),
+                (100.1, 103.5, 100.0, 103.1),
+                (103.1, 103.3, 102.0, 102.5),
+                (102.5, 102.7, 100.0, 100.4),
+                (100.4, 103.9, 100.2, 103.6),
+            ],
+        )
+        contexts = [
+            {
+                "timestamp": rows[2]["timestamp"],
+                "event_state": "pre_event",
+                "active_event_ids": ["fomc_test"],
+                "max_importance": "medium",
+            },
+            {
+                "timestamp": rows[3]["timestamp"],
+                "event_state": "pre_event",
+                "active_event_ids": ["fomc_test"],
+                "max_importance": "medium",
+            },
+        ]
+
+        result = run_bar_result_for_rows_with_events(spec, rows, contexts)
+
+        self.assertEqual(len(result.trades), 2)
+        self.assertEqual(result.event_attribution["event_window_metrics"]["trade_count"], 1)
+        self.assertEqual(result.event_attribution["non_event_metrics"]["trade_count"], 1)
+        self.assertEqual(result.event_attribution["event_dependency_ratio"], 0.5)
+        self.assertEqual(
+            result.event_attribution["event_window_metrics"]["net_pnl"],
+            result.trades[0].net_pnl,
+        )
+        self.assertEqual(
+            result.event_attribution["non_event_metrics"]["net_pnl"],
+            result.trades[1].net_pnl,
+        )
 
 
 class TickReplayBacktestTests(unittest.TestCase):
