@@ -1228,6 +1228,7 @@ def write_research_artifacts(
                 gates=result.gates,
                 robustness_score=result.robustness_score,
                 parameter_stability_report=result.parameter_stability_report,
+                win_rate=test_trade_win_rate(result),
             )
         ],
     )
@@ -1274,6 +1275,18 @@ def load_research_artifacts(
         "fold_metrics": [_json_ready_row(row) for row in fold_metrics],
         "distributions": build_trade_distributions(trades),
     }
+
+
+def test_trade_win_rate(result: ResearchRunResult) -> float | None:
+    test_trades = [
+        trade
+        for artifact in result.split_artifacts
+        if artifact.split == "test"
+        for trade in artifact.trades
+    ]
+    if not test_trades:
+        return None
+    return sum(1 for trade in test_trades if trade.net_pnl > 0) / len(test_trades)
 
 
 def build_trade_distributions(trades: Sequence[dict]) -> dict:

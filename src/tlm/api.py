@@ -26,6 +26,7 @@ from .execution import (
     write_risk_profile_registry,
 )
 from .modules import (
+    build_target_frequency_pool,
     discover_module_memory_files,
     load_module_performance_memory,
     strategy_module_catalog,
@@ -190,7 +191,9 @@ def build_event_context_response(payload: dict) -> dict:
 
 def build_module_memory_response(experiments_root: Path) -> dict:
     records = load_module_performance_memory(discover_module_memory_files(experiments_root))
-    return summarize_module_performance(records)
+    summary = summarize_module_performance(records)
+    summary["target_frequency_pool"] = build_target_frequency_pool(records)
+    return summary
 
 
 def build_monitor_report_response(payload: dict) -> dict:

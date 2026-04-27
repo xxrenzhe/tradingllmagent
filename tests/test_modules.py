@@ -9,6 +9,7 @@ from pathlib import Path
 
 from tlm.cli import main
 from tlm.modules import (
+    build_target_frequency_pool,
     build_module_registry,
     load_module_performance_memory,
     module_can_enter_runtime,
@@ -64,6 +65,62 @@ class ModuleMemoryTests(unittest.TestCase):
         self.assertEqual(module["best_experiment_id"], "exp_a")
         self.assertEqual(module["rejection_reasons"], {"annual_trades_test": 1})
         self.assertEqual(module["timeframes"], ["15m", "5m"])
+        self.assertIn("target_frequency_pool", summary)
+
+    def test_target_frequency_pool_selects_rate_and_win_qualified_records(self) -> None:
+        records = [
+            {
+                "experiment_id": "exp_a",
+                "module_id": "z1iHTV6D",
+                "strategy_name": "candidate_a",
+                "timeframe": "15m",
+                "passed": True,
+                "trades_per_day": 1.1,
+                "proxy_win_rate": 0.61,
+                "expectancy": 8.0,
+                "robustness_score": 0.7,
+            },
+            {
+                "experiment_id": "exp_b",
+                "module_id": "eTdXc6bw",
+                "strategy_name": "candidate_b",
+                "timeframe": "15m",
+                "passed": True,
+                "trades_per_day": 0.9,
+                "proxy_win_rate": 0.58,
+                "expectancy": 5.0,
+                "robustness_score": 0.6,
+            },
+            {
+                "experiment_id": "exp_c",
+                "module_id": "blocked",
+                "strategy_name": "weak_candidate",
+                "passed": True,
+                "trades_per_day": 1.3,
+                "proxy_win_rate": 0.49,
+            },
+            {
+                "experiment_id": "exp_d",
+                "module_id": "rejected",
+                "strategy_name": "rejected_candidate",
+                "passed": False,
+                "trades_per_day": 0.8,
+                "proxy_win_rate": 0.7,
+            },
+        ]
+
+        pool = build_target_frequency_pool(records)
+
+        self.assertEqual(pool["status"], "target_met")
+        self.assertEqual(pool["selected_count"], 2)
+        self.assertAlmostEqual(pool["selected_trades_per_day"], 2.0)
+        self.assertGreaterEqual(pool["weighted_proxy_win_rate"], 0.53)
+        self.assertEqual(
+            [row["strategy_name"] for row in pool["selected"]],
+            ["candidate_a", "candidate_b"],
+        )
+        self.assertEqual(pool["rejected"]["proxy_win_rate_below_threshold"], 1)
+        self.assertEqual(pool["rejected"]["not_passed"], 1)
 
     def test_module_registry_promotes_and_audits_memory_summary(self) -> None:
         registry = build_module_registry(

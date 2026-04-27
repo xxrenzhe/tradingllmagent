@@ -190,7 +190,9 @@ def build_module_performance_record(
     gates: dict[str, Any],
     robustness_score: float | None,
     parameter_stability_report: dict[str, Any],
+    win_rate: float | None = None,
 ) -> dict[str, Any]:
+    annual_trades = aggregate_test_metrics.annual_trades
     return {
         "experiment_id": experiment_id,
         "module_id": infer_module_id(spec),
@@ -201,7 +203,10 @@ def build_module_performance_record(
         "strategy_spec_hash": strategy_spec_hash,
         "variant_parameters": variant_parameters,
         "trade_count": aggregate_test_metrics.trade_count,
-        "win_rate": None,
+        "annual_trades": annual_trades,
+        "trades_per_day": annual_trades / 365,
+        "win_rate": win_rate,
+        "proxy_win_rate": win_rate,
         "expectancy": aggregate_test_metrics.avg_trade_net_pnl,
         "profit_factor": aggregate_test_metrics.profit_factor,
         "max_drawdown": aggregate_test_metrics.max_drawdown,
@@ -309,7 +314,168 @@ def summarize_module_performance(records: Sequence[dict[str, Any]]) -> dict[str,
         "evaluated_records": len(records),
         "module_count": len(ordered),
         "modules": ordered,
+        "target_frequency_pool": build_target_frequency_pool(records),
     }
+
+
+def build_target_frequency_pool(
+    records: Sequence[dict[str, Any]],
+    *,
+    target_min_per_day: float = 2.0,
+    target_max_per_day: float = 3.0,
+    min_proxy_win_rate: float = 0.53,
+    lookback_days: int = 90,
+    require_passed: bool = True,
+    max_pool_size: int = 12,
+) -> dict[str, Any]:
+    candidates = []
+    rejected = {
+        "not_passed": 0,
+        "missing_or_zero_rate": 0,
+        "missing_proxy_win_rate": 0,
+        "proxy_win_rate_below_threshold": 0,
+    }
+    for record in records:
+        if require_passed and not record.get("passed"):
+            rejected["not_passed"] += 1
+            continue
+        daily_rate, rate_source = _record_daily_signal_rate(record, lookback_days)
+        if daily_rate is None or daily_rate <= 0:
+            rejected["missing_or_zero_rate"] += 1
+            continue
+        proxy_win_rate = _record_proxy_win_rate(record)
+        if proxy_win_rate is None:
+            rejected["missing_proxy_win_rate"] += 1
+            continue
+        if proxy_win_rate < min_proxy_win_rate:
+            rejected["proxy_win_rate_below_threshold"] += 1
+            continue
+        candidates.append(
+            {
+                "experiment_id": record.get("experiment_id"),
+                "module_id": str(record.get("module_id") or "unknown"),
+                "strategy_family": record.get("strategy_family"),
+                "strategy_name": record.get("strategy_name"),
+                "strategy_spec_hash": record.get("strategy_spec_hash"),
+                "timeframe": record.get("timeframe"),
+                "trades_per_day": daily_rate,
+                "rate_source": rate_source,
+                "proxy_win_rate": proxy_win_rate,
+                "expectancy": _optional_float(record.get("expectancy")),
+                "robustness_score": _optional_float(record.get("robustness_score")),
+            }
+        )
+
+    ordered = sorted(
+        candidates,
+        key=lambda item: (
+            -float(item["proxy_win_rate"]),
+            -float(item["robustness_score"] or 0),
+            -float(item["expectancy"] or 0),
+            -float(item["trades_per_day"]),
+            str(item.get("strategy_spec_hash") or item.get("experiment_id") or ""),
+        ),
+    )
+    selected = _select_frequency_pool(
+        ordered,
+        target_min_per_day=target_min_per_day,
+        target_max_per_day=target_max_per_day,
+        max_pool_size=max_pool_size,
+    )
+    total_rate = sum(float(item["trades_per_day"]) for item in selected)
+    weighted_proxy_win_rate = (
+        sum(float(item["trades_per_day"]) * float(item["proxy_win_rate"]) for item in selected)
+        / total_rate
+        if total_rate > 0
+        else None
+    )
+    if target_min_per_day <= total_rate <= target_max_per_day and weighted_proxy_win_rate is not None:
+        status = "target_met"
+    elif total_rate < target_min_per_day:
+        status = "below_target"
+    else:
+        status = "above_target"
+    return {
+        "status": status,
+        "target_min_per_day": target_min_per_day,
+        "target_max_per_day": target_max_per_day,
+        "min_proxy_win_rate": min_proxy_win_rate,
+        "lookback_days": lookback_days,
+        "require_passed": require_passed,
+        "candidate_count": len(ordered),
+        "selected_count": len(selected),
+        "selected_trades_per_day": total_rate,
+        "weighted_proxy_win_rate": weighted_proxy_win_rate,
+        "selected": selected,
+        "rejected": rejected,
+    }
+
+
+def _select_frequency_pool(
+    candidates: Sequence[dict[str, Any]],
+    *,
+    target_min_per_day: float,
+    target_max_per_day: float,
+    max_pool_size: int,
+) -> list[dict[str, Any]]:
+    selected = []
+    total_rate = 0.0
+    for candidate in candidates:
+        if len(selected) >= max_pool_size:
+            break
+        candidate_rate = float(candidate["trades_per_day"])
+        if total_rate + candidate_rate <= target_max_per_day:
+            selected.append(candidate)
+            total_rate += candidate_rate
+        if total_rate >= target_min_per_day:
+            break
+    if total_rate >= target_min_per_day:
+        return selected
+    overflow_candidates = [
+        candidate for candidate in candidates if candidate not in selected and float(candidate["trades_per_day"]) > 0
+    ]
+    if not overflow_candidates or len(selected) >= max_pool_size:
+        return selected
+    best_overflow = min(
+        overflow_candidates,
+        key=lambda item: (
+            abs((total_rate + float(item["trades_per_day"])) - target_min_per_day),
+            -float(item["proxy_win_rate"]),
+        ),
+    )
+    return selected + [best_overflow]
+
+
+def _record_daily_signal_rate(record: dict[str, Any], lookback_days: int) -> tuple[float | None, str | None]:
+    for key in ("trades_per_day", "trigger_per_day", "daily_signal_rate", "signals_per_day"):
+        value = _optional_float(record.get(key))
+        if value is not None:
+            return value, key
+    for key in ("annual_trades", "annual_signal_rate"):
+        value = _optional_float(record.get(key))
+        if value is not None:
+            return value / 365, key
+    trade_count = _optional_float(record.get("trade_count"))
+    if trade_count is not None and lookback_days > 0:
+        return trade_count / lookback_days, "trade_count_per_lookback_day"
+    return None, None
+
+
+def _record_proxy_win_rate(record: dict[str, Any]) -> float | None:
+    for key in ("proxy_win_rate", "recent90_win_rate", "weighted_win_rate", "win_rate"):
+        value = _optional_float(record.get(key))
+        if value is not None:
+            return value / 100 if value > 1 else value
+    return None
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def strategy_module_catalog() -> list[dict[str, Any]]:

@@ -30,6 +30,7 @@ from .events import (
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .monitor import build_monitor_report, write_monitor_outputs
 from .modules import (
+    build_target_frequency_pool,
     discover_module_memory_files,
     load_module_performance_memory,
     strategy_module_catalog,
@@ -212,11 +213,20 @@ def cmd_modules_summary(args: argparse.Namespace) -> int:
     else:
         memory_paths = discover_module_memory_files(Path(args.experiments_root))
     records = load_module_performance_memory(memory_paths)
+    summary = summarize_module_performance(records)
+    summary["target_frequency_pool"] = build_target_frequency_pool(
+        records,
+        target_min_per_day=args.target_min_per_day,
+        target_max_per_day=args.target_max_per_day,
+        min_proxy_win_rate=args.min_proxy_win_rate,
+        lookback_days=args.lookback_days,
+        require_passed=not args.include_rejected,
+    )
     print(
         json.dumps(
             {
                 "memory_files": [str(path) for path in memory_paths],
-                **summarize_module_performance(records),
+                **summary,
             },
             indent=2,
             sort_keys=True,
@@ -626,6 +636,11 @@ def build_parser() -> argparse.ArgumentParser:
     modules_summary = modules_subparsers.add_parser("summary")
     modules_summary.add_argument("--experiments-root", default="experiments")
     modules_summary.add_argument("--memory", action="append")
+    modules_summary.add_argument("--target-min-per-day", type=float, default=2.0)
+    modules_summary.add_argument("--target-max-per-day", type=float, default=3.0)
+    modules_summary.add_argument("--min-proxy-win-rate", type=float, default=0.53)
+    modules_summary.add_argument("--lookback-days", type=int, default=90)
+    modules_summary.add_argument("--include-rejected", action="store_true")
     modules_summary.set_defaults(func=cmd_modules_summary)
 
     backtest = subparsers.add_parser("backtest")
