@@ -84,7 +84,7 @@ def download_hour(
     timeout_seconds: int = 30,
 ) -> DownloadResult:
     target = raw_tick_path(data_root, symbol.instrument, hour)
-    if target.exists() and target.stat().st_size > 0:
+    if target.exists():
         return DownloadResult(
             url=dukascopy_url(symbol.instrument, hour),
             path=target,
@@ -106,6 +106,10 @@ def download_hour(
                 return DownloadResult(url=url, path=target, status="empty_hour")
             last_error = exc
         except URLError as exc:
+            last_error = exc
+        except TimeoutError as exc:
+            last_error = exc
+        except OSError as exc:
             last_error = exc
         if attempt < retries:
             time.sleep(min(2**attempt, 8))

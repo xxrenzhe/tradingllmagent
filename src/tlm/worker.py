@@ -164,19 +164,32 @@ def execute_data_download(payload: dict[str, Any]) -> dict[str, Any]:
         day_ticks = []
         raw_paths: list[Path] = []
         day_status_counts: dict[str, int] = {}
+        failed_hours: list[dict[str, str]] = []
         for hour in iter_hours(start, end):
-            result = download_hour(
-                symbol,
-                hour,
-                data_root,
-                retries=hour_retries,
-                timeout_seconds=hour_timeout_seconds,
-            )
+            try:
+                result = download_hour(
+                    symbol,
+                    hour,
+                    data_root,
+                    retries=hour_retries,
+                    timeout_seconds=hour_timeout_seconds,
+                )
+            except Exception as exc:
+                status_counts["failed"] = status_counts.get("failed", 0) + 1
+                day_status_counts["failed"] = day_status_counts.get("failed", 0) + 1
+                failed_hours.append({"hour": hour.isoformat(), "error": str(exc)})
+                continue
             status_counts[result.status] = status_counts.get(result.status, 0) + 1
             day_status_counts[result.status] = day_status_counts.get(result.status, 0) + 1
             if result.status in {"downloaded", "cached"}:
                 raw_paths.append(result.path)
                 day_ticks.extend(parse_bi5_file(result.path, hour, symbol.price_scale))
+
+        if failed_hours:
+            raise RuntimeError(
+                f"Failed to download all hours for {day.isoformat()}: "
+                + ", ".join(f"{item['hour']}={item['error']}" for item in failed_hours)
+            )
 
         output = normalized_tick_path(data_root, symbol_alias, day)
         write_ticks_parquet(output, symbol_alias, day_ticks)

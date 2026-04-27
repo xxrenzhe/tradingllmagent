@@ -18,7 +18,15 @@ from tlm.bars import (
     build_timeframe_bars_from_1m_parquet,
 )
 from tlm.cli import main
-from tlm.dukascopy import DownloadResult, TICK_STRUCT, dukascopy_url, parse_bi5_ticks
+from tlm.config import get_symbol
+from tlm.dukascopy import (
+    DownloadResult,
+    TICK_STRUCT,
+    download_hour,
+    dukascopy_url,
+    parse_bi5_ticks,
+    raw_tick_path,
+)
 from tlm.quality import build_quality_report
 from tlm.storage import normalized_tick_path, write_ticks_parquet
 
@@ -58,6 +66,22 @@ class DukascopyParsingTests(unittest.TestCase):
         payload = lzma.compress(struct.pack(">I", 1))
         with self.assertRaises(ValueError):
             parse_bi5_ticks(payload, datetime(2025, 1, 1, tzinfo=UTC), price_scale=1000)
+
+    def test_download_hour_reuses_zero_byte_cached_file(self) -> None:
+        symbol = get_symbol("NQmain")
+        hour = datetime(2025, 3, 22, 0, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            cached_path = raw_tick_path(data_root, symbol.instrument, hour)
+            cached_path.parent.mkdir(parents=True)
+            cached_path.write_bytes(b"")
+
+            with patch("tlm.dukascopy.urlopen") as urlopen:
+                result = download_hour(symbol, hour, data_root)
+
+        urlopen.assert_not_called()
+        self.assertEqual(result.status, "cached")
+        self.assertEqual(result.bytes_written, 0)
 
 
 class BarAndQualityTests(unittest.TestCase):
@@ -282,6 +306,49 @@ class BarAndQualityTests(unittest.TestCase):
         self.assertTrue(all(call[2] == data_root for call in calls))
         self.assertTrue(all(call[3] == 1 for call in calls))
         self.assertTrue(all(call[4] == 7 for call in calls))
+
+    def test_cli_download_continues_after_hour_failure_before_failing_day(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            calls = []
+
+            def fake_download(symbol, hour, target_root, retries=3, timeout_seconds=30):
+                calls.append(hour.hour)
+                if hour.hour == 3:
+                    raise RuntimeError("temporary provider failure")
+                return DownloadResult(
+                    url=f"https://example.test/{hour.hour:02d}",
+                    path=data_root / "raw" / f"{hour.hour:02d}.bi5",
+                    status="empty_hour",
+                    bytes_written=0,
+                )
+
+            output = io.StringIO()
+            with patch("tlm.cli.download_hour", side_effect=fake_download):
+                with self.assertRaises(RuntimeError):
+                    with redirect_stdout(output):
+                        main(
+                            [
+                                "--data-root",
+                                str(data_root),
+                                "data",
+                                "download",
+                                "--symbol",
+                                "NQmain",
+                                "--from",
+                                "2025-03-19",
+                                "--to",
+                                "2025-03-19",
+                                "--hour-retries",
+                                "0",
+                                "--hour-timeout-seconds",
+                                "7",
+                            ]
+                        )
+
+        self.assertEqual(calls, list(range(24)))
+        self.assertIn("2025-03-19T03:00:00+00:00\tfailed\t0\ttemporary provider failure", output.getvalue())
+        self.assertFalse(normalized_tick_path(data_root, "NQmain", datetime(2025, 3, 19).date()).exists())
 
 
 if __name__ == "__main__":

@@ -110,19 +110,29 @@ def cmd_data_download(args: argparse.Namespace) -> int:
     for day in iter_dates(date_from, date_to):
         start, end = day_bounds(day)
         day_ticks = []
+        failed_hours: list[tuple[datetime, str]] = []
         for hour in iter_hours(start, end):
-            result = download_hour(
-                symbol,
-                hour,
-                data_root,
-                retries=args.hour_retries,
-                timeout_seconds=args.hour_timeout_seconds,
-            )
+            try:
+                result = download_hour(
+                    symbol,
+                    hour,
+                    data_root,
+                    retries=args.hour_retries,
+                    timeout_seconds=args.hour_timeout_seconds,
+                )
+            except Exception as exc:
+                failed_hours.append((hour, str(exc)))
+                print(f"{hour.isoformat()}\tfailed\t0\t{exc}")
+                continue
             if result.status in {"downloaded", "cached"}:
                 raw_paths.append(result.path)
                 ticks = parse_bi5_file(result.path, hour, symbol.price_scale)
                 day_ticks.extend(ticks)
             print(f"{hour.isoformat()}\t{result.status}\t{result.bytes_written}\t{result.url}")
+
+        if failed_hours:
+            failures = ", ".join(f"{hour.isoformat()}={error}" for hour, error in failed_hours)
+            raise RuntimeError(f"Failed to download all hours for {day.isoformat()}: {failures}")
 
         output = normalized_tick_path(data_root, args.symbol, day)
         write_ticks_parquet(output, args.symbol, day_ticks)
