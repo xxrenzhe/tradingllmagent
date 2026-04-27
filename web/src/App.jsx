@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { API_PATHS, apiRequest, apiUrl, formatCompact, formatNumber, formatPercent } from "./api.js";
 
 const DEFAULT_FORMS = {
@@ -14,6 +14,20 @@ const DEFAULT_FORMS = {
   llmModel: "local-deterministic-template",
   llmParameters: "{\"temperature\":0}"
 };
+
+const DEFAULT_HISTORY_FILTERS = {
+  query: "",
+  status: "all",
+  executionMode: "all",
+  moduleId: "all",
+  minSharpe: "2",
+  minAnnualTrades: "1000",
+  minWinProbability: "0.53",
+  minNetPnl: "",
+  sortBy: "sharpe"
+};
+
+const COMPARISON_COLORS = ["#0b6f5b", "#1d4f73", "#9d5b12", "#a9362f", "#5b5f97", "#006d77", "#7f4f24", "#5a3e85"];
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -74,8 +88,11 @@ export default function App() {
   const [triggerGateMemory, setTriggerGateMemory] = useState(null);
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
-  const [filters, setFilters] = useState({ minSharpe: "2", onlyPassed: false });
-  const deferredFilter = useDeferredValue(filters);
+  const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS);
+  const [selectedStrategyIds, setSelectedStrategyIds] = useState([]);
+  const [comparisonArtifacts, setComparisonArtifacts] = useState({});
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const deferredHistoryFilters = useDeferredValue(historyFilters);
 
   useEffect(() => {
     localStorage.setItem("tlm-api-base", apiBase);
@@ -391,10 +408,79 @@ export default function App() {
     return { task_id: `artifacts loaded: ${experimentKey}` };
   }
 
-  const visibleRows = (deferredFilter.onlyPassed ? leaderboard.leaderboard : leaderboard.rows).filter((row) => {
-    const minSharpe = Number(deferredFilter.minSharpe || 0);
-    return (row.sharpe_test ?? -Infinity) >= minSharpe || !row.passed;
-  });
+  function updateHistoryFilter(key, value) {
+    setHistoryFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleStrategySelection(id) {
+    setSelectedStrategyIds((current) => (
+      current.includes(id) ? current.filter((strategyId) => strategyId !== id) : [...current, id]
+    ));
+  }
+
+  function toggleVisibleStrategySelection() {
+    const visibleIds = visibleRows.map((row) => row.experiment_id);
+    const visibleSet = new Set(visibleIds);
+    const selectedVisibleCount = selectedStrategyIds.filter((id) => visibleSet.has(id)).length;
+    if (visibleIds.length && selectedVisibleCount === visibleIds.length) {
+      setSelectedStrategyIds((current) => current.filter((id) => !visibleSet.has(id)));
+      return;
+    }
+    setSelectedStrategyIds((current) => Array.from(new Set([...current, ...visibleIds])));
+  }
+
+  async function loadSelectedComparisonArtifacts() {
+    if (!selectedRows.length) {
+      throw new Error("Select at least one strategy to compare");
+    }
+    setComparisonLoading(true);
+    setComparisonArtifacts((current) => {
+      const next = { ...current };
+      for (const row of selectedRows) {
+        next[row.experiment_id] = { row, loading: true, detail: current[row.experiment_id]?.detail ?? null, error: "" };
+      }
+      return next;
+    });
+    const results = await Promise.all(selectedRows.map(async (row) => {
+      try {
+        const detail = await apiRequest(apiBase, API_PATHS.experimentArtifacts(row.experiment_id));
+        return { row, detail, error: "" };
+      } catch (error) {
+        return { row, detail: null, error: error.message };
+      }
+    }));
+    setComparisonArtifacts((current) => {
+      const next = { ...current };
+      for (const result of results) {
+        next[result.row.experiment_id] = {
+          row: result.row,
+          detail: result.detail,
+          loading: false,
+          error: result.error
+        };
+      }
+      return next;
+    });
+    setComparisonLoading(false);
+    return { task_id: `comparison loaded: ${results.length} strategies` };
+  }
+
+  const historyOptions = useMemo(() => buildHistoryOptions(leaderboard.rows ?? []), [leaderboard.rows]);
+  const visibleRows = useMemo(
+    () => filterHistoryRows(leaderboard.rows ?? [], deferredHistoryFilters),
+    [leaderboard.rows, deferredHistoryFilters]
+  );
+  const selectedIdSet = useMemo(() => new Set(selectedStrategyIds), [selectedStrategyIds]);
+  const selectedRows = useMemo(() => {
+    const rowsById = new Map((leaderboard.rows ?? []).map((row) => [row.experiment_id, row]));
+    return selectedStrategyIds.map((id) => rowsById.get(id)).filter(Boolean);
+  }, [leaderboard.rows, selectedStrategyIds]);
+  const visibleSelectedCount = visibleRows.filter((row) => selectedIdSet.has(row.experiment_id)).length;
+  const allVisibleSelected = visibleRows.length > 0 && visibleSelectedCount === visibleRows.length;
+  const comparisonSeries = useMemo(
+    () => buildComparisonSeries(selectedRows, comparisonArtifacts),
+    [selectedRows, comparisonArtifacts]
+  );
   const selectedLeaderboardRow = (leaderboard.rows ?? []).find((row) => row.experiment_id === selectedArtifactId);
 
   const runningTasks = tasks.filter((task) => ["queued", "running"].includes(task.status)).length;
@@ -523,32 +609,82 @@ export default function App() {
         </Panel>
       </section>
 
-      <Panel title="Leaderboard" kicker="Out-of-sample only">
+      <Panel title="Historical Strategy Performance" kicker="Filter, select, compare">
         <p className={`notice ${leaderboard.conclusion === "qualified_strategies_found" ? "success" : "warn"}`}>
           {leaderboard.message || "No leaderboard report loaded."}
         </p>
-        <div className="toolbar">
-          <label className="inline-control">
-            <span>Min test Sharpe</span>
-            <input value={filters.minSharpe} onChange={(event) => setFilters((current) => ({ ...current, minSharpe: event.target.value }))} />
+        <div className="history-filter-grid">
+          <TextField label="Search" value={historyFilters.query} onChange={(value) => updateHistoryFilter("query", value)} />
+          <label className="field">
+            <span>Gate Status</span>
+            <select value={historyFilters.status} onChange={(event) => updateHistoryFilter("status", event.target.value)}>
+              <option value="all">all</option>
+              <option value="passed">passed</option>
+              <option value="rejected">rejected</option>
+            </select>
           </label>
-          <label className="checkbox-control">
-            <input
-              type="checkbox"
-              checked={filters.onlyPassed}
-              onChange={(event) => setFilters((current) => ({ ...current, onlyPassed: event.target.checked }))}
-            />
-            Passed only
+          <label className="field">
+            <span>Execution Mode</span>
+            <select value={historyFilters.executionMode} onChange={(event) => updateHistoryFilter("executionMode", event.target.value)}>
+              <option value="all">all</option>
+              {historyOptions.executionModes.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+            </select>
           </label>
+          <label className="field">
+            <span>Module</span>
+            <select value={historyFilters.moduleId} onChange={(event) => updateHistoryFilter("moduleId", event.target.value)}>
+              <option value="all">all</option>
+              {historyOptions.moduleIds.map((moduleId) => <option key={moduleId} value={moduleId}>{moduleId}</option>)}
+            </select>
+          </label>
+          <TextField label="Min Sharpe" type="number" value={historyFilters.minSharpe} onChange={(value) => updateHistoryFilter("minSharpe", value)} />
+          <TextField label="Min Annual Trades" type="number" value={historyFilters.minAnnualTrades} onChange={(value) => updateHistoryFilter("minAnnualTrades", value)} />
+          <TextField label="Min Win Probability" type="number" value={historyFilters.minWinProbability} onChange={(value) => updateHistoryFilter("minWinProbability", value)} />
+          <TextField label="Min Test PnL" type="number" value={historyFilters.minNetPnl} onChange={(value) => updateHistoryFilter("minNetPnl", value)} />
+          <label className="field">
+            <span>Sort By</span>
+            <select value={historyFilters.sortBy} onChange={(event) => updateHistoryFilter("sortBy", event.target.value)}>
+              <option value="sharpe">test sharpe</option>
+              <option value="annual_trades">annual trades</option>
+              <option value="win_probability">win probability</option>
+              <option value="net_pnl">test pnl</option>
+              <option value="robustness">robustness</option>
+            </select>
+          </label>
+        </div>
+        <div className="history-summary-strip" aria-label="Filtered strategy summary">
+          <Metric label="Visible" value={formatCompact(visibleRows.length)} detail={`${formatCompact(leaderboard.rows?.length ?? 0)} total rows`} />
+          <Metric label="Selected" value={formatCompact(selectedRows.length)} detail="ready for comparison" />
+          <Metric label="Median Sharpe" value={formatNumber(median(visibleRows.map((row) => row.sharpe_test)))} detail="filtered rows" />
+          <Metric label="Max Trades" value={formatCompact(maxNumber(visibleRows.map((row) => row.annual_trades_test)))} detail="annualized test trades" />
+        </div>
+        <div className="toolbar history-toolbar">
           <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Leaderboard", refreshLeaderboard)}>
             Refresh
+          </ActionButton>
+          <ActionButton
+            disabled={isPending || comparisonLoading || !selectedRows.length}
+            onClick={() => runAction("Comparison", loadSelectedComparisonArtifacts)}
+          >
+            Load Comparison
+          </ActionButton>
+          <ActionButton variant="secondary" disabled={!selectedRows.length} onClick={() => setSelectedStrategyIds([])}>
+            Clear Selection
           </ActionButton>
         </div>
         <LeaderboardTable
           rows={visibleRows}
           selectedExperimentId={selectedArtifactId}
+          selectedStrategyIds={selectedIdSet}
+          allVisibleSelected={allVisibleSelected}
+          onToggleSelect={toggleStrategySelection}
+          onToggleAll={toggleVisibleStrategySelection}
           onInspect={(id) => runAction("Artifacts", () => loadResearchArtifacts(id))}
         />
+      </Panel>
+
+      <Panel title="Selected Strategy Comparison" kicker={`${selectedRows.length} selected`}>
+        <ComparisonEquityChart series={comparisonSeries} loading={comparisonLoading} />
       </Panel>
 
       <Panel title="Strategy Cards" kicker="Promotion, holdout, next round">
@@ -888,6 +1024,142 @@ function ActionButton({ children, onClick, disabled, variant = "primary" }) {
   );
 }
 
+function buildHistoryOptions(rows) {
+  return {
+    executionModes: uniqueSorted(rows.map((row) => row.execution_mode).filter(Boolean)),
+    moduleIds: uniqueSorted(rows.map((row) => row.module_id).filter(Boolean))
+  };
+}
+
+function filterHistoryRows(rows, filters) {
+  const query = filters.query.trim().toLowerCase();
+  const minSharpe = parseOptionalNumber(filters.minSharpe);
+  const minAnnualTrades = parseOptionalNumber(filters.minAnnualTrades);
+  const minWinProbability = parseProbabilityFilter(filters.minWinProbability);
+  const minNetPnl = parseOptionalNumber(filters.minNetPnl);
+  const filtered = rows.filter((row) => {
+    if (filters.status === "passed" && !row.passed) {
+      return false;
+    }
+    if (filters.status === "rejected" && row.passed) {
+      return false;
+    }
+    if (filters.executionMode !== "all" && row.execution_mode !== filters.executionMode) {
+      return false;
+    }
+    if (filters.moduleId !== "all" && row.module_id !== filters.moduleId) {
+      return false;
+    }
+    if (!passesMinimum(row.sharpe_test, minSharpe)) {
+      return false;
+    }
+    if (!passesMinimum(row.annual_trades_test, minAnnualTrades)) {
+      return false;
+    }
+    if (!passesMinimum(row.win_probability_test, minWinProbability)) {
+      return false;
+    }
+    if (!passesMinimum(row.net_pnl_test, minNetPnl)) {
+      return false;
+    }
+    if (!query) {
+      return true;
+    }
+    const haystack = [
+      row.experiment_id,
+      row.strategy_name,
+      row.module_id,
+      row.execution_mode,
+      row.strategy_card?.name,
+      ...(row.reasons ?? [])
+    ].join(" ").toLowerCase();
+    return haystack.includes(query);
+  });
+  return filtered.sort((left, right) => sortHistoryRow(left, right, filters.sortBy));
+}
+
+function sortHistoryRow(left, right, sortBy) {
+  const fields = {
+    annual_trades: "annual_trades_test",
+    net_pnl: "net_pnl_test",
+    robustness: "robustness_score",
+    sharpe: "sharpe_test",
+    win_probability: "win_probability_test"
+  };
+  const field = fields[sortBy] ?? fields.sharpe;
+  return numericValue(right[field]) - numericValue(left[field]);
+}
+
+function buildComparisonSeries(selectedRows, comparisonArtifacts) {
+  return selectedRows.map((row, index) => {
+    const artifact = comparisonArtifacts[row.experiment_id] ?? {};
+    const points = (artifact.detail?.equity ?? [])
+      .filter((entry) => typeof entry.equity === "number")
+      .map((entry) => ({
+        value: Number(entry.equity),
+        label: entry.exit_time ?? entry.timestamp ?? entry.trade_index ?? ""
+      }));
+    const first = points.length ? points[0].value : 0;
+    const last = points.length ? points[points.length - 1].value : 0;
+    return {
+      id: row.experiment_id,
+      label: row.strategy_name || row.experiment_id,
+      color: COMPARISON_COLORS[index % COMPARISON_COLORS.length],
+      points,
+      netChange: last - first,
+      row,
+      loading: artifact.loading,
+      error: artifact.error
+    };
+  });
+}
+
+function uniqueSorted(values) {
+  return Array.from(new Set(values)).sort((left, right) => String(left).localeCompare(String(right)));
+}
+
+function parseOptionalNumber(value) {
+  if (value === "" || value === null || value === undefined) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseProbabilityFilter(value) {
+  const parsed = parseOptionalNumber(value);
+  if (parsed === null) {
+    return null;
+  }
+  return parsed > 1 ? parsed / 100 : parsed;
+}
+
+function numericValue(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
+function passesMinimum(value, minimum) {
+  if (minimum === null) {
+    return true;
+  }
+  return numericValue(value) >= minimum;
+}
+
+function median(values) {
+  const numericValues = values.map(Number).filter(Number.isFinite).sort((left, right) => left - right);
+  if (!numericValues.length) {
+    return null;
+  }
+  const middle = Math.floor(numericValues.length / 2);
+  return numericValues.length % 2 ? numericValues[middle] : (numericValues[middle - 1] + numericValues[middle]) / 2;
+}
+
+function maxNumber(values) {
+  const numericValues = values.map(Number).filter(Number.isFinite);
+  return numericValues.length ? Math.max(...numericValues) : null;
+}
+
 function TaskTable({ tasks, selectedTaskId, onSelect, onCancel, onRun }) {
   if (!tasks.length) {
     return <EmptyState title="No tasks yet" text="Create a data or research task to populate the queue." />;
@@ -933,7 +1205,15 @@ function TaskTable({ tasks, selectedTaskId, onSelect, onCancel, onRun }) {
   );
 }
 
-function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
+function LeaderboardTable({
+  rows,
+  selectedExperimentId,
+  selectedStrategyIds,
+  allVisibleSelected,
+  onToggleSelect,
+  onToggleAll,
+  onInspect
+}) {
   if (!rows.length) {
     return <EmptyState title="No leaderboard rows" text="Run research after data and bars exist, then refresh the report." />;
   }
@@ -942,14 +1222,24 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
       <table>
         <thead>
           <tr>
+            <th className="select-column">
+              <input
+                type="checkbox"
+                aria-label="Select all visible strategies"
+                checked={allVisibleSelected}
+                onChange={onToggleAll}
+              />
+            </th>
             <th>Experiment</th>
             <th>Strategy</th>
             <th>Gate</th>
+            <th>Mode</th>
             <th>Overfit Risk</th>
             <th>Trials/Folds</th>
             <th>Score</th>
             <th>Test Sharpe</th>
             <th>Annual Trades</th>
+            <th>Win Prob</th>
             <th>Tick Replay</th>
             <th>Non-Overlap</th>
             <th>Trade Spread</th>
@@ -969,8 +1259,20 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
             const tradeDistribution = row.trade_count_distribution_report ?? {};
             const tickReplay = row.tick_replay_report ?? {};
             const costStressKnown = typeof costSensitivity.worst_case_survives === "boolean";
+            const selectedForComparison = selectedStrategyIds.has(row.experiment_id);
             return (
-              <tr key={row.experiment_id} className={selectedExperimentId === row.experiment_id ? "selected" : ""}>
+              <tr
+                key={row.experiment_id}
+                className={`${selectedExperimentId === row.experiment_id ? "selected" : ""} ${selectedForComparison ? "compare-selected" : ""}`}
+              >
+                <td className="select-column">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${row.experiment_id} for comparison`}
+                    checked={selectedForComparison}
+                    onChange={() => onToggleSelect(row.experiment_id)}
+                  />
+                </td>
                 <td>
                   <button className="link-button" type="button" onClick={() => onInspect(row.experiment_id)}>
                     {row.experiment_id}
@@ -980,6 +1282,10 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
                 <td>{row.strategy_name}</td>
                 <td>
                   <span className={`status-pill ${row.passed ? "completed" : "failed"}`}>{row.passed ? "passed" : "rejected"}</span>
+                </td>
+                <td>
+                  {row.execution_mode ?? "-"}
+                  <div className="table-detail">{row.module_id ?? "module unknown"}</div>
                 </td>
                 <td>
                   <span className={`status-pill ${riskStatusClass(overfitting.risk_level)}`}>{overfitting.risk_level ?? "unknown"}</span>
@@ -992,6 +1298,7 @@ function LeaderboardTable({ rows, selectedExperimentId, onInspect }) {
                 <td>{formatNumber(row.robustness_score, 3)}</td>
                 <td>{formatNumber(row.sharpe_test)}</td>
                 <td>{formatCompact(row.annual_trades_test)}</td>
+                <td>{formatPercent(row.win_probability_test)}</td>
                 <td>
                   <span className={`status-pill ${tickReplayStatusClass(tickReplay)}`}>
                     {tickReplay.status ?? "unknown"}
@@ -1211,6 +1518,67 @@ function TriggerGateMemoryTimeline({ memory }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function ComparisonEquityChart({ series, loading }) {
+  if (!series.length) {
+    return <EmptyState title="No strategies selected" text="Select rows in the historical strategy table to build a comparison set." />;
+  }
+  const readySeries = series.filter((item) => item.points.length);
+  const width = 860;
+  const height = 280;
+  const values = readySeries.flatMap((item) => item.points.map((point) => point.value));
+  const min = values.length ? Math.min(...values) : 0;
+  const max = values.length ? Math.max(...values) : 0;
+  const span = max - min || 1;
+  const polylines = readySeries.map((item) => ({
+    ...item,
+    polyline: item.points
+      .map((point, index) => {
+        const x = item.points.length === 1 ? 0 : (index / (item.points.length - 1)) * width;
+        const y = height - ((point.value - min) / span) * height;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ")
+  }));
+
+  return (
+    <div className="comparison-panel">
+      <div className="comparison-legend" aria-label="Selected strategy legend">
+        {series.map((item) => (
+          <article key={item.id} className={item.error ? "error" : ""}>
+            <i style={{ background: item.color }} />
+            <div>
+              <strong>{item.label}</strong>
+              <span>
+                {item.loading ? "loading" : item.error || `${formatCompact(item.points.length)} points · ${formatNumber(item.netChange)} net`}
+              </span>
+            </div>
+          </article>
+        ))}
+      </div>
+      {readySeries.length ? (
+        <div className="equity-chart comparison-equity-chart" aria-label="Selected strategy equity comparison">
+          <svg viewBox={`0 0 ${width} ${height}`} role="img">
+            <title>Selected strategy equity comparison</title>
+            <path d={`M0 ${height} H${width}`} />
+            {polylines.map((item) => (
+              <polyline key={item.id} points={item.polyline} style={{ stroke: item.color }} />
+            ))}
+          </svg>
+          <div className="chart-axis">
+            <span>{formatNumber(min)}</span>
+            <span>{formatNumber(max)}</span>
+          </div>
+        </div>
+      ) : (
+        <EmptyState
+          title={loading ? "Loading comparison data" : "No comparison curves loaded"}
+          text="Selected strategies need persisted artifact equity rows before they can be charted together."
+        />
+      )}
     </div>
   );
 }

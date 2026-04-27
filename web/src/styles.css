@@ -332,6 +332,10 @@ select {
   border-radius: 18px;
 }
 
+.leaderboard-table table {
+  min-width: 1720px;
+}
+
 table {
   width: 100%;
   min-width: 1080px;
@@ -361,6 +365,21 @@ tr:last-child td {
 
 tr.selected td {
   background: rgba(11, 111, 91, 0.08);
+}
+
+tr.compare-selected td {
+  background: rgba(29, 79, 115, 0.07);
+}
+
+.select-column {
+  width: 48px;
+  text-align: center;
+}
+
+.select-column input {
+  min-height: 18px;
+  width: 18px;
+  cursor: pointer;
 }
 
 .link-button {
@@ -794,6 +813,34 @@ pre {
   margin-bottom: 14px;
 }
 
+.history-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.history-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.history-summary-strip .metric-card {
+  min-height: 104px;
+  padding: 14px;
+  box-shadow: none;
+}
+
+.history-summary-strip .metric-card strong {
+  font-size: 1.35rem;
+}
+
+.history-toolbar {
+  justify-content: flex-start;
+}
+
 .inline-control {
   display: flex;
   align-items: center;
@@ -819,6 +866,61 @@ pre {
 
 .inline-form input {
   flex: 1 1 260px;
+}
+
+.comparison-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.comparison-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.comparison-legend article {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border: 1px solid rgba(222, 211, 189, 0.78);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.6);
+  padding: 12px;
+}
+
+.comparison-legend article.error {
+  border-color: rgba(169, 54, 47, 0.32);
+}
+
+.comparison-legend i {
+  display: block;
+  width: 12px;
+  height: 44px;
+  border-radius: 999px;
+}
+
+.comparison-legend strong,
+.comparison-legend span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.comparison-legend strong {
+  font-size: 0.88rem;
+}
+
+.comparison-legend span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-family: "Azeret Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.76rem;
+}
+
+.comparison-equity-chart polyline {
+  stroke-width: 3.5;
+  filter: none;
 }
 
 .body-copy {
@@ -865,6 +967,8 @@ pre {
   .metric-grid,
   .quality-grid,
   .artifact-summary,
+  .history-filter-grid,
+  .history-summary-strip,
   .strategy-card-grid,
   .chart-grid,
   .distribution-grid,
