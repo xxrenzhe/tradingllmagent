@@ -9,7 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from tlm.cli import main
-from tlm.paper import export_ninjatrader_signals, load_backtest_result, replay_trades
+from tlm.paper import build_paper_replay_attribution, export_ninjatrader_signals, load_backtest_result, replay_trades
 
 
 def sample_result() -> dict:
@@ -43,6 +43,7 @@ def sample_result() -> dict:
 class PaperReplayTests(unittest.TestCase):
     def test_replay_trades_builds_paper_fills_and_equity(self) -> None:
         replay = replay_trades(sample_result()["trades"], starting_equity=100_000)
+        attribution = build_paper_replay_attribution(sample_result(), replay)
 
         self.assertEqual(replay.trade_count, 1)
         self.assertEqual(replay.realized_pnl, 45.0)
@@ -55,6 +56,11 @@ class PaperReplayTests(unittest.TestCase):
         self.assertEqual(payload["orders"][0]["status"], "filled")
         self.assertEqual(payload["positions"][0]["status"], "closed")
         self.assertEqual(payload["positions"][0]["realized_pnl"], 45.0)
+        self.assertEqual(attribution["artifact"], "paper_shadow_replay_attribution")
+        self.assertEqual(attribution["strategy_name"], "test_orb")
+        self.assertEqual(attribution["total_fees"], 5.0)
+        self.assertEqual(attribution["total_slippage_cost"], 10.0)
+        self.assertTrue(attribution["replay_attribution_hash"])
 
     def test_ninjatrader_csv_and_oif_exports_are_offline_signals(self) -> None:
         trades = sample_result()["trades"]
@@ -127,6 +133,7 @@ class PaperReplayTests(unittest.TestCase):
         self.assertEqual(export_code, 0)
         self.assertEqual(replay_payload["ending_equity"], 100_045.0)
         self.assertEqual(replay_payload["account"]["mode"], "paper_replay")
+        self.assertEqual(replay_payload["replay_attribution"]["strategy_name"], "test_orb")
         self.assertEqual(len(replay_payload["positions"]), 1)
         self.assertEqual(loaded["symbol"], "NQmain")
         self.assertIn("close_above_opening_range_high", signal_output)

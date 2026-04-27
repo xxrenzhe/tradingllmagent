@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 from dataclasses import dataclass
@@ -140,6 +141,54 @@ def replay_trades(trades: Sequence[dict[str, Any]], starting_equity: float = 100
         fills=fills,
         positions=positions,
     )
+
+
+def build_paper_replay_attribution(
+    source_result: dict[str, Any],
+    replay: PaperReplayResult,
+) -> dict[str, Any]:
+    fills = replay.fills
+    total_fees = sum(float(fill.get("fees", 0)) for fill in fills)
+    total_slippage_cost = sum(float(fill.get("slippage_cost", 0)) for fill in fills)
+    gross_pnl = sum(float(fill.get("gross_pnl", 0)) for fill in fills)
+    source_strategy = source_result.get("strategy_spec", {}) if isinstance(source_result.get("strategy_spec"), dict) else {}
+    generation = source_strategy.get("generation", {}) if isinstance(source_strategy.get("generation"), dict) else {}
+    attribution = {
+        "schema_version": 1,
+        "artifact": "paper_shadow_replay_attribution",
+        "strategy_name": source_result.get("strategy_name") or source_strategy.get("name"),
+        "strategy_spec_hash": source_result.get("strategy_spec_hash"),
+        "module_id": source_result.get("module_id")
+        or source_result.get("strategy_card", {}).get("module_id")
+        or source_strategy.get("module_id")
+        or source_strategy.get("strategy_family"),
+        "generation_id": generation.get("generation_id"),
+        "feature_combo_hash": generation.get("feature_combo_hash"),
+        "trade_count": replay.trade_count,
+        "order_count": len(replay.orders),
+        "fill_count": len(replay.fills),
+        "position_count": len(replay.positions),
+        "gross_pnl": gross_pnl,
+        "realized_pnl": replay.realized_pnl,
+        "total_fees": total_fees,
+        "total_slippage_cost": total_slippage_cost,
+        "cost_drag": gross_pnl - replay.realized_pnl,
+        "average_fee_per_fill": total_fees / len(fills) if fills else 0.0,
+        "average_slippage_cost_per_fill": total_slippage_cost / len(fills) if fills else 0.0,
+        "drift_inputs": {
+            "backtest_metrics": source_result.get("metrics", {}),
+            "account": replay.account,
+            "closed_positions": replay.account.get("closed_position_count"),
+        },
+    }
+    attribution["replay_attribution_hash"] = stable_hash(attribution)
+    return attribution
+
+
+def stable_hash(payload: dict[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def _trade_risk_fields(trade: dict[str, Any]) -> dict[str, Any]:

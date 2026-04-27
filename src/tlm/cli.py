@@ -37,7 +37,7 @@ from .modules import (
     strategy_module_catalog,
     summarize_module_performance,
 )
-from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
+from .paper import build_paper_replay_attribution, export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_quality_report
 from .research import (
     StrategyTargetCriteria,
@@ -790,7 +790,9 @@ def cmd_report_experiment(args: argparse.Namespace) -> int:
 def cmd_paper_replay(args: argparse.Namespace) -> int:
     result = load_backtest_result(Path(args.strategy_id))
     replay = replay_trades(result["trades"], starting_equity=args.starting_equity)
-    output = json.dumps(replay.to_dict(), indent=2, sort_keys=True)
+    payload = replay.to_dict()
+    payload["replay_attribution"] = build_paper_replay_attribution(result, replay)
+    output = json.dumps(payload, indent=2, sort_keys=True)
     if args.output:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
