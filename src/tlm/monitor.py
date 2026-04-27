@@ -31,6 +31,7 @@ class MarketSnapshot:
     opening_range_high: float | None
     opening_range_low: float | None
     vwap: float | None
+    spread: float | None
     bar_count: int
     source: str
 
@@ -45,6 +46,7 @@ class MarketSnapshot:
             "opening_range_high": self.opening_range_high,
             "opening_range_low": self.opening_range_low,
             "vwap": self.vwap,
+            "spread": self.spread,
             "bar_count": self.bar_count,
             "source": self.source,
         }
@@ -58,7 +60,7 @@ def build_market_snapshot(
     source: str = "local_bars",
 ) -> MarketSnapshot:
     if not bars:
-        return MarketSnapshot(symbol, timeframe, None, None, None, None, None, None, None, 0, source)
+        return MarketSnapshot(symbol, timeframe, None, None, None, None, None, None, None, None, 0, source)
     ordered = sorted(bars, key=lambda row: row["timestamp"])
     latest = ordered[-1]
     opening = ordered[: max(opening_range_bars, 1)]
@@ -79,6 +81,7 @@ def build_market_snapshot(
         opening_range_high=max(float(row["high"]) for row in opening),
         opening_range_low=min(float(row["low"]) for row in opening),
         vwap=vwap,
+        spread=float(latest.get("avg_spread") or 0),
         bar_count=len(ordered),
         source=source,
     )
@@ -152,6 +155,7 @@ def build_monitor_report(
     bar_files: Sequence[Path],
     events: Sequence[MacroEvent] = (),
     proximity_points: float = 2.0,
+    target_frequency_pool: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     bars = load_bar_rows(bar_files)
     snapshot = build_market_snapshot(symbol, timeframe, bars)
@@ -176,12 +180,103 @@ def build_monitor_report(
         event_state=event_context["event_state"],
         max_importance=event_context.get("max_importance"),
     )
-    return {
+    report = {
         "monitor_run_id": monitor_run_id(symbol, timeframe, snapshot.snapshot_time),
         "snapshot": snapshot.to_dict(),
         "key_levels": key_levels,
         "event_context": event_context,
         "signal": signal,
+    }
+    if target_frequency_pool is not None:
+        report["trigger_gate"] = build_monitor_trigger_gate(report, target_frequency_pool)
+    return report
+
+
+def build_monitor_trigger_gate(
+    monitor_report: dict[str, Any],
+    target_frequency_pool: dict[str, Any],
+    *,
+    max_spread: float = 2.0,
+) -> dict[str, Any]:
+    signal = monitor_report.get("signal", {})
+    selected = list(target_frequency_pool.get("selected", []))
+    candidates = []
+    for strategy in selected:
+        risk_pre_gate = monitor_trigger_pre_gate(
+            monitor_report,
+            strategy,
+            max_spread=max_spread,
+        )
+        candidates.append(
+            {
+                "strategy_spec_hash": strategy.get("strategy_spec_hash"),
+                "strategy_name": strategy.get("strategy_name"),
+                "module_id": strategy.get("module_id"),
+                "timeframe": strategy.get("timeframe"),
+                "trigger_reason": "monitor_signal",
+                "signal_features": {
+                    "monitor_bucket": signal.get("bucket"),
+                    "monitor_strength": signal.get("strength"),
+                    "proxy_win_rate": strategy.get("proxy_win_rate"),
+                    "trades_per_day": strategy.get("trades_per_day"),
+                },
+                "risk_pre_gate": risk_pre_gate,
+            }
+        )
+    eligible = [
+        candidate
+        for candidate in candidates
+        if candidate["risk_pre_gate"]["passed"]
+        and signal.get("bucket") in {"strong_review", "medium_watch"}
+    ]
+    return {
+        "schema_version": 1,
+        "pool_version": target_frequency_pool.get("pool_version"),
+        "selected_count": len(selected),
+        "candidate_count": len(candidates),
+        "eligible_candidate_count": len(eligible),
+        "llm_trigger_required": bool(eligible),
+        "candidates": candidates,
+        "forbidden_outputs": ["live_gateway_command", "freeform_order", "broker_order"],
+    }
+
+
+def monitor_trigger_pre_gate(
+    monitor_report: dict[str, Any],
+    strategy: dict[str, Any],
+    *,
+    max_spread: float = 2.0,
+) -> dict[str, Any]:
+    snapshot = monitor_report.get("snapshot", {})
+    event_context = monitor_report.get("event_context", {})
+    reasons = []
+    hard_blocks = {
+        "event_blackout": False,
+        "data_stale": False,
+        "spread_above_limit": False,
+        "strategy_not_in_pool": False,
+        "live_gateway_forbidden": True,
+    }
+    if not strategy.get("strategy_spec_hash"):
+        hard_blocks["strategy_not_in_pool"] = True
+        reasons.append("missing_strategy_spec_hash")
+    if not snapshot.get("snapshot_time"):
+        hard_blocks["data_stale"] = True
+        reasons.append("missing_snapshot_time")
+    if (
+        event_context.get("event_state") in {"release_window", "event_release"}
+        and event_context.get("max_importance") == "high"
+    ):
+        hard_blocks["event_blackout"] = True
+        reasons.append("high_impact_event_blackout")
+    spread = snapshot.get("spread")
+    if spread is not None and float(spread) > max_spread:
+        hard_blocks["spread_above_limit"] = True
+        reasons.append("spread_above_limit")
+    return {
+        "passed": not any(value for key, value in hard_blocks.items() if key != "live_gateway_forbidden"),
+        "reasons": reasons,
+        "hard_blocks": hard_blocks,
     }
 
 

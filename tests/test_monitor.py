@@ -13,6 +13,7 @@ from tlm.events import MacroEvent
 from tlm.monitor import (
     build_market_snapshot,
     build_monitor_report,
+    build_monitor_trigger_gate,
     build_structured_monitor_review,
     scan_key_levels,
     validate_monitor_review_result,
@@ -131,6 +132,60 @@ class RuntimeMonitorTests(unittest.TestCase):
         self.assertEqual(report["event_context"]["event_state"], "release_window")
         self.assertEqual(report["signal"]["bucket"], "blocked")
         self.assertIn("blocked_by_high_impact_release_window", report["signal"]["reasons"])
+
+    def test_monitor_report_adds_trigger_gate_candidates_for_target_pool(self) -> None:
+        day = datetime(2026, 4, 27, 13, 30)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            write_monitor_bars(data_root, day)
+            report = build_monitor_report(
+                symbol="NQmain",
+                timeframe="5m",
+                bar_files=[bar_path(data_root, "NQmain", "5m", day.date())],
+                target_frequency_pool={
+                    "pool_version": "target_frequency_pool.v2",
+                    "selected": [
+                        {
+                            "module_id": "module_a",
+                            "strategy_name": "strategy_a",
+                            "strategy_spec_hash": "hash_a",
+                            "timeframe": "15m",
+                            "trades_per_day": 1.0,
+                            "proxy_win_rate": 0.61,
+                        }
+                    ],
+                },
+            )
+
+        self.assertEqual(report["signal"]["bucket"], "strong_review")
+        self.assertTrue(report["trigger_gate"]["llm_trigger_required"])
+        self.assertEqual(report["trigger_gate"]["eligible_candidate_count"], 1)
+        self.assertEqual(report["trigger_gate"]["candidates"][0]["risk_pre_gate"]["passed"], True)
+        self.assertIn("live_gateway_command", report["trigger_gate"]["forbidden_outputs"])
+
+    def test_monitor_trigger_gate_blocks_high_impact_event_window(self) -> None:
+        report = {
+            "snapshot": {"snapshot_time": "2026-04-27T13:30:00", "spread": 0.5},
+            "event_context": {"event_state": "release_window", "max_importance": "high"},
+            "signal": {"bucket": "strong_review", "strength": 0.9},
+        }
+        trigger_gate = build_monitor_trigger_gate(
+            report,
+            {
+                "pool_version": "target_frequency_pool.v2",
+                "selected": [
+                    {
+                        "module_id": "module_a",
+                        "strategy_name": "strategy_a",
+                        "strategy_spec_hash": "hash_a",
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(trigger_gate["llm_trigger_required"])
+        self.assertIn("high_impact_event_blackout", trigger_gate["candidates"][0]["risk_pre_gate"]["reasons"])
 
     def test_structured_monitor_review_routes_strong_signal_to_research_candidate(self) -> None:
         bars = [
