@@ -17,6 +17,7 @@ from .dukascopy import download_hour, iter_hours, parse_bi5_file
 from .experiments import record_audit_event, record_experiment, record_trial
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .monitor import build_monitor_report, write_monitor_outputs
+from .modules import build_target_frequency_pool, discover_module_memory_files, load_module_performance_memory
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .research import run_budgeted_research, write_research_result
 from .storage import (
@@ -28,6 +29,7 @@ from .storage import (
 )
 from .strategy import load_strategy_spec
 from .tasks import append_task_log, claim_queued_task, get_task, next_queued_task, update_task
+from .trigger_gate import load_trigger_gate_forward_report, run_trigger_gate_simulation
 from .variants import strategy_logic_hash
 
 
@@ -92,7 +94,53 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_research_iterate(payload)
     if task_type == "monitor.once":
         return execute_monitor_once(payload)
+    if task_type == "trigger_gate.simulate":
+        return execute_trigger_gate_simulate(payload)
+    if task_type == "trigger_gate.report":
+        return execute_trigger_gate_report(payload)
     raise ValueError(f"Unsupported task_type: {task_type}")
+
+
+def execute_trigger_gate_simulate(payload: dict[str, Any]) -> dict[str, Any]:
+    target_frequency_pool = payload.get("target_frequency_pool")
+    if not isinstance(target_frequency_pool, dict):
+        experiments_root = Path(payload.get("experiments_root", "experiments"))
+        records = load_module_performance_memory(discover_module_memory_files(experiments_root))
+        target_frequency_pool = build_target_frequency_pool(
+            records,
+            target_min_per_day=float(payload.get("target_min_per_day", 2.0)),
+            target_max_per_day=float(payload.get("target_max_per_day", 3.0)),
+            min_proxy_win_rate=float(payload.get("min_proxy_win_rate", 0.53)),
+            lookback_days=int(payload.get("lookback_days", 90)),
+            require_passed=not bool(payload.get("include_rejected", False)),
+        )
+    output_dir = payload.get("output_dir")
+    if not output_dir:
+        raise ValueError("output_dir is required")
+    return run_trigger_gate_simulation(
+        target_frequency_pool=target_frequency_pool,
+        output_dir=Path(str(output_dir)),
+        replay_start=str(payload.get("from") or payload.get("date_from") or ""),
+        replay_end=str(payload.get("to") or payload.get("date_to") or ""),
+        enable_llm=bool(payload.get("enable_llm", False)),
+        step_minutes=int(payload.get("step_minutes", 15)),
+        model=str(payload.get("model", "local-trigger-gate")),
+        daily_token_budget=(
+            int(payload["daily_token_budget"])
+            if payload.get("daily_token_budget") is not None
+            else None
+        ),
+    )
+
+
+def execute_trigger_gate_report(payload: dict[str, Any]) -> dict[str, Any]:
+    output_dir = payload.get("output_dir")
+    if not output_dir:
+        raise ValueError("output_dir is required")
+    previous_pool = payload.get("previous_pool")
+    if previous_pool is not None and not isinstance(previous_pool, dict):
+        raise ValueError("previous_pool must be an object")
+    return load_trigger_gate_forward_report(Path(str(output_dir)), previous_pool=previous_pool)
 
 
 def execute_data_download(payload: dict[str, Any]) -> dict[str, Any]:

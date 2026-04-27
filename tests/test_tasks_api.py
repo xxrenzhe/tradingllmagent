@@ -109,6 +109,52 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(completed["result"]["strategy_family"], "opening_range_breakout")
         self.assertTrue(any(log["message"] == "Completed strategy.validate" for log in logs))
 
+    def test_run_task_executes_trigger_gate_simulation_and_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            db_path = root / "tasks.sqlite3"
+            output_dir = root / "trigger_gate"
+            pool = {
+                "pool_version": "target_frequency_pool.v2",
+                "selected": [
+                    {
+                        "module_id": "module_a",
+                        "strategy_name": "strategy_a",
+                        "strategy_spec_hash": "hash_a",
+                        "timeframe": "15m",
+                        "trades_per_day": 1.0,
+                        "proxy_win_rate": 0.61,
+                    }
+                ],
+            }
+            create_task(
+                db_path,
+                "trigger_gate.simulate",
+                {
+                    "target_frequency_pool": pool,
+                    "from": "2026-04-25",
+                    "to": "2026-04-26",
+                    "output_dir": str(output_dir),
+                    "enable_llm": True,
+                },
+                task_id="task_trigger_gate_sim",
+            )
+            completed_sim = run_task(db_path, "task_trigger_gate_sim")
+            create_task(
+                db_path,
+                "trigger_gate.report",
+                {"output_dir": str(output_dir)},
+                task_id="task_trigger_gate_report",
+            )
+            completed_report = run_task(db_path, "task_trigger_gate_report")
+            logs = get_task_logs(db_path, "task_trigger_gate_sim")
+
+        self.assertEqual(completed_sim["status"], "completed")
+        self.assertEqual(completed_sim["result"]["mode"], "llm_enabled")
+        self.assertEqual(completed_report["status"], "completed")
+        self.assertEqual(completed_report["result"]["llm_calls_match_triggers"], True)
+        self.assertTrue(any(log["message"] == "Completed trigger_gate.simulate" for log in logs))
+
     def test_run_next_queued_task_claims_and_executes_once(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "tasks.sqlite3"
