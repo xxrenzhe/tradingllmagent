@@ -17,6 +17,7 @@ Older documents remain useful as design history, but they should not override ne
 - `nt8-live-integration-roadmap.md`: authoritative for post-v1 execution readiness, NT8 gateway evolution, paper shadow, sim, micro-live, controlled live, incident response, and execution safety.
 - `integrated-trading-system-implementation-plan.md`: authoritative for cross-document implementation sequencing, phase gates, and immediate landing order.
 - `current-trading-system-optimization-roadmap.md`: authoritative for current completeness assessment, remaining optimization priorities, and next implementation milestones.
+- `llm-trigger-gate-optimization-plan.md`: authoritative for triggered LLM gating, target-frequency strategy pool selection, token-cost control, memory backfill, and forward-test iteration.
 
 ## 3. Version Boundaries
 
@@ -41,8 +42,9 @@ The current implementation should follow this order:
 1. Stabilize v1 research artifacts: Strategy Spec, module id, leaderboard, report artifacts, hidden final holdout, and reproducibility hashes.
 2. Add structured context: macro event calendar, event context, runtime snapshot, key-level scanner, and paper-only monitor reports.
 3. Add memory and review layer: strategy cards, module performance memory, LLM report reviews, debate ranking, and global-memory events.
-4. Add execution contract without live permission: OpenAPI schemas, typed client, `ExecutionIntent`, `RiskDecision`, audit events, and mock/sim gateway contracts.
-5. Add NT8 sim boundary: independent gateway process, heartbeat, ACK/NACK, reconciliation, incident events, and sim-only validation.
-6. Add controlled live only after gates: paper shadow, micro-live with manual approval, broker-side protection, runbooks, and live profile whitelist.
+4. Add triggered LLM gate discipline: target-frequency strategy pool, deterministic pre-gates, structured LLM decisions, token accounting, and memory outcome backfill.
+5. Add execution contract without live permission: OpenAPI schemas, typed client, `ExecutionIntent`, `RiskDecision`, audit events, and mock/sim gateway contracts.
+6. Add NT8 sim boundary: independent gateway process, heartbeat, ACK/NACK, reconciliation, incident events, and sim-only validation.
+7. Add controlled live only after gates: paper shadow, micro-live with manual approval, broker-side protection, runbooks, and live profile whitelist.
 
 Do not start from live order buttons, unrestricted NT8 control, or free-form LLM trading actions. Those are downstream capabilities gated by `nt8-live-integration-roadmap.md`.
