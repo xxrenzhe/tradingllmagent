@@ -6,7 +6,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 from uuid import uuid4
 
 
@@ -14,6 +14,15 @@ ALLOWED_ACTIONS = {"buy", "sell", "sell_short", "buy_to_cover"}
 ALLOWED_MODES = {"offline_export", "nt8_sim", "paper_shadow", "micro_live", "live"}
 ENTRY_ACTIONS = {"buy", "sell_short"}
 READINESS_STAGES = {"paper_shadow", "nt8_sim", "micro_live", "controlled_live"}
+RISK_PROFILE_SCHEMA_VERSION = 1
+REQUIRED_RISK_PROFILE_FIELDS = {
+    "profile_id",
+    "allowed_accounts",
+    "allowed_instruments",
+    "max_quantity",
+    "require_bracket",
+    "live_enabled",
+}
 EXECUTION_INTENT_STATUSES = {
     "created",
     "risk_rejected",
@@ -267,6 +276,105 @@ def evaluate_risk(intent: ExecutionIntent, profile: dict[str, Any] | None = None
     }
 
 
+def validate_risk_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    errors = []
+    missing = sorted(field for field in REQUIRED_RISK_PROFILE_FIELDS if field not in profile)
+    errors.extend(f"missing_{field}" for field in missing)
+    if "profile_id" in profile and not str(profile["profile_id"]).strip():
+        errors.append("profile_id_empty")
+    if int(profile.get("max_quantity", 1)) <= 0:
+        errors.append("max_quantity_must_be_positive")
+    for field in ["allowed_accounts", "allowed_instruments"]:
+        if field in profile and not isinstance(profile[field], list):
+            errors.append(f"{field}_must_be_list")
+    for field in ["require_bracket", "live_enabled"]:
+        if field in profile and not isinstance(profile[field], bool):
+            errors.append(f"{field}_must_be_boolean")
+    return {
+        "valid": not errors,
+        "errors": errors,
+        "profile_id": profile.get("profile_id"),
+        "schema_version": int(profile.get("schema_version", RISK_PROFILE_SCHEMA_VERSION)),
+    }
+
+
+def write_risk_profile_registry(path: Path, profiles: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    registry = build_risk_profile_registry(profiles)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(registry, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return registry
+
+
+def build_risk_profile_registry(profiles: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    rows = []
+    seen = set()
+    errors = []
+    for profile in profiles:
+        validation = validate_risk_profile(profile)
+        profile_id = str(profile.get("profile_id", ""))
+        if profile_id in seen:
+            errors.append(f"duplicate_profile_id:{profile_id}")
+        seen.add(profile_id)
+        if not validation["valid"]:
+            errors.extend(f"{profile_id}:{error}" for error in validation["errors"])
+        rows.append(
+            {
+                **profile,
+                "schema_version": int(profile.get("schema_version", RISK_PROFILE_SCHEMA_VERSION)),
+                "updated_at": str(profile.get("updated_at") or datetime.now(UTC).isoformat()),
+            }
+        )
+    if errors:
+        raise ValueError(";".join(errors))
+    return {
+        "schema_version": RISK_PROFILE_SCHEMA_VERSION,
+        "profile_count": len(rows),
+        "profiles": sorted(rows, key=lambda item: item["profile_id"]),
+        "generated_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def load_risk_profile_registry(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return build_risk_profile_registry([default_paper_shadow_risk_profile()])
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def get_risk_profile(path: Path, profile_id: str) -> dict[str, Any]:
+    registry = load_risk_profile_registry(path)
+    for profile in registry.get("profiles", []):
+        if profile.get("profile_id") == profile_id:
+            return profile
+    raise KeyError(f"Unknown risk profile: {profile_id}")
+
+
+def resolve_risk_profile(payload: dict[str, Any], registry_path: Path | None = None) -> dict[str, Any]:
+    if payload.get("risk_profile"):
+        return dict(payload["risk_profile"])
+    profile_id = str(payload.get("risk_profile_id", "paper_shadow_default"))
+    return get_risk_profile(registry_path or Path("configs/risk_profiles.json"), profile_id)
+
+
+def default_paper_shadow_risk_profile() -> dict[str, Any]:
+    return {
+        "schema_version": RISK_PROFILE_SCHEMA_VERSION,
+        "profile_id": "paper_shadow_default",
+        "description": "Default paper-only risk profile. Live modes disabled.",
+        "allowed_accounts": ["Sim101"],
+        "allowed_instruments": ["NQ 06-26", "MNQ 06-26"],
+        "max_quantity": 1,
+        "require_bracket": True,
+        "live_enabled": False,
+        "kill_switch": False,
+        "data_stale": False,
+        "event_blackout": False,
+        "daily_loss_limit_reached": False,
+        "max_spread_ticks": 4,
+        "max_slippage_ticks": 4,
+        "max_position_after_fill": 1,
+    }
+
+
 def build_gateway_command(intent: ExecutionIntent, risk: dict[str, Any]) -> dict[str, Any]:
     if risk.get("decision") != "risk_approved":
         raise ValueError("Only risk_approved intents can be converted to gateway commands")
@@ -299,6 +407,17 @@ def build_execution_intent_response(payload: dict[str, Any]) -> dict[str, Any]:
     intent_payload = intent.to_dict()
     intent_payload["status"] = status
     return {"intent": intent_payload, "risk": risk}
+
+
+def build_execution_intent_response_with_registry(
+    payload: dict[str, Any],
+    registry_path: Path,
+) -> dict[str, Any]:
+    enriched = dict(payload)
+    enriched["risk_profile"] = resolve_risk_profile(payload, registry_path)
+    response = build_execution_intent_response(enriched)
+    response["risk_profile_id"] = enriched["risk_profile"].get("profile_id")
+    return response
 
 
 def append_execution_audit(path: Path, event: dict[str, Any]) -> None:

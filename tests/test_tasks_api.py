@@ -489,6 +489,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/monitor/report", paths)
         self.assertIn("/api/execution/readiness", paths)
         self.assertIn("/api/execution/approval-queue", paths)
+        self.assertIn("/api/execution/risk-profiles", paths)
         self.assertIn("/api/readiness/external-validation", paths)
         self.assertIn("/api/calibration/costs", paths)
         self.assertIn("/api/modules/memory", paths)
@@ -533,6 +534,7 @@ class APIImportTests(unittest.TestCase):
             "/api/execution/paper-shadow",
             "/api/execution/readiness",
             "/api/execution/approval-queue",
+            "/api/execution/risk-profiles",
             "/api/readiness/external-validation",
             "/api/calibration/costs",
             "/api/gateways/nt8/commands",

@@ -264,6 +264,17 @@ paths:
       responses:
         "200":
           description: Approval queue.
+  /api/execution/risk-profiles:
+    get:
+      summary: List audited execution risk profiles.
+      responses:
+        "200":
+          description: Risk profile registry.
+    post:
+      summary: Write an audited execution risk profile registry.
+      responses:
+        "200":
+          description: Risk profile registry.
   /api/readiness/external-validation:
     post:
       summary: Build an external validation evidence artifact.

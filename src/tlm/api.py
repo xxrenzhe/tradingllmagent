@@ -17,10 +17,13 @@ from .events import (
 )
 from .experiments import load_experiment_audit_logs, load_experiment_summary
 from .execution import (
+    build_execution_intent_response_with_registry,
     build_execution_intent_response,
     evaluate_live_readiness,
+    load_risk_profile_registry,
     list_approval_queue,
     submit_paper_shadow,
+    write_risk_profile_registry,
 )
 from .modules import (
     discover_module_memory_files,
@@ -455,8 +458,13 @@ def create_app():
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/execution/intents")
-    def execution_intents(payload: dict = Body(...)) -> dict:
+    def execution_intents(
+        payload: dict = Body(...),
+        risk_profile_registry: str = "configs/risk_profiles.json",
+    ) -> dict:
         try:
+            if payload.get("risk_profile_id") and not payload.get("risk_profile"):
+                return build_execution_intent_response_with_registry(payload, Path(risk_profile_registry))
             return build_execution_intent_response(payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -484,6 +492,20 @@ def create_app():
         limit: int = 100,
     ) -> dict:
         return list_approval_queue(Path(execution_db), limit=limit)
+
+    @app.get("/api/execution/risk-profiles")
+    def execution_risk_profiles(risk_profile_registry: str = "configs/risk_profiles.json") -> dict:
+        return load_risk_profile_registry(Path(risk_profile_registry))
+
+    @app.post("/api/execution/risk-profiles")
+    def execution_risk_profiles_write(
+        payload: dict = Body(...),
+        risk_profile_registry: str = "configs/risk_profiles.json",
+    ) -> dict:
+        try:
+            return write_risk_profile_registry(Path(risk_profile_registry), payload.get("profiles", []))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/readiness/external-validation")
     def readiness_external_validation(payload: dict = Body(...)) -> dict:

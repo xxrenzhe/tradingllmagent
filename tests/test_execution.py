@@ -7,13 +7,19 @@ from pathlib import Path
 
 from tlm.api import build_execution_intent_response
 from tlm.execution import (
+    build_execution_intent_response_with_registry,
     build_paper_shadow_run,
     build_gateway_command,
     create_execution_state_record,
     create_execution_intent,
+    default_paper_shadow_risk_profile,
     evaluate_live_readiness,
     evaluate_risk,
+    get_risk_profile,
+    load_risk_profile_registry,
     transition_execution_state,
+    validate_risk_profile,
+    write_risk_profile_registry,
     submit_paper_shadow,
 )
 
@@ -58,6 +64,36 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertEqual(response["intent"]["schema_version"], 1)
         self.assertEqual(response["intent"]["protocol_version"], "execution.v1")
         self.assertEqual(response["intent"]["source_strategy"]["module_id"], "opening_range_breakout")
+
+    def test_risk_profile_registry_roundtrip_and_intent_resolution(self) -> None:
+        profile = {
+            **default_paper_shadow_risk_profile(),
+            "profile_id": "sim_nq_one_lot",
+            "allowed_accounts": ["Sim101"],
+            "allowed_instruments": ["NQ 06-26"],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry_path = Path(temp_dir) / "risk_profiles.json"
+            registry = write_risk_profile_registry(registry_path, [profile])
+            loaded = load_risk_profile_registry(registry_path)
+            resolved = get_risk_profile(registry_path, "sim_nq_one_lot")
+            payload = sample_intent_payload()
+            payload.pop("risk_profile")
+            payload["risk_profile_id"] = "sim_nq_one_lot"
+            response = build_execution_intent_response_with_registry(payload, registry_path)
+
+        self.assertEqual(registry["profile_count"], 1)
+        self.assertEqual(loaded["profiles"][0]["profile_id"], "sim_nq_one_lot")
+        self.assertEqual(resolved["max_quantity"], 1)
+        self.assertEqual(response["risk_profile_id"], "sim_nq_one_lot")
+        self.assertTrue(response["risk"]["passed"])
+
+    def test_risk_profile_validation_rejects_incomplete_profiles(self) -> None:
+        validation = validate_risk_profile({"profile_id": "bad", "max_quantity": 0})
+
+        self.assertFalse(validation["valid"])
+        self.assertIn("max_quantity_must_be_positive", validation["errors"])
+        self.assertIn("missing_allowed_accounts", validation["errors"])
 
     def test_risk_gate_rejects_missing_bracket_and_disabled_live(self) -> None:
         payload = sample_intent_payload()
