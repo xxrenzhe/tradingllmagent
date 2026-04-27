@@ -75,6 +75,49 @@ class MacroEventTests(unittest.TestCase):
         self.assertEqual(release_context.event_state, "release_window")
         self.assertEqual(normal_context.event_state, "normal")
 
+    def test_event_actual_and_surprise_are_point_in_time_gated(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            calendar_path = Path(temp_dir) / "macro_events.json"
+            calendar_path.write_text(
+                json.dumps(
+                    {
+                        "calendar_id": "test_macro",
+                        "events": [
+                            {
+                                "event_id": "cpi_actual",
+                                "name": "CPI actual",
+                                "timestamp_utc": "2026-04-27T13:30:00Z",
+                                "actual_available_at": "2026-04-27T13:31:00Z",
+                                "importance": "high",
+                                "affected_symbols": ["NQmain"],
+                                "pre_event_minutes": 15,
+                                "release_window_minutes": 5,
+                                "post_event_minutes": 20,
+                                "forecast": 3.1,
+                                "previous": 3.0,
+                                "actual": 3.4,
+                                "surprise": 0.3,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            event = load_event_calendar(calendar_path)["events"][0]
+            pre_context = context_for_timestamp("NQmain", datetime(2026, 4, 27, 13, 29), [event])
+            post_context = context_for_timestamp("NQmain", datetime(2026, 4, 27, 13, 31), [event])
+
+        pre_detail = pre_context.active_event_details[0]
+        post_detail = post_context.active_event_details[0]
+        self.assertEqual(pre_detail["forecast"], 3.1)
+        self.assertEqual(pre_detail["previous"], 3.0)
+        self.assertIsNone(pre_detail["actual"])
+        self.assertIsNone(pre_detail["surprise"])
+        self.assertFalse(pre_detail["actual_released"])
+        self.assertEqual(post_detail["actual"], 3.4)
+        self.assertEqual(post_detail["surprise"], 0.3)
+        self.assertTrue(post_detail["actual_released"])
+
     def test_event_calendar_normalizes_aliases_and_calendar_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -182,6 +225,13 @@ class MacroEventTests(unittest.TestCase):
                         [str(output)],
                     ).fetchall()
                 ]
+                event_details = [
+                    row[0]
+                    for row in con.execute(
+                        "SELECT active_event_details FROM read_parquet(?) ORDER BY timestamp",
+                        [str(output)],
+                    ).fetchall()
+                ]
             finally:
                 con.close()
 
@@ -189,6 +239,7 @@ class MacroEventTests(unittest.TestCase):
         self.assertEqual(payload["rows"], 4)
         self.assertTrue(output_exists)
         self.assertEqual(states, ["normal", "pre_event", "pre_event", "pre_event"])
+        self.assertEqual(json.loads(event_details[0]), [])
 
     def test_strategy_spec_accepts_event_policy(self) -> None:
         payload = base_spec()

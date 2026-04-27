@@ -21,6 +21,11 @@ class MacroEvent:
     release_window_minutes: int
     post_event_minutes: int
     policy_ref: str
+    forecast: float | None = None
+    previous: float | None = None
+    actual: float | None = None
+    surprise: float | None = None
+    actual_available_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -33,6 +38,11 @@ class MacroEvent:
             "release_window_minutes": self.release_window_minutes,
             "post_event_minutes": self.post_event_minutes,
             "policy_ref": self.policy_ref,
+            "forecast": self.forecast,
+            "previous": self.previous,
+            "actual": self.actual,
+            "surprise": self.surprise,
+            "actual_available_at": self.actual_available_at.isoformat() if self.actual_available_at else None,
         }
 
 
@@ -46,6 +56,7 @@ class EventContext:
     policy_ref: str | None
     minutes_to_event: float | None
     minutes_since_event: float | None
+    active_event_details: list[dict[str, Any]]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -57,6 +68,7 @@ class EventContext:
             "policy_ref": self.policy_ref,
             "minutes_to_event": self.minutes_to_event,
             "minutes_since_event": self.minutes_since_event,
+            "active_event_details": self.active_event_details,
         }
 
 
@@ -114,6 +126,15 @@ def parse_event(raw: dict[str, Any]) -> MacroEvent:
         release_window_minutes=int(raw.get("release_window_minutes", 0)),
         post_event_minutes=int(post_event_minutes),
         policy_ref=str(raw.get("policy_ref", "default_macro_policy")),
+        forecast=_optional_float(raw.get("forecast")),
+        previous=_optional_float(raw.get("previous")),
+        actual=_optional_float(raw.get("actual")),
+        surprise=_optional_float(raw.get("surprise")),
+        actual_available_at=(
+            parse_timestamp(raw.get("actual_available_at"))
+            if raw.get("actual_available_at")
+            else timestamp
+        ),
     )
 
 
@@ -175,7 +196,7 @@ def context_for_timestamp(symbol: str, timestamp: datetime, events: Sequence[Mac
             else:
                 minutes_since_values.append(abs(delta_minutes))
     if not active:
-        return EventContext(symbol, timestamp, "normal", [], None, None, None, None)
+        return EventContext(symbol, timestamp, "normal", [], None, None, None, None, [])
     max_event = max(active, key=lambda event: IMPORTANCE_RANK.get(event.importance, 0))
     release_half_window = timedelta(minutes=max_event.release_window_minutes / 2)
     if max_event.release_window_minutes and (
@@ -199,7 +220,26 @@ def context_for_timestamp(symbol: str, timestamp: datetime, events: Sequence[Mac
         policy_ref=max_event.policy_ref,
         minutes_to_event=min(minutes_to_values) if minutes_to_values else None,
         minutes_since_event=min(minutes_since_values) if minutes_since_values else None,
+        active_event_details=[point_in_time_event_detail(event, timestamp) for event in active],
     )
+
+
+def point_in_time_event_detail(event: MacroEvent, timestamp: datetime) -> dict[str, Any]:
+    timestamp = timestamp.replace(tzinfo=None)
+    actual_available_at = event.actual_available_at or event.timestamp_utc
+    released = timestamp >= actual_available_at.replace(tzinfo=None)
+    return {
+        "event_id": event.event_id,
+        "name": event.name,
+        "timestamp_utc": event.timestamp_utc.isoformat(),
+        "importance": event.importance,
+        "forecast": event.forecast,
+        "previous": event.previous,
+        "actual": event.actual if released else None,
+        "surprise": event.surprise if released else None,
+        "actual_available_at": actual_available_at.isoformat(),
+        "actual_released": released,
+    }
 
 
 def load_bar_timestamps(bar_files: Sequence[Path]) -> list[tuple[str, datetime]]:
@@ -240,6 +280,7 @@ def write_event_context_parquet(path: Path, contexts: Sequence[EventContext]) ->
             context.policy_ref,
             context.minutes_to_event,
             context.minutes_since_event,
+            json.dumps(context.active_event_details, sort_keys=True),
         )
         for context in contexts
     ]
@@ -255,12 +296,17 @@ def write_event_context_parquet(path: Path, contexts: Sequence[EventContext]) ->
                 max_importance VARCHAR,
                 policy_ref VARCHAR,
                 minutes_to_event DOUBLE,
-                minutes_since_event DOUBLE
+                minutes_since_event DOUBLE,
+                active_event_details VARCHAR
             )
             """
         )
         if rows:
-            con.executemany("INSERT INTO event_context VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+            con.executemany("INSERT INTO event_context VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
         con.execute("COPY event_context TO ? (FORMAT PARQUET)", [str(path)])
     finally:
         con.close()
+
+
+def _optional_float(value: Any) -> float | None:
+    return None if value is None else float(value)
