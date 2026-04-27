@@ -48,6 +48,7 @@ coverage/
 Thumbs.db
 
 # Logs, databases, and runtime artifacts
+logs/
 *.log
 *.sqlite
 *.sqlite3
