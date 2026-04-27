@@ -214,6 +214,72 @@ class TriggerGateMemoryTests(unittest.TestCase):
         self.assertEqual(report["decision_outcome_confusion"]["rows"]["allow"]["allowed_loser"], 1)
         self.assertEqual(report["live_gateway_command_count"], 0)
 
+    def test_forward_report_counts_block_opportunity_cost(self) -> None:
+        evidence = build_trigger_evidence_record(
+            strategy_spec_hash="hash_a",
+            module_id="module_a",
+            strategy_name="strategy_a",
+            timeframe="15m",
+            signal_time=datetime(2026, 4, 27, 12, 0, tzinfo=UTC),
+            signal_features={"entry_signal": True, "score": 0.82},
+            market_snapshot={"last_price": 19000.0},
+            event_context={"event_state": "normal"},
+            risk_pre_gate={"passed": True, "reasons": []},
+            pool_version="target_frequency_pool.v2",
+            trigger_reason="strategy_signal",
+        )
+        decision = build_trigger_decision_record(
+            evidence=evidence,
+            model="local-gate",
+            prompt_payload={"evidence_id": evidence["evidence_id"]},
+            response_payload={
+                "decision": "block",
+                "risk_level": "high",
+                "confidence": 0.7,
+                "reasons": ["late entry"],
+                "invalidation": [],
+                "required_follow_up": [],
+                "token_budget_note": "within budget",
+            },
+            input_tokens=100,
+            output_tokens=20,
+        )
+        outcome = build_trigger_outcome_record(
+            decision=decision,
+            outcome_window="48h",
+            net_pnl=125.0,
+        )
+        manifest = {
+            "mode": "llm_enabled",
+            "duration_days": 2,
+            "trigger_per_day": 0.5,
+            "selected_strategy_pool": [
+                {
+                    "module_id": "module_a",
+                    "strategy_name": "strategy_a",
+                    "strategy_spec_hash": "hash_a",
+                    "trades_per_day": 0.5,
+                    "proxy_win_rate": 0.61,
+                }
+            ],
+            "target_frequency_pool": {
+                "pool_version": "target_frequency_pool.v2",
+                "weighted_proxy_win_rate": 0.61,
+            },
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            append_trigger_gate_memory(root, evidence=evidence, decision=decision, outcome=outcome)
+            report = load_trigger_gate_forward_report(root)
+
+        cost = report["block_opportunity_cost"]
+        self.assertEqual(cost["status"], "missed_winners_found")
+        self.assertEqual(cost["block_decision_count"], 1)
+        self.assertEqual(cost["missed_winner_count"], 1)
+        self.assertEqual(cost["opportunity_cost"], 125.0)
+        self.assertEqual(cost["strategy_rows"][0]["strategy_spec_hash"], "hash_a")
+
     def test_cli_trigger_gate_simulate_uses_pool_file(self) -> None:
         pool = {
             "pool_version": "target_frequency_pool.v2",

@@ -459,11 +459,88 @@ def build_forward_test_report(
         "token_total": token_budget["token_total"],
         "token_per_trigger": token_budget["token_total"] / len(evidence) if evidence else None,
         "decision_outcome_confusion": build_decision_outcome_confusion(decisions, outcomes),
+        "block_opportunity_cost": build_block_opportunity_cost_report(decisions, outcomes),
         "strategy_pool_changes": build_strategy_pool_change_report(previous_pool, manifest.get("target_frequency_pool")),
         "llm_call_count": len(decisions),
         "llm_calls_match_triggers": len(decisions) == len(evidence) if manifest.get("mode") == "llm_enabled" else None,
         "live_gateway_command_count": 0,
     }
+
+
+def build_block_opportunity_cost_report(
+    decisions: Sequence[dict[str, Any]],
+    outcomes: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    decisions_by_id = {str(row.get("decision_id")): row for row in decisions if row.get("decision_id")}
+    block_decisions = [row for row in decisions if row.get("decision") == "block"]
+    block_outcomes = [
+        (decisions_by_id[str(outcome.get("decision_id"))], outcome)
+        for outcome in outcomes
+        if outcome.get("decision_id")
+        and str(outcome.get("decision_id")) in decisions_by_id
+        and decisions_by_id[str(outcome.get("decision_id"))].get("decision") == "block"
+        and outcome.get("net_pnl") is not None
+    ]
+    missed_winners = [(decision, outcome) for decision, outcome in block_outcomes if float(outcome.get("net_pnl") or 0) > 0]
+    avoided_losers = [(decision, outcome) for decision, outcome in block_outcomes if float(outcome.get("net_pnl") or 0) <= 0]
+    opportunity_cost = sum(float(outcome.get("net_pnl") or 0) for _, outcome in missed_winners)
+    avoided_loss = abs(sum(float(outcome.get("net_pnl") or 0) for _, outcome in avoided_losers))
+    net_blocked_pnl = sum(float(outcome.get("net_pnl") or 0) for _, outcome in block_outcomes)
+    by_strategy: dict[str, dict[str, Any]] = {}
+    for decision, outcome in block_outcomes:
+        strategy_hash = str(decision.get("strategy_spec_hash") or "unknown")
+        row = by_strategy.setdefault(
+            strategy_hash,
+            {
+                "strategy_spec_hash": strategy_hash,
+                "strategy_name": decision.get("strategy_name"),
+                "module_id": decision.get("module_id"),
+                "blocked_outcome_count": 0,
+                "missed_winner_count": 0,
+                "avoided_loser_count": 0,
+                "opportunity_cost": 0.0,
+                "avoided_loss": 0.0,
+                "net_blocked_pnl": 0.0,
+            },
+        )
+        net_pnl = float(outcome.get("net_pnl") or 0)
+        row["blocked_outcome_count"] += 1
+        row["net_blocked_pnl"] += net_pnl
+        if net_pnl > 0:
+            row["missed_winner_count"] += 1
+            row["opportunity_cost"] += net_pnl
+        else:
+            row["avoided_loser_count"] += 1
+            row["avoided_loss"] += abs(net_pnl)
+    return {
+        "schema_version": 1,
+        "status": _block_opportunity_status(block_decisions, block_outcomes, opportunity_cost),
+        "block_decision_count": len(block_decisions),
+        "blocked_outcome_count": len(block_outcomes),
+        "pending_block_outcome_count": max(len(block_decisions) - len(block_outcomes), 0),
+        "missed_winner_count": len(missed_winners),
+        "avoided_loser_count": len(avoided_losers),
+        "missed_winner_rate": len(missed_winners) / len(block_outcomes) if block_outcomes else None,
+        "opportunity_cost": opportunity_cost,
+        "avoided_loss": avoided_loss,
+        "net_blocked_pnl": net_blocked_pnl,
+        "opportunity_cost_per_block": opportunity_cost / len(block_decisions) if block_decisions else None,
+        "strategy_rows": sorted(by_strategy.values(), key=lambda row: (-row["opportunity_cost"], row["strategy_spec_hash"])),
+    }
+
+
+def _block_opportunity_status(
+    block_decisions: Sequence[dict[str, Any]],
+    block_outcomes: Sequence[tuple[dict[str, Any], dict[str, Any]]],
+    opportunity_cost: float,
+) -> str:
+    if not block_decisions:
+        return "no_blocks"
+    if not block_outcomes:
+        return "pending_outcomes"
+    if opportunity_cost > 0:
+        return "missed_winners_found"
+    return "blocks_avoided_losses"
 
 
 def build_proxy_outcome_drift_report(
