@@ -121,6 +121,53 @@ class ModuleMemoryTests(unittest.TestCase):
         )
         self.assertEqual(pool["rejected"]["proxy_win_rate_below_threshold"], 1)
         self.assertEqual(pool["rejected"]["not_passed"], 1)
+        self.assertEqual(pool["schema_version"], 2)
+        self.assertEqual(pool["diversity_report"]["selected_module_count"], 2)
+        self.assertEqual(len(pool["candidate_quality_order"]), 2)
+
+    def test_target_frequency_pool_limits_duplicate_modules(self) -> None:
+        records = [
+            {
+                "experiment_id": "exp_a",
+                "module_id": "same_module",
+                "strategy_name": "best_duplicate",
+                "strategy_spec_hash": "hash_a",
+                "passed": True,
+                "trades_per_day": 1.0,
+                "proxy_win_rate": 0.7,
+                "expectancy": 8.0,
+                "robustness_score": 0.8,
+            },
+            {
+                "experiment_id": "exp_b",
+                "module_id": "same_module",
+                "strategy_name": "lower_duplicate",
+                "strategy_spec_hash": "hash_b",
+                "passed": True,
+                "trades_per_day": 1.0,
+                "proxy_win_rate": 0.65,
+                "expectancy": 5.0,
+                "robustness_score": 0.7,
+            },
+            {
+                "experiment_id": "exp_c",
+                "module_id": "different_module",
+                "strategy_name": "diversifier",
+                "strategy_spec_hash": "hash_c",
+                "passed": True,
+                "trades_per_day": 1.1,
+                "proxy_win_rate": 0.6,
+            },
+        ]
+
+        pool = build_target_frequency_pool(records)
+
+        self.assertEqual(pool["status"], "target_met")
+        self.assertEqual(
+            [row["strategy_name"] for row in pool["selected"]],
+            ["best_duplicate", "diversifier"],
+        )
+        self.assertEqual(pool["diversity_report"]["selected_modules"], ["different_module", "same_module"])
 
     def test_module_registry_promotes_and_audits_memory_summary(self) -> None:
         registry = build_module_registry(

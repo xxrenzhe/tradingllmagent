@@ -327,6 +327,8 @@ def build_target_frequency_pool(
     lookback_days: int = 90,
     require_passed: bool = True,
     max_pool_size: int = 12,
+    max_per_module: int = 1,
+    max_per_strategy_hash: int = 1,
 ) -> dict[str, Any]:
     candidates = []
     rejected = {
@@ -363,6 +365,7 @@ def build_target_frequency_pool(
                 "proxy_win_rate": proxy_win_rate,
                 "expectancy": _optional_float(record.get("expectancy")),
                 "robustness_score": _optional_float(record.get("robustness_score")),
+                "quality_rank_key": _target_pool_quality_rank(record, daily_rate, proxy_win_rate),
             }
         )
 
@@ -381,6 +384,8 @@ def build_target_frequency_pool(
         target_min_per_day=target_min_per_day,
         target_max_per_day=target_max_per_day,
         max_pool_size=max_pool_size,
+        max_per_module=max_per_module,
+        max_per_strategy_hash=max_per_strategy_hash,
     )
     total_rate = sum(float(item["trades_per_day"]) for item in selected)
     weighted_proxy_win_rate = (
@@ -395,18 +400,35 @@ def build_target_frequency_pool(
         status = "below_target"
     else:
         status = "above_target"
+    diversity_report = _target_pool_diversity_report(ordered, selected)
     return {
+        "schema_version": 2,
+        "pool_version": "target_frequency_pool.v2",
         "status": status,
         "target_min_per_day": target_min_per_day,
         "target_max_per_day": target_max_per_day,
         "min_proxy_win_rate": min_proxy_win_rate,
         "lookback_days": lookback_days,
         "require_passed": require_passed,
+        "max_per_module": max_per_module,
+        "max_per_strategy_hash": max_per_strategy_hash,
         "candidate_count": len(ordered),
         "selected_count": len(selected),
         "selected_trades_per_day": total_rate,
         "weighted_proxy_win_rate": weighted_proxy_win_rate,
         "selected": selected,
+        "candidate_quality_order": [
+            {
+                "experiment_id": item.get("experiment_id"),
+                "module_id": item.get("module_id"),
+                "strategy_name": item.get("strategy_name"),
+                "strategy_spec_hash": item.get("strategy_spec_hash"),
+                "trades_per_day": item.get("trades_per_day"),
+                "proxy_win_rate": item.get("proxy_win_rate"),
+            }
+            for item in ordered
+        ],
+        "diversity_report": diversity_report,
         "rejected": rejected,
     }
 
@@ -417,12 +439,21 @@ def _select_frequency_pool(
     target_min_per_day: float,
     target_max_per_day: float,
     max_pool_size: int,
+    max_per_module: int,
+    max_per_strategy_hash: int,
 ) -> list[dict[str, Any]]:
     selected = []
     total_rate = 0.0
     for candidate in candidates:
         if len(selected) >= max_pool_size:
             break
+        if _violates_pool_diversity_limits(
+            selected,
+            candidate,
+            max_per_module=max_per_module,
+            max_per_strategy_hash=max_per_strategy_hash,
+        ):
+            continue
         candidate_rate = float(candidate["trades_per_day"])
         if total_rate + candidate_rate <= target_max_per_day:
             selected.append(candidate)
@@ -437,13 +468,77 @@ def _select_frequency_pool(
     if not overflow_candidates or len(selected) >= max_pool_size:
         return selected
     best_overflow = min(
-        overflow_candidates,
+        (
+            candidate
+            for candidate in overflow_candidates
+            if not _violates_pool_diversity_limits(
+                selected,
+                candidate,
+                max_per_module=max_per_module,
+                max_per_strategy_hash=max_per_strategy_hash,
+            )
+        ),
         key=lambda item: (
             abs((total_rate + float(item["trades_per_day"])) - target_min_per_day),
             -float(item["proxy_win_rate"]),
         ),
+        default=None,
     )
-    return selected + [best_overflow]
+    return selected + [best_overflow] if best_overflow else selected
+
+
+def _violates_pool_diversity_limits(
+    selected: Sequence[dict[str, Any]],
+    candidate: dict[str, Any],
+    *,
+    max_per_module: int,
+    max_per_strategy_hash: int,
+) -> bool:
+    if max_per_module > 0:
+        module_id = candidate.get("module_id")
+        selected_module_count = sum(1 for item in selected if item.get("module_id") == module_id)
+        if selected_module_count >= max_per_module:
+            return True
+    if max_per_strategy_hash > 0 and candidate.get("strategy_spec_hash"):
+        strategy_hash = candidate.get("strategy_spec_hash")
+        selected_hash_count = sum(1 for item in selected if item.get("strategy_spec_hash") == strategy_hash)
+        if selected_hash_count >= max_per_strategy_hash:
+            return True
+    return False
+
+
+def _target_pool_diversity_report(
+    candidates: Sequence[dict[str, Any]],
+    selected: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    selected_modules = {str(item.get("module_id") or "unknown") for item in selected}
+    selected_hashes = {
+        str(item.get("strategy_spec_hash"))
+        for item in selected
+        if item.get("strategy_spec_hash")
+    }
+    return {
+        "candidate_module_count": len({str(item.get("module_id") or "unknown") for item in candidates}),
+        "selected_module_count": len(selected_modules),
+        "selected_modules": sorted(selected_modules),
+        "candidate_strategy_hash_count": len(
+            {str(item.get("strategy_spec_hash")) for item in candidates if item.get("strategy_spec_hash")}
+        ),
+        "selected_strategy_hash_count": len(selected_hashes),
+    }
+
+
+def _target_pool_quality_rank(
+    record: dict[str, Any],
+    daily_rate: float,
+    proxy_win_rate: float,
+) -> dict[str, Any]:
+    return {
+        "proxy_win_rate": proxy_win_rate,
+        "robustness_score": _optional_float(record.get("robustness_score")),
+        "expectancy": _optional_float(record.get("expectancy")),
+        "trades_per_day": daily_rate,
+    }
 
 
 def _record_daily_signal_rate(record: dict[str, Any], lookback_days: int) -> tuple[float | None, str | None]:
