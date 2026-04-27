@@ -89,6 +89,7 @@ def build_trigger_decision_record(
         ),
         "evidence_id": evidence_id,
         "strategy_spec_hash": evidence.get("strategy_spec_hash"),
+        "strategy_name": evidence.get("strategy_name"),
         "module_id": evidence.get("module_id"),
         "model": model,
         "prompt_hash": prompt_hash,
@@ -188,6 +189,168 @@ def load_trigger_gate_memory(root: Path) -> dict[str, list[dict[str, Any]]]:
         name: load_jsonl(root / filename)
         for name, filename in TRIGGER_GATE_MEMORY_FILES.items()
     }
+
+
+def build_trigger_gate_memory_view(
+    root: Path,
+    *,
+    strategy_spec_hash: str | None = None,
+    module_id: str | None = None,
+    decision: str | None = None,
+    risk_level: str | None = None,
+    outcome_label: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    memory = load_trigger_gate_memory(root)
+    evidence_by_id = {str(row.get("evidence_id")): row for row in memory["evidence"] if row.get("evidence_id")}
+    outcomes_by_decision = {
+        str(row.get("decision_id")): row
+        for row in memory["outcomes"]
+        if row.get("decision_id")
+    }
+    rows = []
+    for decision_row in memory["decisions"]:
+        evidence = evidence_by_id.get(str(decision_row.get("evidence_id")), {})
+        outcome = outcomes_by_decision.get(str(decision_row.get("decision_id")), {})
+        row = _memory_timeline_row(evidence, decision_row, outcome)
+        if _memory_row_matches(
+            row,
+            strategy_spec_hash=strategy_spec_hash,
+            module_id=module_id,
+            decision=decision,
+            risk_level=risk_level,
+            outcome_label=outcome_label,
+        ):
+            rows.append(row)
+    decision_ids = {str(row.get("decision_id")) for row in memory["decisions"] if row.get("decision_id")}
+    for evidence in memory["evidence"]:
+        if any(row.get("evidence_id") == evidence.get("evidence_id") for row in rows):
+            continue
+        if str(evidence.get("evidence_id")) in {str(row.get("evidence_id")) for row in memory["decisions"]}:
+            continue
+        row = _memory_timeline_row(evidence, {}, {})
+        if _memory_row_matches(
+            row,
+            strategy_spec_hash=strategy_spec_hash,
+            module_id=module_id,
+            decision=decision,
+            risk_level=risk_level,
+            outcome_label=outcome_label,
+        ):
+            rows.append(row)
+    rows = sorted(rows, key=lambda row: str(row.get("signal_time") or row.get("decision_created_at") or ""), reverse=True)
+    limit = max(int(limit), 0)
+    if limit:
+        rows = rows[:limit]
+    decision_counts = {name: 0 for name in sorted(TRIGGER_GATE_DECISIONS)}
+    risk_counts = {name: 0 for name in sorted(TRIGGER_GATE_RISK_LEVELS)}
+    outcome_counts: dict[str, int] = {}
+    for row in rows:
+        if row.get("decision") in decision_counts:
+            decision_counts[str(row["decision"])] += 1
+        if row.get("risk_level") in risk_counts:
+            risk_counts[str(row["risk_level"])] += 1
+        label = str(row.get("final_label") or "pending")
+        outcome_counts[label] = outcome_counts.get(label, 0) + 1
+    return {
+        "schema_version": 1,
+        "filters": {
+            "strategy_spec_hash": strategy_spec_hash,
+            "module_id": module_id,
+            "decision": decision,
+            "risk_level": risk_level,
+            "outcome_label": outcome_label,
+            "limit": limit,
+        },
+        "evidence_count": len(memory["evidence"]),
+        "decision_count": len(memory["decisions"]),
+        "outcome_count": len(memory["outcomes"]),
+        "row_count": len(rows),
+        "decision_counts": decision_counts,
+        "risk_counts": risk_counts,
+        "outcome_counts": dict(sorted(outcome_counts.items())),
+        "rows": rows,
+    }
+
+
+def append_trigger_gate_outcome_from_payload(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    decision_id = str(payload.get("decision_id") or "")
+    if not decision_id:
+        raise ValueError("decision_id is required")
+    outcome_window = str(payload.get("outcome_window") or "")
+    if not outcome_window:
+        raise ValueError("outcome_window is required")
+    memory = load_trigger_gate_memory(root)
+    decision = next((row for row in memory["decisions"] if row.get("decision_id") == decision_id), None)
+    if decision is None:
+        raise ValueError(f"decision_id not found: {decision_id}")
+    outcome = build_trigger_outcome_record(
+        decision=decision,
+        outcome_window=outcome_window,
+        net_pnl=_optional_float(payload.get("net_pnl")),
+        mfe=_optional_float(payload.get("mfe")),
+        mae=_optional_float(payload.get("mae")),
+        paper_fill_id=payload.get("paper_fill_id"),
+        would_have_hit_target=_optional_bool(payload.get("would_have_hit_target")),
+        would_have_hit_stop=_optional_bool(payload.get("would_have_hit_stop")),
+        final_label=payload.get("final_label"),
+        notes=payload.get("notes"),
+    )
+    append_trigger_gate_memory(root, outcome=outcome)
+    return outcome
+
+
+def _memory_timeline_row(
+    evidence: dict[str, Any],
+    decision: dict[str, Any],
+    outcome: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "evidence_id": evidence.get("evidence_id") or decision.get("evidence_id"),
+        "decision_id": decision.get("decision_id"),
+        "outcome_id": outcome.get("outcome_id"),
+        "strategy_spec_hash": evidence.get("strategy_spec_hash") or decision.get("strategy_spec_hash"),
+        "strategy_name": evidence.get("strategy_name") or decision.get("strategy_name"),
+        "module_id": evidence.get("module_id") or decision.get("module_id"),
+        "timeframe": evidence.get("timeframe"),
+        "signal_time": evidence.get("signal_time"),
+        "trigger_reason": evidence.get("trigger_reason"),
+        "risk_pre_gate_passed": (evidence.get("risk_pre_gate") or {}).get("passed"),
+        "decision": decision.get("decision"),
+        "risk_level": decision.get("risk_level"),
+        "confidence": decision.get("confidence"),
+        "runtime_action": decision.get("runtime_action"),
+        "total_tokens": decision.get("total_tokens"),
+        "decision_created_at": decision.get("created_at"),
+        "final_label": outcome.get("final_label"),
+        "net_pnl": outcome.get("net_pnl"),
+        "mfe": outcome.get("mfe"),
+        "mae": outcome.get("mae"),
+        "outcome_window": outcome.get("outcome_window"),
+        "outcome_recorded_at": outcome.get("recorded_at"),
+    }
+
+
+def _memory_row_matches(
+    row: dict[str, Any],
+    *,
+    strategy_spec_hash: str | None,
+    module_id: str | None,
+    decision: str | None,
+    risk_level: str | None,
+    outcome_label: str | None,
+) -> bool:
+    if strategy_spec_hash and row.get("strategy_spec_hash") != strategy_spec_hash:
+        return False
+    if module_id and row.get("module_id") != module_id:
+        return False
+    if decision and row.get("decision") != decision:
+        return False
+    if risk_level and row.get("risk_level") != risk_level:
+        return False
+    if outcome_label and (row.get("final_label") or "pending") != outcome_label:
+        return False
+    return True
 
 
 def build_token_budget_report(
@@ -789,6 +952,20 @@ def _optional_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _optional_bool(value: Any) -> bool | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y"}:
+            return True
+        if lowered in {"false", "0", "no", "n"}:
+            return False
+    return bool(value)
 
 
 def build_decision_outcome_confusion(

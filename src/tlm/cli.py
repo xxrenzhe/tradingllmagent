@@ -49,7 +49,13 @@ from .storage import (
     write_ticks_parquet,
 )
 from .strategy import StrategySpecError, load_strategy_spec
-from .trigger_gate import build_forward_test_schedule, load_trigger_gate_forward_report, run_trigger_gate_simulation
+from .trigger_gate import (
+    append_trigger_gate_outcome_from_payload,
+    build_forward_test_schedule,
+    build_trigger_gate_memory_view,
+    load_trigger_gate_forward_report,
+    run_trigger_gate_simulation,
+)
 from .variants import DEFAULT_PARAMETER_BUDGET, ParameterBudgetError
 
 
@@ -296,6 +302,38 @@ def cmd_trigger_gate_schedule(args: argparse.Namespace) -> int:
     if args.output:
         write_json(Path(args.output), schedule)
     print(json.dumps(schedule, indent=2, sort_keys=True, default=str))
+    return 0
+
+
+def cmd_trigger_gate_memory(args: argparse.Namespace) -> int:
+    view = build_trigger_gate_memory_view(
+        Path(args.output_dir),
+        strategy_spec_hash=args.strategy_spec_hash,
+        module_id=args.module_id,
+        decision=args.decision,
+        risk_level=args.risk_level,
+        outcome_label=args.outcome_label,
+        limit=args.limit,
+    )
+    print(json.dumps(view, indent=2, sort_keys=True, default=str))
+    return 0
+
+
+def cmd_trigger_gate_outcome(args: argparse.Namespace) -> int:
+    payload = {
+        "decision_id": args.decision_id,
+        "outcome_window": args.outcome_window,
+        "net_pnl": args.net_pnl,
+        "mfe": args.mfe,
+        "mae": args.mae,
+        "paper_fill_id": args.paper_fill_id,
+        "would_have_hit_target": args.would_have_hit_target,
+        "would_have_hit_stop": args.would_have_hit_stop,
+        "final_label": args.final_label,
+        "notes": args.notes,
+    }
+    outcome = append_trigger_gate_outcome_from_payload(Path(args.output_dir), payload)
+    print(json.dumps(outcome, indent=2, sort_keys=True, default=str))
     return 0
 
 
@@ -744,6 +782,28 @@ def build_parser() -> argparse.ArgumentParser:
     trigger_gate_schedule.add_argument("--lookback-days", type=int, default=90)
     trigger_gate_schedule.add_argument("--include-rejected", action="store_true")
     trigger_gate_schedule.set_defaults(func=cmd_trigger_gate_schedule)
+    trigger_gate_memory = trigger_gate_subparsers.add_parser("memory")
+    trigger_gate_memory.add_argument("--output-dir", required=True)
+    trigger_gate_memory.add_argument("--strategy-spec-hash")
+    trigger_gate_memory.add_argument("--module-id")
+    trigger_gate_memory.add_argument("--decision", choices=["allow", "block", "observe"])
+    trigger_gate_memory.add_argument("--risk-level", choices=["low", "medium", "high"])
+    trigger_gate_memory.add_argument("--outcome-label")
+    trigger_gate_memory.add_argument("--limit", type=int, default=100)
+    trigger_gate_memory.set_defaults(func=cmd_trigger_gate_memory)
+    trigger_gate_outcome = trigger_gate_subparsers.add_parser("outcome")
+    trigger_gate_outcome.add_argument("--output-dir", required=True)
+    trigger_gate_outcome.add_argument("--decision-id", required=True)
+    trigger_gate_outcome.add_argument("--outcome-window", required=True)
+    trigger_gate_outcome.add_argument("--net-pnl", type=float)
+    trigger_gate_outcome.add_argument("--mfe", type=float)
+    trigger_gate_outcome.add_argument("--mae", type=float)
+    trigger_gate_outcome.add_argument("--paper-fill-id")
+    trigger_gate_outcome.add_argument("--would-have-hit-target", action=argparse.BooleanOptionalAction, default=None)
+    trigger_gate_outcome.add_argument("--would-have-hit-stop", action=argparse.BooleanOptionalAction, default=None)
+    trigger_gate_outcome.add_argument("--final-label")
+    trigger_gate_outcome.add_argument("--notes")
+    trigger_gate_outcome.set_defaults(func=cmd_trigger_gate_outcome)
 
     backtest = subparsers.add_parser("backtest")
     backtest_subparsers = backtest.add_subparsers(dest="backtest_command", required=True)

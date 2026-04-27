@@ -48,7 +48,13 @@ from .tasks import (
     get_task_logs,
     list_tasks,
 )
-from .trigger_gate import build_forward_test_schedule, load_trigger_gate_forward_report, run_trigger_gate_simulation
+from .trigger_gate import (
+    append_trigger_gate_outcome_from_payload,
+    build_forward_test_schedule,
+    build_trigger_gate_memory_view,
+    load_trigger_gate_forward_report,
+    run_trigger_gate_simulation,
+)
 from .worker import run_task, worker_loop
 
 
@@ -267,6 +273,28 @@ def build_trigger_gate_schedule_response(payload: dict) -> dict:
             else None
         ),
     )
+
+
+def build_trigger_gate_memory_response(payload: dict) -> dict:
+    output_dir = payload.get("output_dir")
+    if not output_dir:
+        raise ValueError("output_dir is required")
+    return build_trigger_gate_memory_view(
+        Path(output_dir),
+        strategy_spec_hash=payload.get("strategy_spec_hash"),
+        module_id=payload.get("module_id"),
+        decision=payload.get("decision"),
+        risk_level=payload.get("risk_level"),
+        outcome_label=payload.get("outcome_label"),
+        limit=int(payload.get("limit", 100)),
+    )
+
+
+def build_trigger_gate_outcome_response(payload: dict) -> dict:
+    output_dir = payload.get("output_dir")
+    if not output_dir:
+        raise ValueError("output_dir is required")
+    return append_trigger_gate_outcome_from_payload(Path(output_dir), payload)
 
 
 def build_monitor_report_response(payload: dict) -> dict:
@@ -626,6 +654,20 @@ def create_app():
     def trigger_gate_schedules(payload: dict = Body(...)) -> dict:
         try:
             return build_trigger_gate_schedule_response(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/trigger-gate/memory")
+    def trigger_gate_memory(payload: dict = Body(...)) -> dict:
+        try:
+            return build_trigger_gate_memory_response(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/trigger-gate/outcomes")
+    def trigger_gate_outcomes(payload: dict = Body(...)) -> dict:
+        try:
+            return build_trigger_gate_outcome_response(payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -13,6 +13,8 @@ from tlm.api import (
     build_experiment_artifacts_response,
     build_nt_export_signal_response,
     build_paper_replay_response,
+    build_trigger_gate_memory_response,
+    build_trigger_gate_outcome_response,
     build_trigger_gate_report_response,
     build_trigger_gate_schedule_response,
     build_trigger_gate_simulation_response,
@@ -545,6 +547,8 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/trigger-gate/simulations", paths)
         self.assertIn("/api/trigger-gate/reports", paths)
         self.assertIn("/api/trigger-gate/schedules", paths)
+        self.assertIn("/api/trigger-gate/memory", paths)
+        self.assertIn("/api/trigger-gate/outcomes", paths)
         self.assertIn("/api/gateways/nt8/order-updates", paths)
         self.assertIn("/api/gateways/nt8/incidents", paths)
 
@@ -577,6 +581,54 @@ class APIImportTests(unittest.TestCase):
         self.assertEqual(manifest["mode"], "llm_enabled")
         self.assertEqual(manifest["llm_call_count"], manifest["trigger_count"])
         self.assertEqual(report["llm_calls_match_triggers"], True)
+        self.assertIn("adaptive_recommendations", report)
+
+    def test_trigger_gate_memory_and_outcome_api_helpers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            output_dir = root / "trigger_gate"
+            build_trigger_gate_simulation_response(
+                {
+                    "target_frequency_pool": {
+                        "pool_version": "target_frequency_pool.v2",
+                        "selected": [
+                            {
+                                "module_id": "module_a",
+                                "strategy_name": "strategy_a",
+                                "strategy_spec_hash": "hash_a",
+                                "timeframe": "15m",
+                                "trades_per_day": 1.0,
+                                "proxy_win_rate": 0.61,
+                            }
+                        ],
+                    },
+                    "from": "2026-04-25",
+                    "to": "2026-04-26",
+                    "output_dir": str(output_dir),
+                    "enable_llm": True,
+                }
+            )
+            initial_memory = build_trigger_gate_memory_response({"output_dir": str(output_dir), "limit": 1})
+            decision_id = initial_memory["rows"][0]["decision_id"]
+            outcome = build_trigger_gate_outcome_response(
+                {
+                    "output_dir": str(output_dir),
+                    "decision_id": decision_id,
+                    "outcome_window": "48h",
+                    "net_pnl": -25,
+                }
+            )
+            filtered = build_trigger_gate_memory_response(
+                {
+                    "output_dir": str(output_dir),
+                    "decision": "allow",
+                    "outcome_label": "allowed_loser",
+                }
+            )
+
+        self.assertEqual(outcome["final_label"], "allowed_loser")
+        self.assertEqual(filtered["row_count"], 1)
+        self.assertEqual(filtered["outcome_counts"]["allowed_loser"], 1)
 
     def test_trigger_gate_schedule_api_helper_builds_standard_windows(self) -> None:
         schedule = build_trigger_gate_schedule_response(

@@ -11,6 +11,8 @@ from pathlib import Path
 from tlm.cli import main
 from tlm.trigger_gate import (
     append_trigger_gate_memory,
+    append_trigger_gate_outcome_from_payload,
+    build_trigger_gate_memory_view,
     build_forward_test_schedule,
     build_token_budget_report,
     build_trigger_decision_record,
@@ -298,6 +300,69 @@ class TriggerGateMemoryTests(unittest.TestCase):
             report["adaptive_recommendations"]["strategy_review_flags"][0]["flags"],
             ["blocked_winners"],
         )
+
+    def test_memory_view_filters_and_outcome_backfill(self) -> None:
+        pool = {
+            "pool_version": "target_frequency_pool.v2",
+            "selected": [
+                {
+                    "module_id": "module_a",
+                    "strategy_name": "strategy_a",
+                    "strategy_spec_hash": "hash_a",
+                    "timeframe": "15m",
+                    "trades_per_day": 1.0,
+                    "proxy_win_rate": 0.61,
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_trigger_gate_simulation(
+                target_frequency_pool=pool,
+                output_dir=root,
+                replay_start="2026-04-25",
+                replay_end="2026-04-26",
+                enable_llm=True,
+            )
+            memory = load_trigger_gate_memory(root)
+            decision_id = memory["decisions"][0]["decision_id"]
+            outcome = append_trigger_gate_outcome_from_payload(
+                root,
+                {
+                    "decision_id": decision_id,
+                    "outcome_window": "48h",
+                    "net_pnl": 50,
+                    "mfe": 75,
+                    "mae": -20,
+                },
+            )
+            view = build_trigger_gate_memory_view(
+                root,
+                strategy_spec_hash="hash_a",
+                decision="allow",
+                outcome_label="allowed_winner",
+            )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "trigger-gate",
+                        "memory",
+                        "--output-dir",
+                        str(root),
+                        "--decision",
+                        "allow",
+                        "--outcome-label",
+                        "allowed_winner",
+                    ]
+                )
+            cli_view = json.loads(stdout.getvalue())
+
+        self.assertEqual(outcome["final_label"], "allowed_winner")
+        self.assertEqual(view["row_count"], 1)
+        self.assertEqual(view["rows"][0]["net_pnl"], 50.0)
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(cli_view["rows"][0]["decision_id"], decision_id)
 
     def test_cli_trigger_gate_simulate_uses_pool_file(self) -> None:
         pool = {
