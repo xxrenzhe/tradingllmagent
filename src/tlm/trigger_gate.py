@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -219,6 +219,177 @@ def build_token_budget_report(
     }
 
 
+def run_trigger_gate_simulation(
+    *,
+    target_frequency_pool: dict[str, Any],
+    output_dir: Path,
+    replay_start: date | datetime | str,
+    replay_end: date | datetime | str,
+    enable_llm: bool = False,
+    step_minutes: int = 15,
+    model: str = "local-trigger-gate",
+    daily_token_budget: int | None = None,
+) -> dict[str, Any]:
+    start_at = _coerce_datetime(replay_start, end_of_day=False)
+    end_at = _coerce_datetime(replay_end, end_of_day=True)
+    if end_at <= start_at:
+        raise ValueError("replay_end must be after replay_start")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    selected_pool = list(target_frequency_pool.get("selected", []))
+    triggers = generate_trigger_events(
+        selected_pool,
+        replay_start=start_at,
+        replay_end=end_at,
+    )
+    evidence_records = []
+    decision_records = []
+    remaining_budget = daily_token_budget
+    for trigger in triggers:
+        evidence = build_trigger_evidence_record(
+            strategy_spec_hash=str(trigger.get("strategy_spec_hash") or trigger["trigger_id"]),
+            module_id=str(trigger.get("module_id") or "unknown"),
+            strategy_name=trigger.get("strategy_name"),
+            timeframe=trigger.get("timeframe"),
+            signal_time=trigger["signal_time"],
+            signal_features=trigger["signal_features"],
+            market_snapshot=trigger["market_snapshot"],
+            event_context=trigger["event_context"],
+            risk_pre_gate=trigger["risk_pre_gate"],
+            pool_version=str(target_frequency_pool.get("pool_version") or "target_frequency_pool"),
+            trigger_reason="strategy_signal",
+        )
+        evidence_records.append(evidence)
+        if enable_llm and evidence["risk_pre_gate"].get("passed"):
+            decision, remaining_budget = build_deterministic_trigger_gate_decision(
+                evidence,
+                model=model,
+                remaining_token_budget=remaining_budget,
+            )
+            decision_records.append(decision)
+
+    for evidence in evidence_records:
+        append_trigger_gate_memory(output_dir, evidence=evidence)
+    for decision in decision_records:
+        append_trigger_gate_memory(output_dir, decision=decision)
+
+    duration_days = _duration_days(start_at, end_at)
+    token_budget = build_token_budget_report(decision_records, daily_token_budget=daily_token_budget)
+    manifest = {
+        "schema_version": 1,
+        "simulation_id": stable_hash(
+            {
+                "pool": target_frequency_pool,
+                "replay_start": start_at.isoformat(),
+                "replay_end": end_at.isoformat(),
+                "enable_llm": enable_llm,
+            }
+        ),
+        "mode": "llm_enabled" if enable_llm else "frequency_only",
+        "replay_start": start_at.isoformat(),
+        "replay_end": end_at.isoformat(),
+        "duration_days": duration_days,
+        "step_minutes": step_minutes,
+        "event_count": int(duration_days * 24 * 60 / max(step_minutes, 1)),
+        "trigger_count": len(evidence_records),
+        "trigger_per_day": len(evidence_records) / duration_days if duration_days else 0,
+        "llm_call_count": len(decision_records),
+        "token_budget": token_budget,
+        "target_frequency_pool": target_frequency_pool,
+        "selected_strategy_pool": selected_pool,
+        "artifacts": {
+            "manifest": "manifest.json",
+            "evidence": TRIGGER_GATE_MEMORY_FILES["evidence"],
+            "decisions": TRIGGER_GATE_MEMORY_FILES["decisions"],
+            "outcomes": TRIGGER_GATE_MEMORY_FILES["outcomes"],
+        },
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    (output_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def generate_trigger_events(
+    selected_pool: Sequence[dict[str, Any]],
+    *,
+    replay_start: datetime,
+    replay_end: datetime,
+) -> list[dict[str, Any]]:
+    duration_days = _duration_days(replay_start, replay_end)
+    events = []
+    for pool_index, strategy in enumerate(selected_pool):
+        daily_rate = float(strategy.get("trades_per_day") or 0)
+        trigger_count = int(round(daily_rate * duration_days))
+        if trigger_count <= 0 and daily_rate > 0 and duration_days >= 1:
+            trigger_count = 1
+        for trigger_index in range(trigger_count):
+            offset_fraction = (trigger_index + 1) / (trigger_count + 1)
+            offset_seconds = int((replay_end - replay_start).total_seconds() * offset_fraction)
+            signal_time = replay_start + timedelta(seconds=offset_seconds + pool_index * 60)
+            signal_time = min(signal_time, replay_end)
+            events.append(_build_synthetic_trigger_event(strategy, signal_time, trigger_index))
+    return sorted(events, key=lambda item: item["signal_time"])
+
+
+def build_deterministic_trigger_gate_decision(
+    evidence: dict[str, Any],
+    *,
+    model: str,
+    remaining_token_budget: int | None,
+) -> tuple[dict[str, Any], int | None]:
+    prompt_payload = {
+        "task": "trigger_gate_review",
+        "evidence": evidence,
+        "allowed_decisions": sorted(TRIGGER_GATE_DECISIONS),
+        "forbidden_outputs": ["live_gateway_command", "freeform_order", "broker_order"],
+    }
+    estimated_input_tokens = max(len(json.dumps(prompt_payload, sort_keys=True, default=str)) // 4, 1)
+    estimated_output_tokens = 96
+    estimated_total_tokens = estimated_input_tokens + estimated_output_tokens
+    if remaining_token_budget is not None and estimated_total_tokens > remaining_token_budget:
+        response_payload = {
+            "decision": "observe",
+            "risk_level": "medium",
+            "confidence": 0.5,
+            "reasons": ["token_budget_exhausted"],
+            "invalidation": [],
+            "required_follow_up": ["increase_budget_or_reduce_pool"],
+            "token_budget_note": "deterministic fallback without LLM call",
+        }
+        decision = build_trigger_decision_record(
+            evidence=evidence,
+            model="deterministic-token-budget-fallback",
+            prompt_payload=prompt_payload,
+            response_payload=response_payload,
+            input_tokens=0,
+            output_tokens=0,
+        )
+        return decision, remaining_token_budget
+    confidence = min(max(float(evidence.get("signal_features", {}).get("proxy_win_rate", 0.53)), 0.0), 1.0)
+    response_payload = {
+        "decision": "allow" if confidence >= 0.57 else "observe",
+        "risk_level": "low" if confidence >= 0.6 else "medium",
+        "confidence": confidence,
+        "reasons": ["strategy_signal_confirmed", "deterministic_pre_gate_passed"],
+        "invalidation": ["risk_pre_gate_turns_false", "spread_or_event_risk_expands"],
+        "required_follow_up": [],
+        "token_budget_note": "within budget",
+    }
+    decision = build_trigger_decision_record(
+        evidence=evidence,
+        model=model,
+        prompt_payload=prompt_payload,
+        response_payload=response_payload,
+        input_tokens=estimated_input_tokens,
+        output_tokens=estimated_output_tokens,
+    )
+    if remaining_token_budget is None:
+        return decision, None
+    return decision, max(remaining_token_budget - estimated_total_tokens, 0)
+
+
 def append_jsonl(path: Path, record: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
@@ -261,3 +432,69 @@ def _isoformat(value: str | datetime) -> str:
     if isinstance(value, datetime):
         return value.isoformat()
     return str(value)
+
+
+def _build_synthetic_trigger_event(
+    strategy: dict[str, Any],
+    signal_time: datetime,
+    trigger_index: int,
+) -> dict[str, Any]:
+    proxy_win_rate = float(strategy.get("proxy_win_rate") or 0)
+    spread = float(strategy.get("simulated_spread") or 0.5)
+    risk_pre_gate = {
+        "passed": spread <= float(strategy.get("max_spread", 2.0)),
+        "reasons": [] if spread <= float(strategy.get("max_spread", 2.0)) else ["spread_above_limit"],
+        "hard_blocks": {
+            "event_blackout": False,
+            "data_stale": False,
+            "spread_above_limit": spread > float(strategy.get("max_spread", 2.0)),
+            "strategy_not_in_pool": False,
+            "live_gateway_forbidden": True,
+        },
+    }
+    return {
+        "trigger_id": stable_hash(
+            {
+                "strategy_spec_hash": strategy.get("strategy_spec_hash"),
+                "module_id": strategy.get("module_id"),
+                "signal_time": signal_time.isoformat(),
+                "trigger_index": trigger_index,
+            }
+        ),
+        "strategy_spec_hash": strategy.get("strategy_spec_hash"),
+        "module_id": strategy.get("module_id"),
+        "strategy_name": strategy.get("strategy_name"),
+        "timeframe": strategy.get("timeframe"),
+        "signal_time": signal_time,
+        "signal_features": {
+            "entry_signal": True,
+            "proxy_win_rate": proxy_win_rate,
+            "trades_per_day": float(strategy.get("trades_per_day") or 0),
+            "trigger_index": trigger_index,
+        },
+        "market_snapshot": {
+            "source": "synthetic_trigger_replay",
+            "snapshot_time": signal_time.isoformat(),
+            "last_price": float(strategy.get("simulated_last_price") or 19000 + trigger_index),
+            "spread": spread,
+        },
+        "event_context": {
+            "event_state": "normal",
+            "active_event_ids": [],
+            "max_importance": None,
+        },
+        "risk_pre_gate": risk_pre_gate,
+    }
+
+
+def _coerce_datetime(value: date | datetime | str, *, end_of_day: bool) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, time.max if end_of_day else time.min, tzinfo=UTC)
+    parsed_date = date.fromisoformat(str(value))
+    return datetime.combine(parsed_date, time.max if end_of_day else time.min, tzinfo=UTC)
+
+
+def _duration_days(start_at: datetime, end_at: datetime) -> float:
+    return max((end_at - start_at).total_seconds() / 86_400, 1 / 86_400)

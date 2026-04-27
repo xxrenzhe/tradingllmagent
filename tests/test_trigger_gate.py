@@ -12,6 +12,7 @@ from tlm.trigger_gate import (
     build_trigger_evidence_record,
     build_trigger_outcome_record,
     load_trigger_gate_memory,
+    run_trigger_gate_simulation,
     validate_trigger_gate_response,
 )
 
@@ -93,6 +94,74 @@ class TriggerGateMemoryTests(unittest.TestCase):
         self.assertEqual(report["remaining_token_budget"], 0)
         self.assertEqual(report["allow_rate"], 0.5)
         self.assertEqual(report["block_rate"], 0.5)
+
+    def test_trigger_gate_simulation_writes_frequency_only_artifacts(self) -> None:
+        pool = {
+            "pool_version": "target_frequency_pool.v2",
+            "selected": [
+                {
+                    "module_id": "module_a",
+                    "strategy_name": "strategy_a",
+                    "strategy_spec_hash": "hash_a",
+                    "timeframe": "15m",
+                    "trades_per_day": 1.0,
+                    "proxy_win_rate": 0.61,
+                },
+                {
+                    "module_id": "module_b",
+                    "strategy_name": "strategy_b",
+                    "strategy_spec_hash": "hash_b",
+                    "timeframe": "15m",
+                    "trades_per_day": 1.5,
+                    "proxy_win_rate": 0.58,
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest = run_trigger_gate_simulation(
+                target_frequency_pool=pool,
+                output_dir=Path(temp_dir),
+                replay_start="2026-04-25",
+                replay_end="2026-04-26",
+                enable_llm=False,
+            )
+            memory = load_trigger_gate_memory(Path(temp_dir))
+
+        self.assertEqual(manifest["mode"], "frequency_only")
+        self.assertEqual(manifest["llm_call_count"], 0)
+        self.assertEqual(manifest["trigger_count"], 5)
+        self.assertEqual(len(memory["evidence"]), 5)
+        self.assertEqual(memory["decisions"], [])
+
+    def test_trigger_gate_simulation_records_llm_decisions_and_tokens(self) -> None:
+        pool = {
+            "pool_version": "target_frequency_pool.v2",
+            "selected": [
+                {
+                    "module_id": "module_a",
+                    "strategy_name": "strategy_a",
+                    "strategy_spec_hash": "hash_a",
+                    "timeframe": "15m",
+                    "trades_per_day": 1.0,
+                    "proxy_win_rate": 0.61,
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest = run_trigger_gate_simulation(
+                target_frequency_pool=pool,
+                output_dir=Path(temp_dir),
+                replay_start="2026-04-25",
+                replay_end="2026-04-26",
+                enable_llm=True,
+                daily_token_budget=10_000,
+            )
+            memory = load_trigger_gate_memory(Path(temp_dir))
+
+        self.assertEqual(manifest["mode"], "llm_enabled")
+        self.assertEqual(manifest["llm_call_count"], manifest["trigger_count"])
+        self.assertGreater(manifest["token_budget"]["token_total"], 0)
+        self.assertTrue(all(row["decision"] == "allow" for row in memory["decisions"]))
 
 
 if __name__ == "__main__":
