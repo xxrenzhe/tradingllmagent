@@ -15,6 +15,7 @@ from tlm.trigger_gate import (
     build_trigger_decision_record,
     build_trigger_evidence_record,
     build_trigger_outcome_record,
+    load_trigger_gate_forward_report,
     load_trigger_gate_memory,
     run_trigger_gate_simulation,
     validate_trigger_gate_response,
@@ -161,11 +162,49 @@ class TriggerGateMemoryTests(unittest.TestCase):
                 daily_token_budget=10_000,
             )
             memory = load_trigger_gate_memory(Path(temp_dir))
+            report_exists = (Path(temp_dir) / "forward_test_report.json").exists()
 
         self.assertEqual(manifest["mode"], "llm_enabled")
         self.assertEqual(manifest["llm_call_count"], manifest["trigger_count"])
         self.assertGreater(manifest["token_budget"]["token_total"], 0)
         self.assertTrue(all(row["decision"] == "allow" for row in memory["decisions"]))
+        self.assertTrue(report_exists)
+
+    def test_forward_report_counts_outcome_confusion(self) -> None:
+        pool = {
+            "pool_version": "target_frequency_pool.v2",
+            "selected": [
+                {
+                    "module_id": "module_a",
+                    "strategy_name": "strategy_a",
+                    "strategy_spec_hash": "hash_a",
+                    "timeframe": "15m",
+                    "trades_per_day": 0.5,
+                    "proxy_win_rate": 0.61,
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_trigger_gate_simulation(
+                target_frequency_pool=pool,
+                output_dir=root,
+                replay_start="2026-04-25",
+                replay_end="2026-04-26",
+                enable_llm=True,
+            )
+            memory = load_trigger_gate_memory(root)
+            outcome = build_trigger_outcome_record(
+                decision=memory["decisions"][0],
+                outcome_window="48h",
+                net_pnl=-25.0,
+            )
+            append_trigger_gate_memory(root, outcome=outcome)
+            report = load_trigger_gate_forward_report(root)
+
+        self.assertEqual(report["actual_paper_win_rate"], 0.0)
+        self.assertEqual(report["decision_outcome_confusion"]["rows"]["allow"]["allowed_loser"], 1)
+        self.assertEqual(report["live_gateway_command_count"], 0)
 
     def test_cli_trigger_gate_simulate_uses_pool_file(self) -> None:
         pool = {
@@ -205,9 +244,22 @@ class TriggerGateMemoryTests(unittest.TestCase):
             )
             manifest = json.loads(stdout.getvalue())
             manifest_exists = (output_dir / "manifest.json").exists()
+            report_stdout = io.StringIO()
+            with redirect_stdout(report_stdout):
+                report_exit_code = main(
+                    [
+                        "trigger-gate",
+                        "report",
+                        "--output-dir",
+                        str(output_dir),
+                    ]
+                )
+            report = json.loads(report_stdout.getvalue())
 
         self.assertEqual(exit_code, 0)
+        self.assertEqual(report_exit_code, 0)
         self.assertEqual(manifest["mode"], "llm_enabled")
+        self.assertEqual(report["llm_calls_match_triggers"], True)
         self.assertTrue(manifest_exists)
 
 

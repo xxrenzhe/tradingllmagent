@@ -48,7 +48,7 @@ from .tasks import (
     get_task_logs,
     list_tasks,
 )
-from .trigger_gate import run_trigger_gate_simulation
+from .trigger_gate import load_trigger_gate_forward_report, run_trigger_gate_simulation
 from .worker import run_task, worker_loop
 
 
@@ -227,6 +227,16 @@ def build_trigger_gate_simulation_response(payload: dict) -> dict:
             if payload.get("daily_token_budget") is not None
             else None
         ),
+    )
+
+
+def build_trigger_gate_report_response(payload: dict) -> dict:
+    output_dir = payload.get("output_dir")
+    if not output_dir:
+        raise ValueError("output_dir is required")
+    return load_trigger_gate_forward_report(
+        Path(output_dir),
+        previous_pool=payload.get("previous_pool"),
     )
 
 
@@ -574,6 +584,13 @@ def create_app():
         try:
             return build_trigger_gate_simulation_response(payload)
         except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/trigger-gate/reports")
+    def trigger_gate_reports(payload: dict = Body(...)) -> dict:
+        try:
+            return build_trigger_gate_report_response(payload)
+        except (ValueError, FileNotFoundError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/gateways/nt8/health")

@@ -49,7 +49,7 @@ from .storage import (
     write_ticks_parquet,
 )
 from .strategy import StrategySpecError, load_strategy_spec
-from .trigger_gate import run_trigger_gate_simulation
+from .trigger_gate import load_trigger_gate_forward_report, run_trigger_gate_simulation
 from .variants import DEFAULT_PARAMETER_BUDGET, ParameterBudgetError
 
 
@@ -263,6 +263,13 @@ def cmd_trigger_gate_simulate(args: argparse.Namespace) -> int:
         daily_token_budget=args.daily_token_budget,
     )
     print(json.dumps(manifest, indent=2, sort_keys=True, default=str))
+    return 0
+
+
+def cmd_trigger_gate_report(args: argparse.Namespace) -> int:
+    previous_pool = json.loads(Path(args.previous_pool).read_text(encoding="utf-8")) if args.previous_pool else None
+    report = load_trigger_gate_forward_report(Path(args.output_dir), previous_pool=previous_pool)
+    print(json.dumps(report, indent=2, sort_keys=True, default=str))
     return 0
 
 
@@ -693,6 +700,10 @@ def build_parser() -> argparse.ArgumentParser:
     trigger_gate_simulate.add_argument("--lookback-days", type=int, default=90)
     trigger_gate_simulate.add_argument("--include-rejected", action="store_true")
     trigger_gate_simulate.set_defaults(func=cmd_trigger_gate_simulate)
+    trigger_gate_report = trigger_gate_subparsers.add_parser("report")
+    trigger_gate_report.add_argument("--output-dir", required=True)
+    trigger_gate_report.add_argument("--previous-pool")
+    trigger_gate_report.set_defaults(func=cmd_trigger_gate_report)
 
     backtest = subparsers.add_parser("backtest")
     backtest_subparsers = backtest.add_subparsers(dest="backtest_command", required=True)

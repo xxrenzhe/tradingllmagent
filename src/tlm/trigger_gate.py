@@ -301,11 +301,24 @@ def run_trigger_gate_simulation(
             "evidence": TRIGGER_GATE_MEMORY_FILES["evidence"],
             "decisions": TRIGGER_GATE_MEMORY_FILES["decisions"],
             "outcomes": TRIGGER_GATE_MEMORY_FILES["outcomes"],
+            "forward_test_report": "forward_test_report.json",
         },
         "created_at": datetime.now(UTC).isoformat(),
     }
+    forward_test_report = build_forward_test_report(
+        manifest,
+        {
+            "evidence": evidence_records,
+            "decisions": decision_records,
+            "outcomes": [],
+        },
+    )
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+    (output_dir / "forward_test_report.json").write_text(
+        json.dumps(forward_test_report, indent=2, sort_keys=True, default=str) + "\n",
         encoding="utf-8",
     )
     return manifest
@@ -388,6 +401,96 @@ def build_deterministic_trigger_gate_decision(
     if remaining_token_budget is None:
         return decision, None
     return decision, max(remaining_token_budget - estimated_total_tokens, 0)
+
+
+def load_trigger_gate_forward_report(
+    output_dir: Path,
+    *,
+    previous_pool: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    manifest_path = output_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"trigger gate manifest not found: {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return build_forward_test_report(
+        manifest,
+        load_trigger_gate_memory(output_dir),
+        previous_pool=previous_pool,
+    )
+
+
+def build_forward_test_report(
+    manifest: dict[str, Any],
+    memory: dict[str, list[dict[str, Any]]],
+    *,
+    previous_pool: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    evidence = memory.get("evidence", [])
+    decisions = memory.get("decisions", [])
+    outcomes = memory.get("outcomes", [])
+    selected_pool = list(manifest.get("selected_strategy_pool", []))
+    token_budget = build_token_budget_report(decisions)
+    outcome_rows = [row for row in outcomes if row.get("net_pnl") is not None]
+    actual_paper_win_rate = (
+        sum(1 for row in outcome_rows if float(row.get("net_pnl") or 0) > 0) / len(outcome_rows)
+        if outcome_rows
+        else None
+    )
+    return {
+        "schema_version": 1,
+        "lookback_days": manifest.get("duration_days"),
+        "forward_days": manifest.get("duration_days"),
+        "selected_strategy_pool": selected_pool,
+        "trigger_per_day": manifest.get("trigger_per_day"),
+        "trigger_count": len(evidence),
+        "proxy_win_rate": manifest.get("target_frequency_pool", {}).get("weighted_proxy_win_rate"),
+        "actual_paper_win_rate": actual_paper_win_rate,
+        "allow_rate": token_budget["allow_rate"],
+        "block_rate": token_budget["block_rate"],
+        "observe_rate": token_budget["observe_rate"],
+        "token_total": token_budget["token_total"],
+        "token_per_trigger": token_budget["token_total"] / len(evidence) if evidence else None,
+        "decision_outcome_confusion": build_decision_outcome_confusion(decisions, outcomes),
+        "strategy_pool_changes": build_strategy_pool_change_report(previous_pool, manifest.get("target_frequency_pool")),
+        "llm_call_count": len(decisions),
+        "llm_calls_match_triggers": len(decisions) == len(evidence) if manifest.get("mode") == "llm_enabled" else None,
+        "live_gateway_command_count": 0,
+    }
+
+
+def build_decision_outcome_confusion(
+    decisions: Sequence[dict[str, Any]],
+    outcomes: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    outcomes_by_decision = {row.get("decision_id"): row for row in outcomes}
+    rows: dict[str, dict[str, int]] = {}
+    for decision in decisions:
+        decision_name = str(decision.get("decision") or "unknown")
+        outcome = outcomes_by_decision.get(decision.get("decision_id"), {})
+        label = str(outcome.get("final_label") or "pending")
+        bucket = rows.setdefault(decision_name, {})
+        bucket[label] = bucket.get(label, 0) + 1
+    return {
+        "rows": rows,
+        "decision_count": len(decisions),
+        "outcome_count": len(outcomes),
+        "pending_outcome_count": max(len(decisions) - len(outcomes_by_decision), 0),
+    }
+
+
+def build_strategy_pool_change_report(
+    previous_pool: dict[str, Any] | None,
+    current_pool: dict[str, Any] | None,
+) -> dict[str, Any]:
+    previous_hashes = _pool_strategy_hashes(previous_pool or {})
+    current_hashes = _pool_strategy_hashes(current_pool or {})
+    return {
+        "previous_count": len(previous_hashes),
+        "current_count": len(current_hashes),
+        "added_strategy_hashes": sorted(current_hashes - previous_hashes),
+        "removed_strategy_hashes": sorted(previous_hashes - current_hashes),
+        "unchanged_strategy_hashes": sorted(previous_hashes.intersection(current_hashes)),
+    }
 
 
 def append_jsonl(path: Path, record: dict[str, Any]) -> None:
@@ -498,3 +601,11 @@ def _coerce_datetime(value: date | datetime | str, *, end_of_day: bool) -> datet
 
 def _duration_days(start_at: datetime, end_at: datetime) -> float:
     return max((end_at - start_at).total_seconds() / 86_400, 1 / 86_400)
+
+
+def _pool_strategy_hashes(pool: dict[str, Any]) -> set[str]:
+    return {
+        str(row.get("strategy_spec_hash"))
+        for row in pool.get("selected", [])
+        if row.get("strategy_spec_hash")
+    }

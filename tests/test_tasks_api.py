@@ -13,6 +13,7 @@ from tlm.api import (
     build_experiment_artifacts_response,
     build_nt_export_signal_response,
     build_paper_replay_response,
+    build_trigger_gate_report_response,
     build_trigger_gate_simulation_response,
     create_app,
 )
@@ -495,6 +496,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/calibration/costs", paths)
         self.assertIn("/api/modules/memory", paths)
         self.assertIn("/api/trigger-gate/simulations", paths)
+        self.assertIn("/api/trigger-gate/reports", paths)
         self.assertIn("/api/gateways/nt8/order-updates", paths)
         self.assertIn("/api/gateways/nt8/incidents", paths)
 
@@ -522,9 +524,11 @@ class APIImportTests(unittest.TestCase):
                     "enable_llm": True,
                 }
             )
+            report = build_trigger_gate_report_response({"output_dir": str(root / "trigger_gate")})
 
         self.assertEqual(manifest["mode"], "llm_enabled")
         self.assertEqual(manifest["llm_call_count"], manifest["trigger_count"])
+        self.assertEqual(report["llm_calls_match_triggers"], True)
 
     def test_cost_calibration_api_helper_builds_artifact_without_fastapi(self) -> None:
         artifact = build_cost_calibration_response(
