@@ -16,6 +16,12 @@ const DEFAULT_FORMS = {
   minAnnualTrades: 1000,
   minSharpe: 2,
   minWinProbability: 0.53,
+  minProfitFactor: 1.2,
+  maxDrawdown: 10000,
+  minPositiveYearRatio: 0.6,
+  maxFinalHoldoutSharpeDecay: 0.5,
+  maxTargetParameterCombinations: 200,
+  minNonOverlapTestFolds: 1,
   targetSeedMode: "auto",
   strategiesRoot: "strategies",
   executionMode: "bar",
@@ -36,7 +42,7 @@ const DEFAULT_HISTORY_FILTERS = {
   sortBy: "sharpe"
 };
 
-const COMPARISON_COLORS = ["#0b6f5b", "#1d4f73", "#9d5b12", "#a9362f", "#5b5f97", "#006d77", "#7f4f24", "#5a3e85"];
+const COMPARISON_COLORS = ["#2dd4bf", "#60a5fa", "#f59e0b", "#f87171", "#a78bfa", "#22c55e", "#f97316", "#38bdf8"];
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -49,6 +55,7 @@ export default function App() {
   const [symbols, setSymbols] = useState({});
   const [quality, setQuality] = useState(null);
   const [leaderboard, setLeaderboard] = useState({ leaderboard: [], rejected: [], rows: [], summary: {} });
+  const [featureReadiness, setFeatureReadiness] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [taskEvents, setTaskEvents] = useState([]);
   const [experimentId, setExperimentId] = useState("");
@@ -111,15 +118,17 @@ export default function App() {
     let ignore = false;
     async function loadStaticData() {
       try {
-        const [symbolPayload, reportPayload] = await Promise.all([
+        const [symbolPayload, reportPayload, featurePayload] = await Promise.all([
           apiRequest(apiBase, API_PATHS.dataSymbols),
-          apiRequest(apiBase, API_PATHS.reportsLeaderboard)
+          apiRequest(apiBase, API_PATHS.reportsLeaderboard),
+          apiRequest(apiBase, API_PATHS.featuresReadiness)
         ]);
         if (ignore) {
           return;
         }
         setSymbols(symbolPayload.symbols ?? {});
         setLeaderboard(reportPayload);
+        setFeatureReadiness(featurePayload);
       } catch (error) {
         if (!ignore) {
           setNotice({ tone: "warn", text: error.message });
@@ -389,6 +398,12 @@ export default function App() {
     return { task_id: "leaderboard refreshed" };
   }
 
+  async function refreshFeatureReadiness() {
+    const payload = await apiRequest(apiBase, API_PATHS.featuresReadiness);
+    setFeatureReadiness(payload);
+    return { task_id: "feature readiness refreshed" };
+  }
+
   async function loadExperiment() {
     const id = experimentId.trim();
     if (!id) {
@@ -495,18 +510,29 @@ export default function App() {
   const runningTasks = tasks.filter((task) => ["queued", "running"].includes(task.status)).length;
   const failedTasks = tasks.filter((task) => task.status === "failed").length;
   const passedCount = leaderboard.summary?.passed ?? 0;
-  const rejectedCount = leaderboard.summary?.rejected ?? 0;
+  const totalStrategies = leaderboard.rows?.length ?? 0;
+  const implementedFeatureCount = featureReadiness?.by_status?.implemented ?? 0;
+  const generatedStrategyCount = featureReadiness?.generated_strategy_summary?.strategy_count ?? 0;
+  const apiStateLabel = notice.tone === "danger" ? "API fault" : notice.tone === "warn" ? "API warning" : "API ready";
+  const queueStateLabel = runningTasks ? `${runningTasks} active` : "idle";
+  const gateStateLabel = totalStrategies ? `${passedCount}/${totalStrategies} qualified` : "no report";
 
   return (
     <main className="app-shell">
-      <section className="hero-panel">
-        <div>
-          <p className="eyebrow">Local NQ strategy lab</p>
-          <h1>Research console for LLM-generated strategies with strict out-of-sample gates.</h1>
+      <header className="ops-header">
+        <div className="ops-title-block">
+          <p className="eyebrow">TradingLLMAgent Web Console</p>
+          <h1>Research, validate, and promote strategy candidates.</h1>
           <p className="hero-copy">
-            Data jobs, rolling validation results, rejected strategies, audit context, and paper replay stay local.
-            This console deliberately avoids live brokerage controls.
+            Local-first NQ research operations with queued jobs, hard gates, replay evidence, execution readiness,
+            and audit traces in one dense workspace.
           </p>
+          <div className="system-strip" aria-label="System state">
+            <span><i className={`status-dot ${notice.tone}`} />{apiStateLabel}</span>
+            <span>{queueStateLabel}</span>
+            <span>{gateStateLabel}</span>
+            <span>{failedTasks} task failures</span>
+          </div>
         </div>
         <div className="connection-card" aria-label="API connection">
           <label htmlFor="api-base">FastAPI base URL</label>
@@ -514,21 +540,41 @@ export default function App() {
             id="api-base"
             value={apiBase}
             onChange={(event) => setApiBase(event.target.value)}
-            placeholder="empty = same origin, or http://127.0.0.1:8000"
+            placeholder="empty = Vite proxy"
           />
           <p className={`notice ${notice.tone}`}>{notice.text}</p>
         </div>
-      </section>
+        <nav className="workspace-tabs" aria-label="Workspace sections">
+          <a href="#run">Run</a>
+          <a href="#factory">Factory</a>
+          <a href="#history">History</a>
+          <a href="#compare">Compare</a>
+          <a href="#replay">Replay</a>
+          <a href="#execution">Execution</a>
+          <a href="#trigger-gate">Trigger Gate</a>
+        </nav>
+      </header>
 
       <section className="metric-grid" aria-label="System summary">
         <Metric label="Tracked Symbols" value={Object.keys(symbols).length} detail={Object.keys(symbols).join(", ") || "No symbols loaded"} />
         <Metric label="Active Tasks" value={runningTasks} detail={`${tasks.length} recent tasks`} />
         <Metric label="Passed" value={passedCount} detail="Hard-gated leaderboard" />
-        <Metric label="Rejected" value={rejectedCount} detail={`${failedTasks} task failures`} />
+        <Metric label="Features" value={implementedFeatureCount} detail={`${generatedStrategyCount} generated seed strategies`} />
       </section>
 
+      <Panel id="factory" title="Optimization Factory" kicker="Feature, generation, validation, replay">
+        <FactoryReadinessSummary
+          featureReadiness={featureReadiness}
+          leaderboard={leaderboard}
+          moduleMemory={moduleMemory}
+          paperReplay={paperReplay}
+          onRefresh={() => runAction("Feature readiness", refreshFeatureReadiness)}
+          disabled={isPending}
+        />
+      </Panel>
+
       <section className="workbench-grid">
-        <Panel title="Run Controls" kicker="Create queued jobs">
+        <Panel id="run" title="Research Command Center" kicker="Create queued jobs">
           <div className="form-grid">
             <TextField label="Symbol" value={forms.symbol} onChange={(value) => updateForm("symbol", value)} />
             <TextField label="From" type="date" value={forms.dateFrom} onChange={(value) => updateForm("dateFrom", value)} />
@@ -544,6 +590,12 @@ export default function App() {
             <TextField label="Min Annual Trades" type="number" value={forms.minAnnualTrades} onChange={(value) => updateForm("minAnnualTrades", value)} />
             <TextField label="Min Sharpe" type="number" value={forms.minSharpe} onChange={(value) => updateForm("minSharpe", value)} />
             <TextField label="Min Win Probability" type="number" value={forms.minWinProbability} onChange={(value) => updateForm("minWinProbability", value)} />
+            <TextField label="Min Profit Factor" type="number" value={forms.minProfitFactor} onChange={(value) => updateForm("minProfitFactor", value)} />
+            <TextField label="Max Drawdown" type="number" value={forms.maxDrawdown} onChange={(value) => updateForm("maxDrawdown", value)} />
+            <TextField label="Min Positive Year Ratio" type="number" value={forms.minPositiveYearRatio} onChange={(value) => updateForm("minPositiveYearRatio", value)} />
+            <TextField label="Max Holdout Sharpe Decay" type="number" value={forms.maxFinalHoldoutSharpeDecay} onChange={(value) => updateForm("maxFinalHoldoutSharpeDecay", value)} />
+            <TextField label="Max Target Parameter Combos" type="number" value={forms.maxTargetParameterCombinations} onChange={(value) => updateForm("maxTargetParameterCombinations", value)} />
+            <TextField label="Min Non-Overlap Folds" type="number" value={forms.minNonOverlapTestFolds} onChange={(value) => updateForm("minNonOverlapTestFolds", value)} />
             <TextField label="Strategies Root" value={forms.strategiesRoot} onChange={(value) => updateForm("strategiesRoot", value)} />
             <TextField label="Warmup Days" type="number" value={forms.indicatorWarmupDays} onChange={(value) => updateForm("indicatorWarmupDays", value)} />
             <TextField label="LLM Model" value={forms.llmModel} onChange={(value) => updateForm("llmModel", value)} />
@@ -636,7 +688,7 @@ export default function App() {
         </Panel>
       </section>
 
-      <Panel title="Historical Strategy Performance" kicker="Filter, select, compare">
+      <Panel id="history" title="Historical Strategy Performance" kicker="Filter, select, compare">
         <p className={`notice ${leaderboard.conclusion === "qualified_strategies_found" ? "success" : "warn"}`}>
           {leaderboard.message || "No leaderboard report loaded."}
         </p>
@@ -710,7 +762,7 @@ export default function App() {
         />
       </Panel>
 
-      <Panel title="Selected Strategy Comparison" kicker={`${selectedRows.length} selected`}>
+      <Panel id="compare" title="Selected Strategy Comparison" kicker={`${selectedRows.length} selected`}>
         <ComparisonEquityChart series={comparisonSeries} loading={comparisonLoading} />
       </Panel>
 
@@ -722,7 +774,7 @@ export default function App() {
         />
       </Panel>
 
-      <Panel title="Strategy Replay Detail" kicker={selectedArtifactId || "Select a leaderboard row"}>
+      <Panel id="replay" title="Strategy Replay Detail" kicker={selectedArtifactId || "Select a leaderboard row"}>
         {artifactDetail ? (
           <ArtifactDashboard detail={artifactDetail} row={selectedLeaderboardRow} />
         ) : (
@@ -791,6 +843,7 @@ export default function App() {
           <span>No Alpaca live account</span>
           <span>No NinjaTrader live bridge</span>
         </div>
+        {paperReplay ? <PaperReplayAttributionSummary replay={paperReplay} /> : null}
         {paperReplay ? <JsonBlock payload={paperReplay} /> : null}
         {ntExport ? <JsonBlock payload={ntExport} /> : null}
       </Panel>
@@ -811,7 +864,7 @@ export default function App() {
           {monitorReport ? <RuntimeMonitorSummary report={monitorReport} /> : <EmptyState title="No runtime report" text="Load a monitor report from local bar data and event context." />}
         </Panel>
 
-        <Panel title="Execution Readiness" kicker="Paper, sim, live gates">
+        <Panel id="execution" title="Execution Readiness" kicker="Paper, sim, live gates">
           <div className="form-grid compact-form two-column-form">
             <label className="field">
               <span>Stage</span>
@@ -872,7 +925,7 @@ export default function App() {
         {moduleMemory ? <ModuleMemorySummary summary={moduleMemory} /> : <EmptyState title="No module memory loaded" text="Refresh after research writes module performance records." />}
       </Panel>
 
-      <Panel title="Trigger Gate" kicker="Target pool, token budget, forward test">
+      <Panel id="trigger-gate" title="Trigger Gate" kicker="Target pool, token budget, forward test">
         <p className="body-copy">
           Trigger gate simulations use selected module-memory pool rows and write local evidence, decision, token, and forward-test artifacts. No live commands are emitted.
         </p>
@@ -988,6 +1041,12 @@ function targetDiscoveryPayload(forms) {
     min_annual_trades: Number(forms.minAnnualTrades || 1000),
     min_sharpe: Number(forms.minSharpe || 2),
     min_win_probability: Number(forms.minWinProbability || 0.53),
+    min_profit_factor: Number(forms.minProfitFactor || 1.2),
+    max_drawdown: Number(forms.maxDrawdown || 10000),
+    min_positive_year_ratio: Number(forms.minPositiveYearRatio || 0.6),
+    max_final_holdout_sharpe_decay: Number(forms.maxFinalHoldoutSharpeDecay || 0.5),
+    max_target_parameter_combinations: Number(forms.maxTargetParameterCombinations || 200),
+    min_non_overlap_test_folds: Number(forms.minNonOverlapTestFolds || 1),
     execution_mode: forms.executionMode,
     indicator_warmup_days: optionalNumber(forms.indicatorWarmupDays),
     llm_model: forms.llmModel,
@@ -1044,9 +1103,9 @@ function parseJsonArray(value, label) {
   return payload;
 }
 
-function Panel({ title, kicker, children }) {
+function Panel({ title, kicker, children, id }) {
   return (
-    <section className="panel">
+    <section className="panel" id={id}>
       <div className="panel-header">
         <div>
           <p className="kicker">{kicker}</p>
@@ -1410,6 +1469,148 @@ function LeaderboardTable({
   );
 }
 
+function FactoryReadinessSummary({ featureReadiness, leaderboard, moduleMemory, paperReplay, onRefresh, disabled }) {
+  const features = featureReadiness?.features ?? [];
+  const generated = featureReadiness?.generated_strategy_manifest?.strategies ?? [];
+  const generatedSummary = featureReadiness?.generated_strategy_summary ?? {};
+  const rows = leaderboard.rows ?? [];
+  const passed = leaderboard.summary?.passed ?? 0;
+  const rejected = leaderboard.summary?.rejected ?? 0;
+  const featureStatusEntries = Object.entries(featureReadiness?.by_status ?? {});
+  const featureCategoryEntries = Object.entries(featureReadiness?.by_category ?? {});
+  const closureGates = [
+    {
+      label: "Feature registry",
+      passed: Number(featureReadiness?.feature_count ?? 0) >= 100 && Number(featureReadiness?.usable_for_bar_research_count ?? 0) > 0,
+      detail: `${formatCompact(featureReadiness?.feature_count ?? 0)} features, ${formatCompact(featureReadiness?.usable_for_bar_research_count ?? 0)} bar-ready`
+    },
+    {
+      label: "Generated seeds",
+      passed: Number(generatedSummary.strategy_count ?? 0) > 0,
+      detail: `${formatCompact(generatedSummary.strategy_count ?? 0)} generated, max complexity ${formatCompact(generatedSummary.max_complexity_score)}`
+    },
+    {
+      label: "Validation report",
+      passed: rows.length > 0,
+      detail: `${formatCompact(passed)} passed, ${formatCompact(rejected)} rejected`
+    },
+    {
+      label: "Replay attribution",
+      passed: Boolean(paperReplay?.replay_attribution),
+      detail: paperReplay?.replay_attribution?.replay_attribution_hash ? shortHash(paperReplay.replay_attribution.replay_attribution_hash) : "run paper replay"
+    },
+    {
+      label: "Memory backfill",
+      passed: Boolean(moduleMemory?.modules?.length),
+      detail: `${formatCompact(moduleMemory?.modules?.length ?? 0)} module memory rows`
+    }
+  ];
+
+  if (!featureReadiness) {
+    return (
+      <div className="factory-grid">
+        <EmptyState title="No feature readiness loaded" text="Start the API, then refresh to load feature registry and generation manifest state." />
+        <ActionButton variant="secondary" disabled={disabled} onClick={onRefresh}>Refresh Factory State</ActionButton>
+      </div>
+    );
+  }
+
+  return (
+    <div className="factory-grid">
+      <div className="artifact-summary">
+        <Metric label="Feature Registry" value={formatCompact(featureReadiness.feature_count)} detail={`${formatCompact(featureReadiness.usable_for_bar_research_count)} usable for bar research`} />
+        <Metric label="Generated Seeds" value={formatCompact(generatedSummary.strategy_count)} detail={generatedSummary.method ?? "no manifest"} />
+        <Metric label="Passed Strategies" value={formatCompact(passed)} detail={`${formatCompact(rows.length)} historical rows`} />
+        <Metric label="Replay Attribution" value={paperReplay?.replay_attribution ? "ready" : "missing"} detail={paperReplay?.replay_attribution?.strategy_name ?? "run paper replay"} />
+      </div>
+      <div className="toolbar">
+        <ActionButton variant="secondary" disabled={disabled} onClick={onRefresh}>Refresh Factory State</ActionButton>
+      </div>
+      <div className="factory-columns">
+        <section className="chart-card">
+          <div className="chart-heading">
+            <h3>Closure Gates</h3>
+            <span>implementation checklist</span>
+          </div>
+          <div className="gate-list">
+            {closureGates.map((gate) => (
+              <span key={gate.label} className={gate.passed ? "passed" : "failed"}>
+                {gate.label}: {gate.detail}
+              </span>
+            ))}
+          </div>
+        </section>
+        <section className="chart-card">
+          <div className="chart-heading">
+            <h3>Feature Readiness</h3>
+            <span>status and category mix</span>
+          </div>
+          <div className="gate-list">
+            {featureStatusEntries.map(([status, count]) => (
+              <span key={status} className={status === "implemented" ? "passed" : "failed"}>{status}: {formatCompact(count)}</span>
+            ))}
+            {featureCategoryEntries.slice(0, 8).map(([category, count]) => (
+              <span key={category}>{category}: {formatCompact(count)}</span>
+            ))}
+          </div>
+        </section>
+      </div>
+      <div className="table-wrap compact-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Generated Strategy</th>
+              <th>Family</th>
+              <th>Generation ID</th>
+              <th>Feature Combo</th>
+              <th>Params</th>
+              <th>Complexity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {generated.slice(0, 10).map((strategy) => (
+              <tr key={strategy.generation_id ?? strategy.path}>
+                <td>{strategy.name}<div className="table-detail">{strategy.path}</div></td>
+                <td>{strategy.strategy_family}</td>
+                <td>{strategy.generation_id}</td>
+                <td>{shortHash(strategy.feature_combo_hash)}</td>
+                <td>{formatCompact(strategy.parameter_combinations)}</td>
+                <td>{formatCompact(strategy.complexity_score)} / {formatCompact(generatedSummary.complexity_limit)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-wrap compact-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Category</th>
+              <th>Data Level</th>
+              <th>Status</th>
+              <th>Leakage</th>
+              <th>Warmup</th>
+            </tr>
+          </thead>
+          <tbody>
+            {features.slice(0, 14).map((feature) => (
+              <tr key={feature.name}>
+                <td>{feature.name}<div className="table-detail">{feature.description}</div></td>
+                <td>{feature.category}</td>
+                <td>{feature.data_level}</td>
+                <td><span className={`status-pill ${feature.implementation_status === "implemented" ? "completed" : "running"}`}>{feature.implementation_status}</span></td>
+                <td>{feature.leakage_risk}</td>
+                <td>{formatCompact(feature.warmup_days)}d</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function RuntimeMonitorSummary({ report }) {
   const signal = report.signal ?? {};
   const eventContext = report.event_context ?? {};
@@ -1422,6 +1623,18 @@ function RuntimeMonitorSummary({ report }) {
       <Metric label="Key Levels" value={(report.key_levels ?? []).length} detail={(report.key_levels ?? []).slice(0, 2).map((level) => level.level).join(", ") || "none"} />
       <JsonBlock payload={report} />
     </div>
+  );
+}
+
+function PaperReplayAttributionSummary({ replay }) {
+  const attribution = replay.replay_attribution ?? {};
+  return (
+    <section className="strict-validation-grid" aria-label="Paper replay attribution">
+      <Metric label="Strategy" value={attribution.strategy_name ?? "-"} detail={shortHash(attribution.strategy_spec_hash)} />
+      <Metric label="Module" value={attribution.module_id ?? "-"} detail={attribution.generation_id ?? "manual or legacy strategy"} />
+      <Metric label="Cost Drag" value={formatNumber(attribution.cost_drag)} detail={`${formatNumber(attribution.total_fees)} fees, ${formatNumber(attribution.total_slippage_cost)} slippage`} />
+      <Metric label="Replay Hash" value={shortHash(attribution.replay_attribution_hash)} detail={shortHash(attribution.feature_combo_hash)} />
+    </section>
   );
 }
 

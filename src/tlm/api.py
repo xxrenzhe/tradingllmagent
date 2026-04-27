@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -16,6 +17,7 @@ from .events import (
     validate_event_calendar,
 )
 from .experiments import load_experiment_audit_logs, load_experiment_summary
+from .feature_catalog import FEATURE_CATALOG, feature_readiness_report
 from .execution import (
     build_execution_intent_response_with_registry,
     build_execution_intent_response,
@@ -34,7 +36,12 @@ from .modules import (
 )
 from .monitor import build_monitor_report
 from .nt_gateway import Nt8SimGateway
-from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
+from .paper import (
+    build_paper_replay_attribution,
+    export_ninjatrader_signals,
+    load_backtest_result,
+    replay_trades,
+)
 from .readiness import build_external_validation_artifact
 from .research import load_leaderboard_report, load_research_artifacts
 from .storage import bar_path
@@ -64,7 +71,36 @@ def build_paper_replay_response(payload: dict) -> dict:
         raise ValueError("strategy_id is required")
     starting_equity = float(payload.get("starting_equity", 100_000))
     result = load_backtest_result(Path(strategy_id))
-    return replay_trades(result["trades"], starting_equity=starting_equity).to_dict()
+    replay = replay_trades(result["trades"], starting_equity=starting_equity)
+    response = replay.to_dict()
+    response["replay_attribution"] = build_paper_replay_attribution(result, replay)
+    return response
+
+
+def build_feature_readiness_response() -> dict:
+    report = feature_readiness_report()
+    report["features"] = [feature.to_dict() for feature in FEATURE_CATALOG]
+    manifest_path = Path("strategies/generated/feature_combo_manifest.json")
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        report["generated_strategy_manifest"] = manifest
+        report["generated_strategy_summary"] = {
+            "method": manifest.get("method"),
+            "strategy_count": len(manifest.get("strategies", [])),
+            "complexity_limit": manifest.get("complexity_limit"),
+            "max_complexity_score": manifest.get("max_complexity_score"),
+            "random_seed": manifest.get("random_seed"),
+        }
+    else:
+        report["generated_strategy_manifest"] = {}
+        report["generated_strategy_summary"] = {
+            "method": "none",
+            "strategy_count": 0,
+            "complexity_limit": None,
+            "max_complexity_score": None,
+            "random_seed": None,
+        }
+    return report
 
 
 def build_nt_export_signal_response(payload: dict) -> dict:
@@ -542,6 +578,10 @@ def create_app():
     def experiments_iterations(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "research.iterate", payload)
 
+    @app.post("/api/experiments/target-discovery")
+    def experiments_target_discovery(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "research.discover_target", payload)
+
     @app.post("/api/monitor/once")
     def monitor_once(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "monitor.once", payload)
@@ -635,6 +675,10 @@ def create_app():
     @app.get("/api/modules/memory")
     def modules_memory(experiments_root: str = "experiments") -> dict:
         return build_module_memory_response(Path(experiments_root))
+
+    @app.get("/api/features/readiness")
+    def features_readiness() -> dict:
+        return build_feature_readiness_response()
 
     @app.post("/api/trigger-gate/simulations")
     def trigger_gate_simulations(payload: dict = Body(...)) -> dict:

@@ -219,6 +219,7 @@ def _trial_summary(row: tuple[Any, ...]) -> dict[str, Any]:
         "net_pnl_test": row[4],
         "sharpe_test": row[5],
         "annual_trades_test": row[6],
+        "win_probability_test": result.get("win_probability_test"),
         "net_pnl_holdout": row[7],
         "reasons": json.loads(row[8]),
         "trial_count": result.get("trial_count", 1),

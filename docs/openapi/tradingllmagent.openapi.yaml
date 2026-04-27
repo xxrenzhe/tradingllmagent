@@ -311,6 +311,16 @@ paths:
       responses:
         "200":
           description: Module memory summary.
+  /api/features/readiness:
+    get:
+      summary: Load feature registry readiness and generated strategy audit manifest.
+      responses:
+        "200":
+          description: Feature readiness report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureReadinessReport"
   /api/paper/replay:
     post:
       summary: Replay backtest trades into a paper equity curve.
@@ -557,6 +567,32 @@ components:
           type: array
           items:
             type: object
+    FeatureReadinessReport:
+      type: object
+      required: [feature_count, features, by_status, generated_strategy_summary]
+      properties:
+        feature_count:
+          type: integer
+        by_status:
+          type: object
+        by_data_level:
+          type: object
+        by_leakage_risk:
+          type: object
+        by_category:
+          type: object
+        usable_for_bar_research_count:
+          type: integer
+        external_required_count:
+          type: integer
+        features:
+          type: array
+          items:
+            type: object
+        generated_strategy_summary:
+          type: object
+        generated_strategy_manifest:
+          type: object
     EventCalendar:
       type: object
       required: [calendar_id, event_calendar_hash, events, event_count]

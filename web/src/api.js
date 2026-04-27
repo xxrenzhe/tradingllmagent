@@ -15,6 +15,7 @@ export const API_PATHS = {
   experiment: (id) => `/api/experiments/${encodeURIComponent(id)}`,
   experimentArtifacts: (id) => `/api/experiments/${encodeURIComponent(id)}/artifacts`,
   experimentAuditLogs: (id, limit = 50) => `/api/experiments/${encodeURIComponent(id)}/audit-logs?limit=${limit}`,
+  featuresReadiness: "/api/features/readiness",
   gatewayHealth: "/api/gateways/nt8/health",
   gatewayIncidents: "/api/gateways/nt8/incidents",
   gatewayOrderUpdates: "/api/gateways/nt8/order-updates",

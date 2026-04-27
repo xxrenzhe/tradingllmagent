@@ -11,6 +11,7 @@ import duckdb
 from tlm.api import (
     build_cost_calibration_response,
     build_experiment_artifacts_response,
+    build_feature_readiness_response,
     build_nt_export_signal_response,
     build_paper_replay_response,
     build_trigger_gate_memory_response,
@@ -638,9 +639,23 @@ class APIImportTests(unittest.TestCase):
             )
 
         self.assertEqual(replay["ending_equity"], 100_045.0)
+        self.assertEqual(replay["replay_attribution"]["artifact"], "paper_shadow_replay_attribution")
+        self.assertEqual(replay["replay_attribution"]["strategy_name"], "test_orb")
         self.assertEqual(exported["format"], "oif")
         self.assertEqual(exported["line_count"], 2)
         self.assertIn("PLACE;Sim101;NQ 06-26;BUY;1;MARKET", exported["content"])
+
+    def test_feature_readiness_api_helper_exposes_registry_and_generation_manifest(self) -> None:
+        readiness = build_feature_readiness_response()
+
+        self.assertGreaterEqual(readiness["feature_count"], 100)
+        self.assertEqual(readiness["feature_count"], len(readiness["features"]))
+        self.assertIn("implemented", readiness["by_status"])
+        self.assertGreater(readiness["generated_strategy_summary"]["strategy_count"], 0)
+        self.assertEqual(
+            readiness["generated_strategy_summary"]["strategy_count"],
+            len(readiness["generated_strategy_manifest"]["strategies"]),
+        )
 
     def test_fastapi_app_registers_research_console_routes_when_installed(self) -> None:
         try:
@@ -662,6 +677,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/execution/risk-profiles", paths)
         self.assertIn("/api/readiness/external-validation", paths)
         self.assertIn("/api/calibration/costs", paths)
+        self.assertIn("/api/features/readiness", paths)
         self.assertIn("/api/modules/memory", paths)
         self.assertIn("/api/trigger-gate/simulations", paths)
         self.assertIn("/api/trigger-gate/reports", paths)
@@ -807,6 +823,7 @@ class APIImportTests(unittest.TestCase):
             "/api/execution/risk-profiles",
             "/api/readiness/external-validation",
             "/api/calibration/costs",
+            "/api/features/readiness",
             "/api/gateways/nt8/commands",
             "/api/gateways/nt8/order-updates",
             "/api/gateways/nt8/incidents",
@@ -819,6 +836,7 @@ class APIImportTests(unittest.TestCase):
             "ResearchRunRequest:",
             "TargetDiscoveryRequest:",
             "LeaderboardReport:",
+            "FeatureReadinessReport:",
             "EventCalendar:",
             "MonitorReport:",
             "ReadinessDecision:",
