@@ -1,5 +1,5 @@
 import { startTransition, useDeferredValue, useEffect, useState } from "react";
-import { apiRequest, apiUrl, formatCompact, formatNumber, formatPercent } from "./api.js";
+import { API_PATHS, apiRequest, apiUrl, formatCompact, formatNumber, formatPercent } from "./api.js";
 
 const DEFAULT_FORMS = {
   symbol: "NQmain",
@@ -73,8 +73,8 @@ export default function App() {
     async function loadStaticData() {
       try {
         const [symbolPayload, reportPayload] = await Promise.all([
-          apiRequest(apiBase, "/api/data/symbols"),
-          apiRequest(apiBase, "/api/reports/leaderboard")
+          apiRequest(apiBase, API_PATHS.dataSymbols),
+          apiRequest(apiBase, API_PATHS.reportsLeaderboard)
         ]);
         if (ignore) {
           return;
@@ -97,7 +97,7 @@ export default function App() {
     let active = true;
     async function loadTasks() {
       try {
-        const payload = await apiRequest(apiBase, "/api/tasks?limit=50");
+        const payload = await apiRequest(apiBase, API_PATHS.tasks(50));
         if (active) {
           setTasks(payload.tasks ?? []);
         }
@@ -120,7 +120,7 @@ export default function App() {
       setTaskEvents([]);
       return undefined;
     }
-    const source = new EventSource(apiUrl(apiBase, `/api/tasks/${selectedTaskId}/events`));
+    const source = new EventSource(apiUrl(apiBase, API_PATHS.taskEvents(selectedTaskId)));
     setTaskEvents([]);
     source.addEventListener("task", (event) => {
       setTaskEvents((current) => [...current.slice(-80), { type: "task", payload: JSON.parse(event.data) }]);
@@ -181,7 +181,7 @@ export default function App() {
     if (!strategyId) {
       throw new Error("Select a leaderboard row or enter a strategy result path.");
     }
-    const payload = await apiRequest(apiBase, "/api/paper/replay", {
+    const payload = await apiRequest(apiBase, API_PATHS.paperReplay, {
       method: "POST",
       body: JSON.stringify({ strategy_id: strategyId })
     });
@@ -194,7 +194,7 @@ export default function App() {
     if (!strategyId) {
       throw new Error("Select a leaderboard row or enter a strategy result path.");
     }
-    const payload = await apiRequest(apiBase, "/api/paper/nt-export-signal", {
+    const payload = await apiRequest(apiBase, API_PATHS.paperNtExportSignal, {
       method: "POST",
       body: JSON.stringify({
         strategy_id: strategyId,
@@ -208,7 +208,7 @@ export default function App() {
   }
 
   async function runMonitorReport() {
-    const payload = await apiRequest(apiBase, "/api/monitor/report", {
+    const payload = await apiRequest(apiBase, API_PATHS.monitorReport, {
       method: "POST",
       body: JSON.stringify(monitorForm)
     });
@@ -217,7 +217,7 @@ export default function App() {
   }
 
   async function evaluateReadiness() {
-    const payload = await apiRequest(apiBase, "/api/execution/readiness", {
+    const payload = await apiRequest(apiBase, API_PATHS.executionReadiness, {
       method: "POST",
       body: JSON.stringify({
         stage: readinessForm.stage,
@@ -229,7 +229,7 @@ export default function App() {
   }
 
   async function evaluateExternalValidation() {
-    const payload = await apiRequest(apiBase, "/api/readiness/external-validation", {
+    const payload = await apiRequest(apiBase, API_PATHS.readinessExternalValidation, {
       method: "POST",
       body: JSON.stringify({
         stage: readinessForm.stage,
@@ -242,11 +242,11 @@ export default function App() {
 
   async function refreshGatewayOverview() {
     const [health, approval, reconciliation, incidents, orderUpdates] = await Promise.all([
-      apiRequest(apiBase, "/api/gateways/nt8/health"),
-      apiRequest(apiBase, "/api/execution/approval-queue"),
-      apiRequest(apiBase, "/api/gateways/nt8/reconciliation"),
-      apiRequest(apiBase, "/api/gateways/nt8/incidents"),
-      apiRequest(apiBase, "/api/gateways/nt8/order-updates")
+      apiRequest(apiBase, API_PATHS.gatewayHealth),
+      apiRequest(apiBase, API_PATHS.executionApprovalQueue),
+      apiRequest(apiBase, API_PATHS.gatewayReconciliation),
+      apiRequest(apiBase, API_PATHS.gatewayIncidents),
+      apiRequest(apiBase, API_PATHS.gatewayOrderUpdates)
     ]);
     setGatewayOverview({ health, reconciliation, incidents, orderUpdates });
     setApprovalQueue(approval);
@@ -255,7 +255,7 @@ export default function App() {
 
   async function buildCostCalibration() {
     const samples = parseJsonArray(costSampleJson, "Cost Samples");
-    const payload = await apiRequest(apiBase, "/api/calibration/costs", {
+    const payload = await apiRequest(apiBase, API_PATHS.calibrationCosts, {
       method: "POST",
       body: JSON.stringify({
         cost_model: "nq_conservative_v1",
@@ -270,7 +270,7 @@ export default function App() {
   }
 
   async function refreshModuleMemory() {
-    const payload = await apiRequest(apiBase, "/api/modules/memory");
+    const payload = await apiRequest(apiBase, API_PATHS.modulesMemory);
     setModuleMemory(payload);
     return { task_id: "module memory refreshed" };
   }
@@ -281,13 +281,13 @@ export default function App() {
       date_from: forms.dateFrom,
       date_to: forms.dateTo
     });
-    const payload = await apiRequest(apiBase, `/api/data/quality?${params.toString()}`);
+    const payload = await apiRequest(apiBase, API_PATHS.dataQuality(params.toString()));
     setQuality(payload);
     return { task_id: "quality refreshed" };
   }
 
   async function refreshLeaderboard() {
-    const payload = await apiRequest(apiBase, "/api/reports/leaderboard");
+    const payload = await apiRequest(apiBase, API_PATHS.reportsLeaderboard);
     setLeaderboard(payload);
     return { task_id: "leaderboard refreshed" };
   }
@@ -298,8 +298,8 @@ export default function App() {
       throw new Error("experiment_id is required");
     }
     const [payload, auditPayload] = await Promise.all([
-      apiRequest(apiBase, `/api/experiments/${encodeURIComponent(id)}`),
-      apiRequest(apiBase, `/api/experiments/${encodeURIComponent(id)}/audit-logs?limit=50`)
+      apiRequest(apiBase, API_PATHS.experiment(id)),
+      apiRequest(apiBase, API_PATHS.experimentAuditLogs(id))
     ]);
     setExperiment(payload);
     setAuditLogs(auditPayload.audit_logs ?? []);
@@ -313,7 +313,7 @@ export default function App() {
     }
     const payload = await apiRequest(
       apiBase,
-      `/api/experiments/${encodeURIComponent(experimentKey)}/artifacts`
+      API_PATHS.experimentArtifacts(experimentKey)
     );
     setSelectedArtifactId(experimentKey);
     setArtifactDetail(payload);
@@ -384,19 +384,19 @@ export default function App() {
             </label>
           </div>
           <div className="button-row">
-            <ActionButton disabled={isPending} onClick={() => runAction("Download queued", () => createTask("/api/data/download", dataPayload(forms)))}>
+            <ActionButton disabled={isPending} onClick={() => runAction("Download queued", () => createTask(API_PATHS.dataDownload, dataPayload(forms)))}>
               Download Tick
             </ActionButton>
-            <ActionButton disabled={isPending} onClick={() => runAction("Build bars queued", () => createTask("/api/data/build-bars", dataPayload(forms)))}>
+            <ActionButton disabled={isPending} onClick={() => runAction("Build bars queued", () => createTask(API_PATHS.dataBuildBars, dataPayload(forms)))}>
               Build Bars
             </ActionButton>
-            <ActionButton disabled={isPending} onClick={() => runAction("Research queued", () => createTask("/api/experiments/research-runs", researchPayload(forms)))}>
+            <ActionButton disabled={isPending} onClick={() => runAction("Research queued", () => createTask(API_PATHS.researchRuns, researchPayload(forms)))}>
               Run Research
             </ActionButton>
-            <ActionButton disabled={isPending} onClick={() => runAction("Proposal queued", () => createTask("/api/experiments/proposals", proposalPayload(forms)))}>
+            <ActionButton disabled={isPending} onClick={() => runAction("Proposal queued", () => createTask(API_PATHS.researchProposals, proposalPayload(forms)))}>
               Generate Proposal
             </ActionButton>
-            <ActionButton disabled={isPending} onClick={() => runAction("Tick backtest queued", () => createTask("/api/backtests/tick", backtestPayload(forms)))}>
+            <ActionButton disabled={isPending} onClick={() => runAction("Tick backtest queued", () => createTask(API_PATHS.backtestTick, backtestPayload(forms)))}>
               Tick Backtest
             </ActionButton>
             <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Quality", refreshQuality)}>
@@ -435,8 +435,8 @@ export default function App() {
             tasks={tasks}
             selectedTaskId={selectedTaskId}
             onSelect={setSelectedTaskId}
-            onCancel={(taskId) => runAction("Task cancel", () => apiRequest(apiBase, `/api/tasks/${taskId}/cancel`, { method: "POST" }))}
-            onRun={(taskId) => runAction("Task run", () => apiRequest(apiBase, `/api/tasks/${taskId}/run`, { method: "POST" }))}
+            onCancel={(taskId) => runAction("Task cancel", () => apiRequest(apiBase, API_PATHS.taskCancel(taskId), { method: "POST" }))}
+            onRun={(taskId) => runAction("Task run", () => apiRequest(apiBase, API_PATHS.taskRun(taskId), { method: "POST" }))}
           />
         </Panel>
         <Panel title="Live Task Feed" kicker={selectedTaskId || "Select a task"}>

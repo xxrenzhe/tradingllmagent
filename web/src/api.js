@@ -3,6 +3,37 @@ export function apiUrl(apiBase, path) {
   return `${base}${path}`;
 }
 
+export const API_PATHS = {
+  backtestTick: "/api/backtests/tick",
+  calibrationCosts: "/api/calibration/costs",
+  dataBuildBars: "/api/data/build-bars",
+  dataDownload: "/api/data/download",
+  dataQuality: (query) => `/api/data/quality?${query}`,
+  dataSymbols: "/api/data/symbols",
+  executionApprovalQueue: "/api/execution/approval-queue",
+  executionReadiness: "/api/execution/readiness",
+  experiment: (id) => `/api/experiments/${encodeURIComponent(id)}`,
+  experimentArtifacts: (id) => `/api/experiments/${encodeURIComponent(id)}/artifacts`,
+  experimentAuditLogs: (id, limit = 50) => `/api/experiments/${encodeURIComponent(id)}/audit-logs?limit=${limit}`,
+  gatewayHealth: "/api/gateways/nt8/health",
+  gatewayIncidents: "/api/gateways/nt8/incidents",
+  gatewayOrderUpdates: "/api/gateways/nt8/order-updates",
+  gatewayReconciliation: "/api/gateways/nt8/reconciliation",
+  modulesMemory: "/api/modules/memory",
+  monitorReport: "/api/monitor/report",
+  paperNtExportSignal: "/api/paper/nt-export-signal",
+  paperReplay: "/api/paper/replay",
+  readinessExternalValidation: "/api/readiness/external-validation",
+  reportsLeaderboard: "/api/reports/leaderboard",
+  researchIterations: "/api/experiments/iterations",
+  researchProposals: "/api/experiments/proposals",
+  researchRuns: "/api/experiments/research-runs",
+  taskCancel: (taskId) => `/api/tasks/${taskId}/cancel`,
+  taskEvents: (taskId) => `/api/tasks/${taskId}/events`,
+  taskRun: (taskId) => `/api/tasks/${taskId}/run`,
+  tasks: (limit = 50) => `/api/tasks?limit=${limit}`
+};
+
 export async function apiRequest(apiBase, path, options = {}) {
   const response = await fetch(apiUrl(apiBase, path), {
     headers: {
