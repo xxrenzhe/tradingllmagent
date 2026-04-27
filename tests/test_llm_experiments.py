@@ -30,6 +30,7 @@ from tlm.research import (
     StrategyTargetCriteria,
     discover_strategy_seed_specs,
     evaluate_strategy_target,
+    run_llm_seed_pool_target_discovery,
     run_llm_target_discovery,
     run_research_bar_validation,
     write_research_result,
@@ -349,6 +350,55 @@ class LLMAndExperimentTests(unittest.TestCase):
         self.assertEqual(payload["stop_reason"], "budget_exhausted")
         self.assertEqual(payload["conclusion"], "target_not_found")
         self.assertEqual(payload["qualified_count"], 0)
+
+    def test_seed_pool_target_discovery_searches_multiple_seeds(self) -> None:
+        seed_a_payload = base_spec()
+        seed_b_payload = base_spec()
+        seed_b_payload["name"] = "second_seed"
+        seeds = [parse_strategy_spec(seed_a_payload), parse_strategy_spec(seed_b_payload)]
+
+        def research_runner(**kwargs):
+            strategy_name = kwargs["seed_spec"].name
+            if strategy_name.endswith("0001"):
+                return [
+                    fake_research_result(
+                        f"{kwargs['experiment_id']}_trial_0000",
+                        annual_trades=1300,
+                        sharpe=2.4,
+                        winning_trades=57,
+                        losing_trades=43,
+                    )
+                ]
+            return [
+                fake_research_result(
+                    f"{kwargs['experiment_id']}_trial_0000",
+                    annual_trades=800,
+                    sharpe=1.4,
+                    winning_trades=45,
+                    losing_trades=55,
+                )
+            ]
+
+        discovery = run_llm_seed_pool_target_discovery(
+            seed_specs=seeds,
+            seed_selection_report={"selected_count": 2},
+            symbol_config=symbol_config(),
+            data_root=Path("data"),
+            discovery_id="seed_pool",
+            date_from=date(2025, 1, 1),
+            date_to=date(2025, 2, 1),
+            max_rounds=1,
+            target_count=1,
+            llm_adapter=SequencedLLM(),
+            research_runner=research_runner,
+        )
+
+        payload = discovery.to_dict()
+        self.assertEqual(payload["stop_reason"], "target_found")
+        self.assertEqual(payload["qualified_count"], 1)
+        self.assertEqual(payload["completed_rounds"], 2)
+        self.assertEqual(len(payload["seed_discoveries"]), 2)
+        self.assertEqual(payload["seed_selection_report"]["selected_count"], 2)
 
 class SequencedLLM:
     def __init__(self) -> None:

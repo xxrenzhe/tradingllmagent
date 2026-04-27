@@ -496,6 +496,117 @@ class TaskStoreTests(unittest.TestCase):
             {"llm_strategy_proposal", "research_trial_completed"},
         )
 
+    def test_run_task_executes_target_discovery(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            experiments_root = root / "experiments"
+            experiment_db = root / "research.sqlite3"
+            db_path = root / "tasks.sqlite3"
+            seed_path = root / "seed.json"
+            seed_path.write_text(json.dumps(base_spec()), encoding="utf-8")
+            for offset in range(40):
+                write_breakout_day(data_root, datetime(2025, 1, 1).date() + timedelta(days=offset))
+            create_task(
+                db_path,
+                "research.discover_target",
+                {
+                    "spec": str(seed_path),
+                    "date_from": "2025-01-01",
+                    "date_to": "2025-02-09",
+                    "experiment_id": "target_discovery_task",
+                    "data_root": str(data_root),
+                    "experiments_root": str(experiments_root),
+                    "experiment_db": str(experiment_db),
+                    "max_rounds": 1,
+                    "trials_per_round": 1,
+                    "min_annual_trades": -1,
+                    "min_sharpe": -100,
+                    "min_win_probability": -1,
+                    "train_days": 5,
+                    "validation_days": 5,
+                    "test_days": 5,
+                    "step_days": 5,
+                    "embargo_days": 1,
+                    "final_holdout_days": 5,
+                    "min_folds": 1,
+                    "llm_model": "local-deterministic-template",
+                    "llm_parameters": {"temperature": 0},
+                },
+                task_id="task_target_discovery",
+            )
+            completed = run_task(db_path, "task_target_discovery")
+            summary_path = Path(completed["result"]["summary_path"])
+            summary_exists = summary_path.exists()
+            summary = load_experiment_summary(experiment_db, "target_discovery_task")
+            audit_logs = load_experiment_audit_logs(experiment_db, "target_discovery_task")
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertIn(completed["result"]["stop_reason"], {"target_found", "budget_exhausted"})
+        self.assertEqual(completed["result"]["total_trials"], 1)
+        self.assertTrue(summary_exists)
+        self.assertEqual(summary["experiment"]["status"], "completed")
+        self.assertEqual(len(summary["trials"]), 1)
+        self.assertIn("win_probability_test", summary["trials"][0])
+        self.assertEqual(
+            {entry["event_type"] for entry in audit_logs},
+            {"llm_target_discovery_proposal", "target_discovery_trial_completed"},
+        )
+
+    def test_run_task_discovers_target_from_local_seed_pool(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            strategies_root = root / "strategies"
+            strategies_root.mkdir()
+            (strategies_root / "seed_a.json").write_text(json.dumps(base_spec()), encoding="utf-8")
+            seed_b = trend_pullback_spec()
+            seed_b["name"] = "seed_pool_trend_pullback"
+            (strategies_root / "seed_b.json").write_text(json.dumps(seed_b), encoding="utf-8")
+            experiments_root = root / "experiments"
+            experiment_db = root / "research.sqlite3"
+            db_path = root / "tasks.sqlite3"
+            for offset in range(40):
+                write_breakout_day(data_root, datetime(2025, 1, 1).date() + timedelta(days=offset))
+            create_task(
+                db_path,
+                "research.discover_target",
+                {
+                    "symbol": "NQmain",
+                    "timeframe": "1m",
+                    "strategies_root": str(strategies_root),
+                    "date_from": "2025-01-01",
+                    "date_to": "2025-02-09",
+                    "experiment_id": "target_discovery_seed_pool_task",
+                    "data_root": str(data_root),
+                    "experiments_root": str(experiments_root),
+                    "experiment_db": str(experiment_db),
+                    "max_seed_strategies": 1,
+                    "max_rounds": 1,
+                    "trials_per_round": 1,
+                    "min_annual_trades": -1,
+                    "min_sharpe": -100,
+                    "min_win_probability": -1,
+                    "train_days": 5,
+                    "validation_days": 5,
+                    "test_days": 5,
+                    "step_days": 5,
+                    "embargo_days": 1,
+                    "final_holdout_days": 5,
+                    "min_folds": 1,
+                    "llm_model": "local-deterministic-template",
+                    "llm_parameters": {"temperature": 0},
+                },
+                task_id="task_target_discovery_seed_pool",
+            )
+            completed = run_task(db_path, "task_target_discovery_seed_pool")
+            summary = load_experiment_summary(experiment_db, "target_discovery_seed_pool_task")
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["result"]["seed_selection_report"]["selected_count"], 1)
+        self.assertEqual(completed["result"]["total_trials"], 1)
+        self.assertEqual(summary["experiment"]["status"], "completed")
+
 
 class APIImportTests(unittest.TestCase):
     def test_api_module_imports_without_fastapi_installed(self) -> None:
@@ -676,6 +787,7 @@ class APIImportTests(unittest.TestCase):
             "/api/data/quality",
             "/api/tasks/{task_id}/events",
             "/api/experiments/research-runs",
+            "/api/experiments/target-discovery",
             "/api/experiments/{experiment_id}/artifacts",
             "/api/reports/leaderboard",
             "/api/events/context",
@@ -697,6 +809,7 @@ class APIImportTests(unittest.TestCase):
         for schema_name in [
             "Task:",
             "ResearchRunRequest:",
+            "TargetDiscoveryRequest:",
             "LeaderboardReport:",
             "EventCalendar:",
             "MonitorReport:",

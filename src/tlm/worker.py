@@ -19,7 +19,15 @@ from .llm import append_audit_log, create_llm_adapter, load_train_validation_fee
 from .monitor import build_monitor_report, write_monitor_outputs
 from .modules import build_target_frequency_pool, discover_module_memory_files, load_module_performance_memory
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
-from .research import run_budgeted_research, write_research_result
+from .research import (
+    StrategyTargetCriteria,
+    discover_strategy_seed_specs,
+    run_budgeted_research,
+    run_llm_seed_pool_target_discovery,
+    run_llm_target_discovery,
+    write_research_result,
+    write_strategy_discovery_result,
+)
 from .storage import (
     bar_path,
     compute_data_version_hash,
@@ -92,6 +100,8 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_research_propose(payload)
     if task_type == "research.iterate":
         return execute_research_iterate(payload)
+    if task_type == "research.discover_target":
+        return execute_research_discover_target(payload)
     if task_type == "monitor.once":
         return execute_monitor_once(payload)
     if task_type == "trigger_gate.simulate":
@@ -437,6 +447,157 @@ def execute_research_iterate(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def execute_research_discover_target(payload: dict[str, Any]) -> dict[str, Any]:
+    config_dir = Path(payload.get("config_dir", "configs"))
+    data_root = Path(payload.get("data_root", "data"))
+    experiments_root = Path(payload.get("experiments_root", "experiments"))
+    experiment_db = Path(payload.get("experiment_db", "experiments/research.sqlite3"))
+    date_from = parse_date(_required(payload, "date_from", "from"))
+    date_to = parse_date(_required(payload, "date_to", "to"))
+    seed_specs, seed_selection_report = strategy_discovery_seed_specs(payload)
+    if not seed_specs:
+        raise ValueError("No strategy seed specs matched the discovery filters")
+    seed_spec = seed_specs[0]
+    discovery_id = str(payload.get("experiment_id") or f"{seed_spec.name}_target_discovery_{date_from}_{date_to}")
+    llm_parameters = payload.get("llm_parameters", {})
+    if not isinstance(llm_parameters, dict):
+        raise ValueError("llm_parameters must be an object")
+    target = StrategyTargetCriteria(
+        min_annual_trades=float(payload.get("min_annual_trades", 1000)),
+        min_sharpe=float(payload.get("min_sharpe", 2)),
+        min_win_probability=float(payload.get("min_win_probability", 0.53)),
+    )
+    symbol = get_symbol(payload.get("symbol", seed_spec.symbol), config_dir)
+    cost_model = get_cost_model(seed_spec.cost_model, config_dir)
+    record_experiment(
+        experiment_db,
+        experiment_id=discovery_id,
+        symbol=str(payload.get("symbol", seed_spec.symbol)),
+        status="running",
+        metadata={
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "target": target.to_dict(),
+            "max_rounds": int(payload.get("max_rounds", 10)),
+            "trials_per_round": int(payload.get("trials_per_round", 1)),
+            "target_count": int(payload.get("target_count", 1)),
+            "execution_mode": payload.get("execution_mode", "bar"),
+            "llm_model": payload.get("llm_model", "local-deterministic-template"),
+            "llm_parameters": llm_parameters,
+        },
+    )
+    discovery_kwargs = {
+        "symbol_config": symbol,
+        "data_root": data_root,
+        "discovery_id": discovery_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "max_rounds": int(payload.get("max_rounds", 10)),
+        "trials_per_round": int(payload.get("trials_per_round", 1)),
+        "target_count": int(payload.get("target_count", 1)),
+        "target": target,
+        "starting_equity": float(payload.get("starting_equity", 100_000)),
+        "train_days": int(payload.get("train_days", 730)),
+        "validation_days": int(payload.get("validation_days", 182)),
+        "test_days": int(payload.get("test_days", 182)),
+        "step_days": int(payload.get("step_days", 91)),
+        "embargo_days": int(payload.get("embargo_days", 5)),
+        "final_holdout_days": int(payload.get("final_holdout_days", 365)),
+        "min_folds": int(payload.get("min_folds", 1)),
+        "indicator_warmup_days": optional_int(payload.get("indicator_warmup_days")),
+        "max_parameter_combinations": int(payload.get("max_parameter_combinations", 50)),
+        "allow_high_parameter_budget": bool(payload.get("allow_high_parameter_budget", False)),
+        "execution_mode": str(payload.get("execution_mode", "bar")),
+        "cost_model": cost_model,
+        "config_dir": config_dir,
+        "random_seed": int(payload.get("random_seed", 0)),
+        "llm_model": str(payload.get("llm_model", "local-deterministic-template")),
+        "llm_parameters": llm_parameters,
+    }
+    if len(seed_specs) == 1 and payload.get("spec"):
+        discovery = run_llm_target_discovery(seed_spec=seed_spec, **discovery_kwargs)
+    else:
+        discovery = run_llm_seed_pool_target_discovery(
+            seed_specs=seed_specs,
+            seed_selection_report=seed_selection_report,
+            **discovery_kwargs,
+        )
+    result_paths = []
+    for audit in discovery.proposal_audits:
+        append_audit_log(experiments_root / discovery_id / "llm_audit.jsonl", audit)
+        record_audit_event(
+            experiment_db,
+            experiment_id=discovery_id,
+            event_type="llm_target_discovery_proposal",
+            payload=audit,
+        )
+    for result in discovery.results:
+        output_path = experiments_root / result.experiment_id / "leaderboard.json"
+        write_research_result(output_path, result)
+        record_trial(experiment_db, discovery_id, result)
+        evaluation = next(
+            attempt for attempt in discovery.attempts if attempt.experiment_id == result.experiment_id
+        )
+        record_audit_event(
+            experiment_db,
+            experiment_id=discovery_id,
+            trial_id=result.experiment_id,
+            event_type="target_discovery_trial_completed",
+            payload={
+                "trial_id": result.experiment_id,
+                "strategy_spec_hash": result.strategy_spec_hash,
+                "prompt_hash": result.prompt_hash,
+                "target_evaluation": evaluation.to_dict(),
+            },
+        )
+        result_paths.append(str(output_path))
+    summary_path = experiments_root / discovery_id / "target_discovery.json"
+    write_strategy_discovery_result(summary_path, discovery)
+    result_payload = {
+        **discovery.to_dict(),
+        "result_paths": result_paths,
+        "summary_path": str(summary_path),
+        "seed_selection_report": seed_selection_report,
+    }
+    record_experiment(
+        experiment_db,
+        experiment_id=discovery_id,
+        symbol=str(payload.get("symbol", seed_spec.symbol)),
+        status="completed",
+        metadata=result_payload,
+    )
+    return result_payload
+
+
+def strategy_discovery_seed_specs(payload: dict[str, Any]) -> tuple[list[Any], dict[str, Any]]:
+    if payload.get("spec"):
+        path = Path(_required(payload, "spec"))
+        spec = load_strategy_spec(path)
+        return [spec], {
+            "mode": "explicit_spec",
+            "candidate_count": 1,
+            "selected_count": 1,
+            "selected_paths": [str(path)],
+            "selected": [
+                {
+                    "strategy_name": spec.name,
+                    "strategy_family": spec.strategy_family,
+                    "symbol": spec.symbol,
+                    "timeframe": spec.timeframe,
+                }
+            ],
+            "skipped": [],
+        }
+    return discover_strategy_seed_specs(
+        strategies_root=Path(payload.get("strategies_root", "strategies")),
+        spec_paths=optional_string_list(payload.get("specs")),
+        symbol=payload.get("symbol"),
+        timeframe=payload.get("timeframe"),
+        strategy_families=optional_string_list(payload.get("strategy_families")),
+        limit=optional_int(payload.get("max_seed_strategies")),
+    )
+
+
 def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
     specs, deduplication_report = deduplicate_research_specs(_research_specs(payload))
     config_dir = Path(payload.get("config_dir", "configs"))
@@ -692,6 +853,16 @@ def optional_int(value: Any) -> int | None:
     if value is None or value == "":
         return None
     return int(value)
+
+
+def optional_string_list(value: Any) -> list[str] | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    raise ValueError("value must be a string or list of strings")
 
 
 def _required(payload: dict[str, Any], key: str, *aliases: str) -> str:

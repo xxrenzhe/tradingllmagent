@@ -229,6 +229,52 @@ class StrategyDiscoveryResult:
         }
 
 
+@dataclass(frozen=True)
+class SeedPoolStrategyDiscoveryResult:
+    discovery_id: str
+    target: StrategyTargetCriteria
+    seed_selection_report: dict[str, Any]
+    seed_discoveries: list[StrategyDiscoveryResult]
+    target_count: int
+    stop_reason: str
+
+    @property
+    def attempts(self) -> list[StrategyTargetEvaluation]:
+        return [attempt for discovery in self.seed_discoveries for attempt in discovery.attempts]
+
+    @property
+    def results(self) -> list[ResearchRunResult]:
+        return [result for discovery in self.seed_discoveries for result in discovery.results]
+
+    @property
+    def qualified_attempts(self) -> list[StrategyTargetEvaluation]:
+        return [attempt for attempt in self.attempts if attempt.passed]
+
+    @property
+    def proposal_audits(self) -> list[dict]:
+        return [audit for discovery in self.seed_discoveries for audit in discovery.proposal_audits]
+
+    def to_dict(self) -> dict:
+        qualified = [attempt.to_dict() for attempt in self.qualified_attempts]
+        attempts = [attempt.to_dict() for attempt in self.attempts]
+        return {
+            "discovery_id": self.discovery_id,
+            "target": self.target.to_dict(),
+            "target_count": self.target_count,
+            "seed_selection_report": self.seed_selection_report,
+            "seed_discoveries": [discovery.to_dict() for discovery in self.seed_discoveries],
+            "completed_rounds": sum(discovery.completed_rounds for discovery in self.seed_discoveries),
+            "total_trials": len(self.results),
+            "qualified_count": len(qualified),
+            "stop_reason": self.stop_reason,
+            "conclusion": "target_found" if qualified else "target_not_found",
+            "proposal_audits": self.proposal_audits,
+            "attempts": attempts,
+            "qualified_strategies": qualified,
+            "result_experiment_ids": [result.experiment_id for result in self.results],
+        }
+
+
 ResearchRunner = Callable[..., list[ResearchRunResult]]
 
 
@@ -442,7 +488,110 @@ def run_llm_target_discovery(
     )
 
 
-def write_strategy_discovery_result(path: Path, discovery: StrategyDiscoveryResult) -> None:
+def run_llm_seed_pool_target_discovery(
+    seed_specs: Sequence[StrategySpec],
+    seed_selection_report: dict[str, Any],
+    symbol_config: SymbolConfig,
+    data_root: Path,
+    discovery_id: str,
+    date_from: date,
+    date_to: date,
+    max_rounds: int,
+    trials_per_round: int = 1,
+    target_count: int = 1,
+    target: StrategyTargetCriteria | None = None,
+    starting_equity: float = 100_000,
+    train_days: int = 730,
+    validation_days: int = 182,
+    test_days: int = 182,
+    step_days: int = 91,
+    embargo_days: int = 5,
+    final_holdout_days: int = 365,
+    min_folds: int = 1,
+    indicator_warmup_days: int | None = None,
+    max_parameter_combinations: int = DEFAULT_PARAMETER_BUDGET,
+    allow_high_parameter_budget: bool = False,
+    execution_mode: str = "bar",
+    cost_model: CostModelConfig | None = None,
+    config_dir: Path = Path("configs"),
+    random_seed: int = 0,
+    llm_model: str = "local-deterministic-template",
+    llm_parameters: dict | None = None,
+    llm_adapter: Any | None = None,
+    research_runner: ResearchRunner | None = None,
+) -> SeedPoolStrategyDiscoveryResult:
+    if not seed_specs:
+        raise ValueError("At least one seed strategy is required")
+    if target_count <= 0:
+        raise ValueError("target_count must be positive")
+    target = target or StrategyTargetCriteria()
+    if llm_adapter is None:
+        from .llm import create_llm_adapter
+
+        llm_adapter = create_llm_adapter(llm_model, llm_parameters)
+
+    seed_discoveries: list[StrategyDiscoveryResult] = []
+    stop_reason = "budget_exhausted"
+    for seed_index, seed in enumerate(seed_specs):
+        remaining = target_count - sum(
+            len(discovery.qualified_attempts) for discovery in seed_discoveries
+        )
+        if remaining <= 0:
+            stop_reason = "target_found"
+            break
+        seed_discovery = run_llm_target_discovery(
+            seed_spec=seed,
+            symbol_config=symbol_config,
+            data_root=data_root,
+            discovery_id=f"{discovery_id}_{seed_discovery_suffix(seed, seed_index)}",
+            date_from=date_from,
+            date_to=date_to,
+            max_rounds=max_rounds,
+            trials_per_round=trials_per_round,
+            target_count=remaining,
+            target=target,
+            starting_equity=starting_equity,
+            train_days=train_days,
+            validation_days=validation_days,
+            test_days=test_days,
+            step_days=step_days,
+            embargo_days=embargo_days,
+            final_holdout_days=final_holdout_days,
+            min_folds=min_folds,
+            indicator_warmup_days=indicator_warmup_days,
+            max_parameter_combinations=max_parameter_combinations,
+            allow_high_parameter_budget=allow_high_parameter_budget,
+            execution_mode=execution_mode,
+            cost_model=cost_model,
+            config_dir=config_dir,
+            random_seed=random_seed + seed_index * max(max_rounds, 1),
+            llm_model=llm_model,
+            llm_parameters=llm_parameters,
+            llm_adapter=llm_adapter,
+            research_runner=research_runner,
+        )
+        seed_discoveries.append(seed_discovery)
+        if len([attempt for discovery in seed_discoveries for attempt in discovery.qualified_attempts]) >= target_count:
+            stop_reason = "target_found"
+            break
+
+    return SeedPoolStrategyDiscoveryResult(
+        discovery_id=discovery_id,
+        target=target,
+        seed_selection_report=seed_selection_report,
+        seed_discoveries=seed_discoveries,
+        target_count=target_count,
+        stop_reason=stop_reason,
+    )
+
+
+def seed_discovery_suffix(seed: StrategySpec, seed_index: int) -> str:
+    raw = f"{seed.strategy_family}_{seed.name}".lower()
+    safe = "".join(char if char.isalnum() else "_" for char in raw).strip("_")
+    return f"seed_{seed_index:02d}_{safe[:48]}"
+
+
+def write_strategy_discovery_result(path: Path, discovery: StrategyDiscoveryResult | SeedPoolStrategyDiscoveryResult) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(discovery.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
