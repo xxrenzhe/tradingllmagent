@@ -62,7 +62,9 @@ run_cli() {
   printf "started_at\t%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "$LOG_FILE"
 
-printf "timestamp_utc\tday\tstatus\tattempt\tfree_gb\telapsed_seconds\n" > "$STATUS_FILE"
+if [ ! -s "$STATUS_FILE" ]; then
+  printf "timestamp_utc\tday\tstatus\tattempt\tfree_gb\telapsed_seconds\n" > "$STATUS_FILE"
+fi
 
 for day in $(date_range); do
   output="$(tick_output_path "$day")"

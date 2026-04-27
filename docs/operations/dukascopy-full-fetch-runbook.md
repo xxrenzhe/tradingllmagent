@@ -10,6 +10,7 @@
 - Run id: `dukascopy-NQmain-full-20120201-20260426`
 - Python command: `arch -arm64 python3`
 - Sleep prevention: `caffeinate -dimsu`
+- Current pass: `MAX_ATTEMPTS=1` initial sweep, so provider timeout/503 dates are skipped quickly and left for later backfill.
 - Bars: disabled for this run; this run fetches raw hourly `.bi5` files and normalized daily tick parquet.
 
 ## Progress Checks
@@ -33,7 +34,7 @@ tmux kill-session -t tlm_dukascopy_full
 ## Resume
 
 ```bash
-tmux new-session -d -s tlm_dukascopy_full "cd /Users/jason/Documents/Kiro/tradingllmagent && RUN_ID=dukascopy-NQmain-full-20120201-20260426 DATA_ROOT=data DATE_FROM=2012-02-01 DATE_TO=2026-04-26 BUILD_BARS=0 MIN_FREE_GB=8 PYTHON_BIN='arch -arm64 python3' caffeinate -dimsu bash scripts/fetch_dukascopy_full_nqmain.sh"
+tmux new-session -d -s tlm_dukascopy_full "cd /Users/jason/Documents/Kiro/tradingllmagent && RUN_ID=dukascopy-NQmain-full-20120201-20260426 DATA_ROOT=data DATE_FROM=2012-02-01 DATE_TO=2026-04-26 BUILD_BARS=0 MIN_FREE_GB=8 MAX_ATTEMPTS=1 PYTHON_BIN='arch -arm64 python3' caffeinate -dimsu bash scripts/fetch_dukascopy_full_nqmain.sh"
 ```
 
 The script skips existing non-empty daily tick parquet files, retries failed dates up to `MAX_ATTEMPTS`, and stops automatically when free disk space drops below `MIN_FREE_GB`.
