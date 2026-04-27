@@ -153,7 +153,7 @@ export default function App() {
     try {
       const payload = await fn();
       startTransition(() => {
-        if (payload.task_id) {
+        if (payload.task_id && payload.task_type) {
           setSelectedTaskId(payload.task_id);
         }
       });
