@@ -230,6 +230,15 @@ class StrategyValidationTests(unittest.TestCase):
             self.assertEqual(spec.strategy_family, family)
             self.assertEqual(spec.symbol, "NQmain")
 
+    def test_all_strategy_seed_files_are_valid(self) -> None:
+        paths = sorted(Path("strategies").glob("*.yaml"))
+        self.assertGreaterEqual(len(paths), 12)
+        for path in paths:
+            with self.subTest(path=str(path)):
+                spec = load_strategy_spec(path)
+                self.assertEqual(spec.symbol, "NQmain")
+                self.assertEqual(spec.timeframe, "1m")
+
     def test_cost_model_loads_from_config(self) -> None:
         cost_model = get_cost_model("nq_conservative_v1", Path("configs"))
 
