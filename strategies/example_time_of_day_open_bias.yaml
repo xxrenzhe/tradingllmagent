@@ -1,0 +1,42 @@
+{
+  "schema_version": 0,
+  "name": "nq_time_of_day_open_bias_v1",
+  "strategy_family": "time_of_day_edge",
+  "market_hypothesis": "Specific early NQ regular-session timestamps can carry directional bias that should be tested as a simple bounded module.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {"timezone": "UTC", "trade": "13:30-20:45", "flatten": "20:55"},
+  "regime_filter": {},
+  "indicators": {
+    "time_of_day": {"type": "time_of_day", "entry_time": "13:45", "entry_side": "long"}
+  },
+  "entry": {
+    "long": {"all": [{"left": "time", "op": "==", "right": "13:45"}]},
+    "short": {"all": [{"left": "time", "op": "==", "right": "13:45"}]}
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 12},
+    "take_profit": {"type": "points", "value": 18},
+    "max_holding_minutes": 20
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 1,
+    "max_daily_loss_r": 2
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "entry_time": {"values": ["13:35", "13:45", "14:00"]},
+    "entry_side": {"values": ["long", "short"]},
+    "stop_points": {"values": [10, 12, 16]},
+    "take_profit_points": {"values": [14, 18, 22]},
+    "max_holding_minutes": {"values": [15, 20]}
+  },
+  "cost_model": "nq_conservative_v1"
+}

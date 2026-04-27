@@ -36,7 +36,7 @@
     "momentum_threshold_points": {"values": [3, 4, 6]},
     "stop_points": {"values": [6, 8, 10]},
     "take_profit_points": {"values": [8, 10, 14]},
-    "max_holding_minutes": {"values": [8, 12, 18]}
+    "max_holding_minutes": {"values": [8, 12]}
   },
   "cost_model": "nq_conservative_v1"
 }

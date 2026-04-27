@@ -11,6 +11,7 @@ from tlm.config import CostModelConfig, SymbolConfig, get_cost_model
 from tlm.dukascopy import Tick
 from tlm.storage import bar_path, normalized_tick_path, write_bars_parquet, write_ticks_parquet
 from tlm.strategy import StrategySpecError, load_strategy_spec, parse_strategy_spec
+from tlm.variants import parameter_grid_metadata
 
 
 def base_spec() -> dict:
@@ -232,12 +233,14 @@ class StrategyValidationTests(unittest.TestCase):
 
     def test_all_strategy_seed_files_are_valid(self) -> None:
         paths = sorted(Path("strategies").glob("*.yaml"))
-        self.assertGreaterEqual(len(paths), 12)
+        self.assertGreaterEqual(len(paths), 25)
         for path in paths:
             with self.subTest(path=str(path)):
                 spec = load_strategy_spec(path)
+                metadata = parameter_grid_metadata(spec, max_trials=1)
                 self.assertEqual(spec.symbol, "NQmain")
                 self.assertEqual(spec.timeframe, "1m")
+                self.assertFalse(metadata.high_risk_budget)
 
     def test_cost_model_loads_from_config(self) -> None:
         cost_model = get_cost_model("nq_conservative_v1", Path("configs"))

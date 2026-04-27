@@ -36,7 +36,7 @@
     "volatility_expansion_multiple": {"values": [1.1, 1.15, 1.25]},
     "stop_points": {"values": [6, 8, 10]},
     "take_profit_points": {"values": [10, 12, 16]},
-    "max_holding_minutes": {"values": [10, 14, 20]}
+    "max_holding_minutes": {"values": [10, 14]}
   },
   "cost_model": "nq_conservative_v1"
 }
