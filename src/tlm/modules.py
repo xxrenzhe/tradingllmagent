@@ -193,6 +193,20 @@ def build_module_performance_record(
     win_rate: float | None = None,
 ) -> dict[str, Any]:
     annual_trades = aggregate_test_metrics.annual_trades
+    feature_set = list(spec.raw.get("feature_set", [])) if isinstance(spec.raw.get("feature_set"), list) else []
+    feature_names = [
+        str(feature.get("name"))
+        for feature in feature_set
+        if isinstance(feature, dict) and feature.get("name")
+    ]
+    feature_categories = sorted(
+        {
+            str(feature.get("category"))
+            for feature in feature_set
+            if isinstance(feature, dict) and feature.get("category")
+        }
+    )
+    generation = spec.raw.get("generation", {}) if isinstance(spec.raw.get("generation"), dict) else {}
     return {
         "experiment_id": experiment_id,
         "module_id": infer_module_id(spec),
@@ -215,6 +229,12 @@ def build_module_performance_record(
         "rejection_reasons": list(gates.get("reasons", [])),
         "robustness_score": robustness_score,
         "parameter_stability_status": parameter_stability_report.get("status"),
+        "feature_names": feature_names,
+        "feature_categories": feature_categories,
+        "feature_count": len(feature_names),
+        "generation_id": generation.get("generation_id"),
+        "feature_combo_hash": generation.get("feature_combo_hash"),
+        "generation_method": generation.get("method"),
     }
 
 
