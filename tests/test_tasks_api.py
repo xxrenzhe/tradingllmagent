@@ -523,6 +523,12 @@ class TaskStoreTests(unittest.TestCase):
                     "min_annual_trades": -1,
                     "min_sharpe": -100,
                     "min_win_probability": -1,
+                    "min_profit_factor": 0.1,
+                    "max_drawdown": 100000,
+                    "min_positive_year_ratio": 0,
+                    "max_final_holdout_sharpe_decay": 10,
+                    "max_target_parameter_combinations": 200,
+                    "min_non_overlap_test_folds": 1,
                     "train_days": 5,
                     "validation_days": 5,
                     "test_days": 5,
@@ -546,6 +552,8 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(completed["result"]["total_trials"], 1)
         self.assertTrue(summary_exists)
         self.assertEqual(summary["experiment"]["status"], "completed")
+        self.assertEqual(summary["experiment"]["metadata"]["target"]["min_profit_factor"], 0.1)
+        self.assertEqual(summary["experiment"]["metadata"]["target"]["max_drawdown"], 100000)
         self.assertEqual(len(summary["trials"]), 1)
         self.assertIn("win_probability_test", summary["trials"][0])
         self.assertEqual(

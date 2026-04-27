@@ -618,6 +618,12 @@ def cmd_research_discover_target(args: argparse.Namespace) -> int:
         min_annual_trades=args.min_annual_trades,
         min_sharpe=args.min_sharpe,
         min_win_probability=args.min_win_probability,
+        min_profit_factor=args.min_profit_factor,
+        max_drawdown=args.max_drawdown,
+        min_positive_year_ratio=args.min_positive_year_ratio,
+        max_final_holdout_sharpe_decay=args.max_final_holdout_sharpe_decay,
+        max_parameter_combinations=args.max_target_parameter_combinations,
+        min_non_overlap_test_folds=args.min_non_overlap_test_folds,
     )
     discovery_kwargs = {
         "symbol_config": symbol,
@@ -1113,6 +1119,12 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--min-annual-trades", type=float, default=1000)
     discover.add_argument("--min-sharpe", type=float, default=2)
     discover.add_argument("--min-win-probability", type=float, default=0.53)
+    discover.add_argument("--min-profit-factor", type=float, default=1.2)
+    discover.add_argument("--max-drawdown", type=float, default=10_000)
+    discover.add_argument("--min-positive-year-ratio", type=float, default=0.6)
+    discover.add_argument("--max-final-holdout-sharpe-decay", type=float, default=0.5)
+    discover.add_argument("--max-target-parameter-combinations", type=int, default=200)
+    discover.add_argument("--min-non-overlap-test-folds", type=int, default=1)
     discover.add_argument("--execution-mode", choices=["bar", "tick", "bar_then_tick"], default="bar")
     discover.add_argument("--random-seed", type=int, default=0)
     discover.add_argument("--llm-model", default="local-deterministic-template")

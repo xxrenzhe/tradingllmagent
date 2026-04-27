@@ -466,6 +466,12 @@ def execute_research_discover_target(payload: dict[str, Any]) -> dict[str, Any]:
         min_annual_trades=float(payload.get("min_annual_trades", 1000)),
         min_sharpe=float(payload.get("min_sharpe", 2)),
         min_win_probability=float(payload.get("min_win_probability", 0.53)),
+        min_profit_factor=float(payload.get("min_profit_factor", 1.2)),
+        max_drawdown=float(payload.get("max_drawdown", 10_000)),
+        min_positive_year_ratio=float(payload.get("min_positive_year_ratio", 0.6)),
+        max_final_holdout_sharpe_decay=float(payload.get("max_final_holdout_sharpe_decay", 0.5)),
+        max_parameter_combinations=int(payload.get("max_target_parameter_combinations", 200)),
+        min_non_overlap_test_folds=int(payload.get("min_non_overlap_test_folds", 1)),
     )
     symbol = get_symbol(payload.get("symbol", seed_spec.symbol), config_dir)
     cost_model = get_cost_model(seed_spec.cost_model, config_dir)
