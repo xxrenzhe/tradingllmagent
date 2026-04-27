@@ -32,6 +32,8 @@ export const API_PATHS = {
   taskEvents: (taskId) => `/api/tasks/${taskId}/events`,
   taskRun: (taskId) => `/api/tasks/${taskId}/run`,
   tasks: (limit = 50) => `/api/tasks?limit=${limit}`,
+  triggerGateMemory: "/api/trigger-gate/memory",
+  triggerGateOutcomes: "/api/trigger-gate/outcomes",
   triggerGateReports: "/api/trigger-gate/reports",
   triggerGateSchedules: "/api/trigger-gate/schedules",
   triggerGateSimulations: "/api/trigger-gate/simulations"

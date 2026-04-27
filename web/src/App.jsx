@@ -64,11 +64,14 @@ export default function App() {
     dateTo: "2026-04-26",
     outputDir: "experiments/trigger_gate/latest",
     enableLlm: true,
-    dailyTokenBudget: "30000"
+    dailyTokenBudget: "30000",
+    memoryStrategyHash: "",
+    memoryDecision: ""
   });
   const [triggerGateSimulation, setTriggerGateSimulation] = useState(null);
   const [triggerGateReport, setTriggerGateReport] = useState(null);
   const [triggerGateSchedule, setTriggerGateSchedule] = useState(null);
+  const [triggerGateMemory, setTriggerGateMemory] = useState(null);
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
   const [filters, setFilters] = useState({ minSharpe: "2", onlyPassed: false });
@@ -327,6 +330,20 @@ export default function App() {
     });
     setTriggerGateSchedule(payload);
     return { task_id: "trigger gate schedule built" };
+  }
+
+  async function loadTriggerGateMemory() {
+    const payload = await apiRequest(apiBase, API_PATHS.triggerGateMemory, {
+      method: "POST",
+      body: JSON.stringify({
+        output_dir: triggerGateForm.outputDir,
+        strategy_spec_hash: triggerGateForm.memoryStrategyHash || null,
+        decision: triggerGateForm.memoryDecision || null,
+        limit: 25
+      })
+    });
+    setTriggerGateMemory(payload);
+    return { task_id: "trigger gate memory loaded" };
   }
 
   async function refreshQuality() {
@@ -710,6 +727,16 @@ export default function App() {
             value={triggerGateForm.dailyTokenBudget}
             onChange={(value) => updateTriggerGateForm("dailyTokenBudget", value)}
           />
+          <TextField
+            label="Memory Strategy Hash"
+            value={triggerGateForm.memoryStrategyHash}
+            onChange={(value) => updateTriggerGateForm("memoryStrategyHash", value)}
+          />
+          <TextField
+            label="Memory Decision"
+            value={triggerGateForm.memoryDecision}
+            onChange={(value) => updateTriggerGateForm("memoryDecision", value)}
+          />
           <label className="field checkbox-field">
             <input
               type="checkbox"
@@ -729,8 +756,11 @@ export default function App() {
           <ActionButton variant="secondary" disabled={isPending || !moduleMemory?.target_frequency_pool} onClick={() => runAction("Trigger gate schedule", buildTriggerGateSchedule)}>
             Build 48h/7d/30d/90d Schedule
           </ActionButton>
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Trigger gate memory", loadTriggerGateMemory)}>
+            Load Decision Memory
+          </ActionButton>
         </div>
-        <TriggerGateSummary pool={moduleMemory?.target_frequency_pool} simulation={triggerGateSimulation} report={triggerGateReport} schedule={triggerGateSchedule} />
+        <TriggerGateSummary pool={moduleMemory?.target_frequency_pool} simulation={triggerGateSimulation} report={triggerGateReport} schedule={triggerGateSchedule} memory={triggerGateMemory} />
       </Panel>
     </main>
   );
@@ -1106,9 +1136,10 @@ function TriggerPoolSummary({ pool }) {
   );
 }
 
-function TriggerGateSummary({ pool, simulation, report, schedule }) {
+function TriggerGateSummary({ pool, simulation, report, schedule, memory }) {
   const drift = report?.proxy_outcome_drift;
   const opportunityCost = report?.block_opportunity_cost;
+  const recommendations = report?.adaptive_recommendations?.recommendations ?? [];
   return (
     <div className="artifact-dashboard">
       {pool ? <TriggerPoolSummary pool={pool} /> : <EmptyState title="No target pool loaded" text="Refresh module memory before running a trigger gate simulation." />}
@@ -1129,6 +1160,14 @@ function TriggerGateSummary({ pool, simulation, report, schedule }) {
           <Metric label="Block Cost" value={formatNumber(opportunityCost?.opportunity_cost ?? 0)} detail={`${formatCompact(opportunityCost?.missed_winner_count ?? 0)} missed winners`} />
         </div>
       ) : null}
+      {recommendations.length ? (
+        <div className="gate-list">
+          {recommendations.slice(0, 5).map((item) => (
+            <span key={item.action} className={item.severity === "high" ? "failed" : "passed"}>{item.action}: {item.reason}</span>
+          ))}
+        </div>
+      ) : null}
+      {memory ? <TriggerGateMemoryTimeline memory={memory} /> : null}
       {schedule ? (
         <div className="gate-list">
           {(schedule.runs ?? []).map((run) => (
@@ -1136,6 +1175,42 @@ function TriggerGateSummary({ pool, simulation, report, schedule }) {
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function TriggerGateMemoryTimeline({ memory }) {
+  const rows = memory.rows ?? [];
+  return (
+    <div className="table-wrap">
+      <div className="section-heading">
+        <h3>Decision Memory</h3>
+        <span>{formatCompact(memory.row_count)} rows, {formatCompact(memory.outcome_count)} outcomes</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Signal</th>
+            <th>Strategy</th>
+            <th>Decision</th>
+            <th>Risk</th>
+            <th>Outcome</th>
+            <th>Tokens</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 12).map((row) => (
+            <tr key={row.decision_id ?? row.evidence_id}>
+              <td>{row.signal_time ?? "-"}</td>
+              <td>{row.strategy_name ?? shortHash(row.strategy_spec_hash)}</td>
+              <td>{row.decision ?? "pending"}</td>
+              <td>{row.risk_level ?? "-"}</td>
+              <td>{row.final_label ?? "pending"} {row.net_pnl === null || row.net_pnl === undefined ? "" : `(${formatNumber(row.net_pnl)})`}</td>
+              <td>{formatCompact(row.total_tokens ?? 0)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
