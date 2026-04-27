@@ -169,6 +169,103 @@ class ModuleMemoryTests(unittest.TestCase):
         )
         self.assertEqual(pool["diversity_report"]["selected_modules"], ["different_module", "same_module"])
 
+    def test_target_frequency_pool_limits_correlation_groups(self) -> None:
+        records = [
+            {
+                "experiment_id": "exp_a",
+                "module_id": "module_a",
+                "strategy_name": "best_correlated",
+                "correlation_group": "session_breakout_cluster",
+                "passed": True,
+                "trades_per_day": 1.0,
+                "proxy_win_rate": 0.7,
+                "robustness_score": 0.8,
+            },
+            {
+                "experiment_id": "exp_b",
+                "module_id": "module_b",
+                "strategy_name": "second_correlated",
+                "correlation_group": "session_breakout_cluster",
+                "passed": True,
+                "trades_per_day": 1.0,
+                "proxy_win_rate": 0.68,
+                "robustness_score": 0.7,
+            },
+            {
+                "experiment_id": "exp_c",
+                "module_id": "module_c",
+                "strategy_name": "uncorrelated",
+                "correlation_group": "mean_reversion_cluster",
+                "passed": True,
+                "trades_per_day": 1.1,
+                "proxy_win_rate": 0.6,
+            },
+        ]
+
+        pool = build_target_frequency_pool(records)
+
+        self.assertEqual(pool["status"], "target_met")
+        self.assertEqual(
+            [row["strategy_name"] for row in pool["selected"]],
+            ["best_correlated", "uncorrelated"],
+        )
+        self.assertEqual(pool["diversity_report"]["selected_near_duplicate_pair_count"], 0)
+        self.assertEqual(pool["diversity_report"]["selected_correlation_group_count"], 2)
+
+    def test_target_frequency_pool_rejects_near_duplicate_signal_pairs(self) -> None:
+        similarity_report = {
+            "status": "near_duplicates_found",
+            "threshold": 0.8,
+            "near_duplicate_pair_count": 1,
+            "pairs": [
+                {
+                    "left_trial": "exp_a",
+                    "right_trial": "exp_b",
+                    "similarity": 0.95,
+                    "near_duplicate": True,
+                }
+            ],
+        }
+        records = [
+            {
+                "experiment_id": "exp_a",
+                "module_id": "module_a",
+                "strategy_name": "best_duplicate_signal",
+                "passed": True,
+                "trades_per_day": 1.0,
+                "proxy_win_rate": 0.7,
+                "signal_similarity_report": similarity_report,
+            },
+            {
+                "experiment_id": "exp_b",
+                "module_id": "module_b",
+                "strategy_name": "near_duplicate_signal",
+                "passed": True,
+                "trades_per_day": 1.0,
+                "proxy_win_rate": 0.69,
+                "signal_similarity_report": similarity_report,
+            },
+            {
+                "experiment_id": "exp_c",
+                "module_id": "module_c",
+                "strategy_name": "distinct_signal",
+                "passed": True,
+                "trades_per_day": 1.1,
+                "proxy_win_rate": 0.6,
+                "signal_similarity_report": similarity_report,
+            },
+        ]
+
+        pool = build_target_frequency_pool(records)
+
+        self.assertEqual(pool["status"], "target_met")
+        self.assertEqual(
+            [row["strategy_name"] for row in pool["selected"]],
+            ["best_duplicate_signal", "distinct_signal"],
+        )
+        self.assertEqual(pool["diversity_report"]["selected_near_duplicate_pair_count"], 0)
+        self.assertEqual(pool["candidate_quality_order"][0]["near_duplicate_experiment_ids"], ["exp_b"])
+
     def test_module_registry_promotes_and_audits_memory_summary(self) -> None:
         registry = build_module_registry(
             [

@@ -329,8 +329,11 @@ def build_target_frequency_pool(
     max_pool_size: int = 12,
     max_per_module: int = 1,
     max_per_strategy_hash: int = 1,
+    max_per_correlation_group: int = 1,
+    reject_near_duplicate_signals: bool = True,
 ) -> dict[str, Any]:
     candidates = []
+    near_duplicate_map = _target_pool_near_duplicate_map(records)
     rejected = {
         "not_passed": 0,
         "missing_or_zero_rate": 0,
@@ -359,6 +362,10 @@ def build_target_frequency_pool(
                 "strategy_family": record.get("strategy_family"),
                 "strategy_name": record.get("strategy_name"),
                 "strategy_spec_hash": record.get("strategy_spec_hash"),
+                "correlation_group": _record_correlation_group(record),
+                "near_duplicate_experiment_ids": sorted(
+                    near_duplicate_map.get(str(record.get("experiment_id") or ""), set())
+                ),
                 "timeframe": record.get("timeframe"),
                 "trades_per_day": daily_rate,
                 "rate_source": rate_source,
@@ -386,6 +393,8 @@ def build_target_frequency_pool(
         max_pool_size=max_pool_size,
         max_per_module=max_per_module,
         max_per_strategy_hash=max_per_strategy_hash,
+        max_per_correlation_group=max_per_correlation_group,
+        reject_near_duplicate_signals=reject_near_duplicate_signals,
     )
     total_rate = sum(float(item["trades_per_day"]) for item in selected)
     weighted_proxy_win_rate = (
@@ -412,6 +421,8 @@ def build_target_frequency_pool(
         "require_passed": require_passed,
         "max_per_module": max_per_module,
         "max_per_strategy_hash": max_per_strategy_hash,
+        "max_per_correlation_group": max_per_correlation_group,
+        "reject_near_duplicate_signals": reject_near_duplicate_signals,
         "candidate_count": len(ordered),
         "selected_count": len(selected),
         "selected_trades_per_day": total_rate,
@@ -423,6 +434,8 @@ def build_target_frequency_pool(
                 "module_id": item.get("module_id"),
                 "strategy_name": item.get("strategy_name"),
                 "strategy_spec_hash": item.get("strategy_spec_hash"),
+                "correlation_group": item.get("correlation_group"),
+                "near_duplicate_experiment_ids": item.get("near_duplicate_experiment_ids", []),
                 "trades_per_day": item.get("trades_per_day"),
                 "proxy_win_rate": item.get("proxy_win_rate"),
             }
@@ -441,6 +454,8 @@ def _select_frequency_pool(
     max_pool_size: int,
     max_per_module: int,
     max_per_strategy_hash: int,
+    max_per_correlation_group: int,
+    reject_near_duplicate_signals: bool,
 ) -> list[dict[str, Any]]:
     selected = []
     total_rate = 0.0
@@ -452,6 +467,8 @@ def _select_frequency_pool(
             candidate,
             max_per_module=max_per_module,
             max_per_strategy_hash=max_per_strategy_hash,
+            max_per_correlation_group=max_per_correlation_group,
+            reject_near_duplicate_signals=reject_near_duplicate_signals,
         ):
             continue
         candidate_rate = float(candidate["trades_per_day"])
@@ -476,6 +493,8 @@ def _select_frequency_pool(
                 candidate,
                 max_per_module=max_per_module,
                 max_per_strategy_hash=max_per_strategy_hash,
+                max_per_correlation_group=max_per_correlation_group,
+                reject_near_duplicate_signals=reject_near_duplicate_signals,
             )
         ),
         key=lambda item: (
@@ -493,6 +512,8 @@ def _violates_pool_diversity_limits(
     *,
     max_per_module: int,
     max_per_strategy_hash: int,
+    max_per_correlation_group: int,
+    reject_near_duplicate_signals: bool,
 ) -> bool:
     if max_per_module > 0:
         module_id = candidate.get("module_id")
@@ -503,6 +524,23 @@ def _violates_pool_diversity_limits(
         strategy_hash = candidate.get("strategy_spec_hash")
         selected_hash_count = sum(1 for item in selected if item.get("strategy_spec_hash") == strategy_hash)
         if selected_hash_count >= max_per_strategy_hash:
+            return True
+    if max_per_correlation_group > 0 and candidate.get("correlation_group"):
+        correlation_group = candidate.get("correlation_group")
+        selected_group_count = sum(1 for item in selected if item.get("correlation_group") == correlation_group)
+        if selected_group_count >= max_per_correlation_group:
+            return True
+    if reject_near_duplicate_signals and candidate.get("experiment_id"):
+        candidate_experiment_id = str(candidate["experiment_id"])
+        selected_experiment_ids = {str(item.get("experiment_id")) for item in selected if item.get("experiment_id")}
+        near_duplicates = {str(item) for item in candidate.get("near_duplicate_experiment_ids", [])}
+        if candidate_experiment_id in {
+            str(duplicate_id)
+            for item in selected
+            for duplicate_id in item.get("near_duplicate_experiment_ids", [])
+        }:
+            return True
+        if near_duplicates & selected_experiment_ids:
             return True
     return False
 
@@ -517,6 +555,19 @@ def _target_pool_diversity_report(
         for item in selected
         if item.get("strategy_spec_hash")
     }
+    selected_correlation_groups = {
+        str(item.get("correlation_group"))
+        for item in selected
+        if item.get("correlation_group")
+    }
+    selected_experiment_ids = {str(item.get("experiment_id")) for item in selected if item.get("experiment_id")}
+    selected_near_duplicate_pairs = set()
+    for item in selected:
+        experiment_id = str(item.get("experiment_id") or "")
+        for duplicate_id in item.get("near_duplicate_experiment_ids", []):
+            duplicate = str(duplicate_id)
+            if duplicate in selected_experiment_ids:
+                selected_near_duplicate_pairs.add(tuple(sorted((experiment_id, duplicate))))
     return {
         "candidate_module_count": len({str(item.get("module_id") or "unknown") for item in candidates}),
         "selected_module_count": len(selected_modules),
@@ -525,7 +576,45 @@ def _target_pool_diversity_report(
             {str(item.get("strategy_spec_hash")) for item in candidates if item.get("strategy_spec_hash")}
         ),
         "selected_strategy_hash_count": len(selected_hashes),
+        "candidate_correlation_group_count": len(
+            {str(item.get("correlation_group")) for item in candidates if item.get("correlation_group")}
+        ),
+        "selected_correlation_group_count": len(selected_correlation_groups),
+        "selected_correlation_groups": sorted(selected_correlation_groups),
+        "selected_near_duplicate_pair_count": len(selected_near_duplicate_pairs),
     }
+
+
+def _target_pool_near_duplicate_map(records: Sequence[dict[str, Any]]) -> dict[str, set[str]]:
+    near_duplicates: dict[str, set[str]] = {}
+    known_experiment_ids = {str(record.get("experiment_id")) for record in records if record.get("experiment_id")}
+    for record in records:
+        report = record.get("signal_similarity_report")
+        if not isinstance(report, dict):
+            continue
+        for pair in report.get("pairs", []):
+            if not isinstance(pair, dict) or not pair.get("near_duplicate"):
+                continue
+            left = str(pair.get("left_trial") or "")
+            right = str(pair.get("right_trial") or "")
+            if not left or not right or left not in known_experiment_ids or right not in known_experiment_ids:
+                continue
+            near_duplicates.setdefault(left, set()).add(right)
+            near_duplicates.setdefault(right, set()).add(left)
+    return near_duplicates
+
+
+def _record_correlation_group(record: dict[str, Any]) -> str | None:
+    for key in (
+        "correlation_group",
+        "signal_correlation_group",
+        "signal_similarity_group",
+        "duplicate_signal_group",
+    ):
+        value = record.get(key)
+        if value:
+            return str(value)
+    return None
 
 
 def _target_pool_quality_rank(
