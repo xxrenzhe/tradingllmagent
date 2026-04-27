@@ -48,6 +48,7 @@ from .tasks import (
     get_task_logs,
     list_tasks,
 )
+from .trigger_gate import run_trigger_gate_simulation
 from .worker import run_task, worker_loop
 
 
@@ -194,6 +195,39 @@ def build_module_memory_response(experiments_root: Path) -> dict:
     summary = summarize_module_performance(records)
     summary["target_frequency_pool"] = build_target_frequency_pool(records)
     return summary
+
+
+def build_trigger_gate_simulation_response(payload: dict) -> dict:
+    if payload.get("target_frequency_pool"):
+        target_frequency_pool = payload["target_frequency_pool"]
+    else:
+        experiments_root = Path(payload.get("experiments_root", "experiments"))
+        records = load_module_performance_memory(discover_module_memory_files(experiments_root))
+        target_frequency_pool = build_target_frequency_pool(
+            records,
+            target_min_per_day=float(payload.get("target_min_per_day", 2.0)),
+            target_max_per_day=float(payload.get("target_max_per_day", 3.0)),
+            min_proxy_win_rate=float(payload.get("min_proxy_win_rate", 0.53)),
+            lookback_days=int(payload.get("lookback_days", 90)),
+            require_passed=not bool(payload.get("include_rejected", False)),
+        )
+    output_dir = payload.get("output_dir")
+    if not output_dir:
+        raise ValueError("output_dir is required")
+    return run_trigger_gate_simulation(
+        target_frequency_pool=target_frequency_pool,
+        output_dir=Path(output_dir),
+        replay_start=str(payload.get("from") or payload.get("date_from") or ""),
+        replay_end=str(payload.get("to") or payload.get("date_to") or ""),
+        enable_llm=bool(payload.get("enable_llm", False)),
+        step_minutes=int(payload.get("step_minutes", 15)),
+        model=str(payload.get("model", "local-trigger-gate")),
+        daily_token_budget=(
+            int(payload["daily_token_budget"])
+            if payload.get("daily_token_budget") is not None
+            else None
+        ),
+    )
 
 
 def build_monitor_report_response(payload: dict) -> dict:
@@ -534,6 +568,13 @@ def create_app():
     @app.get("/api/modules/memory")
     def modules_memory(experiments_root: str = "experiments") -> dict:
         return build_module_memory_response(Path(experiments_root))
+
+    @app.post("/api/trigger-gate/simulations")
+    def trigger_gate_simulations(payload: dict = Body(...)) -> dict:
+        try:
+            return build_trigger_gate_simulation_response(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/gateways/nt8/health")
     def nt8_health() -> dict:

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import io
+import json
 import tempfile
 import unittest
 from datetime import UTC, datetime
+from contextlib import redirect_stdout
 from pathlib import Path
 
+from tlm.cli import main
 from tlm.trigger_gate import (
     append_trigger_gate_memory,
     build_token_budget_report,
@@ -162,6 +166,49 @@ class TriggerGateMemoryTests(unittest.TestCase):
         self.assertEqual(manifest["llm_call_count"], manifest["trigger_count"])
         self.assertGreater(manifest["token_budget"]["token_total"], 0)
         self.assertTrue(all(row["decision"] == "allow" for row in memory["decisions"]))
+
+    def test_cli_trigger_gate_simulate_uses_pool_file(self) -> None:
+        pool = {
+            "pool_version": "target_frequency_pool.v2",
+            "selected": [
+                {
+                    "module_id": "module_a",
+                    "strategy_name": "strategy_a",
+                    "strategy_spec_hash": "hash_a",
+                    "timeframe": "15m",
+                    "trades_per_day": 1.0,
+                    "proxy_win_rate": 0.61,
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            pool_path = root / "pool.json"
+            output_dir = root / "trigger_gate"
+            pool_path.write_text(json.dumps(pool), encoding="utf-8")
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "trigger-gate",
+                        "simulate",
+                        "--pool",
+                        str(pool_path),
+                        "--from",
+                        "2026-04-25",
+                        "--to",
+                        "2026-04-26",
+                        "--output-dir",
+                        str(output_dir),
+                        "--enable-llm",
+                    ]
+            )
+            manifest = json.loads(stdout.getvalue())
+            manifest_exists = (output_dir / "manifest.json").exists()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(manifest["mode"], "llm_enabled")
+        self.assertTrue(manifest_exists)
 
 
 if __name__ == "__main__":

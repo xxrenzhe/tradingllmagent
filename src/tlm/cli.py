@@ -49,6 +49,7 @@ from .storage import (
     write_ticks_parquet,
 )
 from .strategy import StrategySpecError, load_strategy_spec
+from .trigger_gate import run_trigger_gate_simulation
 from .variants import DEFAULT_PARAMETER_BUDGET, ParameterBudgetError
 
 
@@ -232,6 +233,36 @@ def cmd_modules_summary(args: argparse.Namespace) -> int:
             sort_keys=True,
         )
     )
+    return 0
+
+
+def cmd_trigger_gate_simulate(args: argparse.Namespace) -> int:
+    if args.pool:
+        target_frequency_pool = json.loads(Path(args.pool).read_text(encoding="utf-8"))
+    else:
+        if args.memory:
+            memory_paths = [Path(path) for path in args.memory]
+        else:
+            memory_paths = discover_module_memory_files(Path(args.experiments_root))
+        target_frequency_pool = build_target_frequency_pool(
+            load_module_performance_memory(memory_paths),
+            target_min_per_day=args.target_min_per_day,
+            target_max_per_day=args.target_max_per_day,
+            min_proxy_win_rate=args.min_proxy_win_rate,
+            lookback_days=args.lookback_days,
+            require_passed=not args.include_rejected,
+        )
+    manifest = run_trigger_gate_simulation(
+        target_frequency_pool=target_frequency_pool,
+        output_dir=Path(args.output_dir),
+        replay_start=args.date_from,
+        replay_end=args.date_to,
+        enable_llm=args.enable_llm,
+        step_minutes=args.step_minutes,
+        model=args.model,
+        daily_token_budget=args.daily_token_budget,
+    )
+    print(json.dumps(manifest, indent=2, sort_keys=True, default=str))
     return 0
 
 
@@ -642,6 +673,26 @@ def build_parser() -> argparse.ArgumentParser:
     modules_summary.add_argument("--lookback-days", type=int, default=90)
     modules_summary.add_argument("--include-rejected", action="store_true")
     modules_summary.set_defaults(func=cmd_modules_summary)
+
+    trigger_gate = subparsers.add_parser("trigger-gate")
+    trigger_gate_subparsers = trigger_gate.add_subparsers(dest="trigger_gate_command", required=True)
+    trigger_gate_simulate = trigger_gate_subparsers.add_parser("simulate")
+    trigger_gate_simulate.add_argument("--pool")
+    trigger_gate_simulate.add_argument("--experiments-root", default="experiments")
+    trigger_gate_simulate.add_argument("--memory", action="append")
+    trigger_gate_simulate.add_argument("--from", dest="date_from", required=True)
+    trigger_gate_simulate.add_argument("--to", dest="date_to", required=True)
+    trigger_gate_simulate.add_argument("--output-dir", required=True)
+    trigger_gate_simulate.add_argument("--enable-llm", action="store_true")
+    trigger_gate_simulate.add_argument("--model", default="local-trigger-gate")
+    trigger_gate_simulate.add_argument("--daily-token-budget", type=int)
+    trigger_gate_simulate.add_argument("--step-minutes", type=int, default=15)
+    trigger_gate_simulate.add_argument("--target-min-per-day", type=float, default=2.0)
+    trigger_gate_simulate.add_argument("--target-max-per-day", type=float, default=3.0)
+    trigger_gate_simulate.add_argument("--min-proxy-win-rate", type=float, default=0.53)
+    trigger_gate_simulate.add_argument("--lookback-days", type=int, default=90)
+    trigger_gate_simulate.add_argument("--include-rejected", action="store_true")
+    trigger_gate_simulate.set_defaults(func=cmd_trigger_gate_simulate)
 
     backtest = subparsers.add_parser("backtest")
     backtest_subparsers = backtest.add_subparsers(dest="backtest_command", required=True)

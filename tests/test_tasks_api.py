@@ -13,6 +13,7 @@ from tlm.api import (
     build_experiment_artifacts_response,
     build_nt_export_signal_response,
     build_paper_replay_response,
+    build_trigger_gate_simulation_response,
     create_app,
 )
 from tlm.dukascopy import Tick
@@ -493,8 +494,37 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/readiness/external-validation", paths)
         self.assertIn("/api/calibration/costs", paths)
         self.assertIn("/api/modules/memory", paths)
+        self.assertIn("/api/trigger-gate/simulations", paths)
         self.assertIn("/api/gateways/nt8/order-updates", paths)
         self.assertIn("/api/gateways/nt8/incidents", paths)
+
+    def test_trigger_gate_api_helper_writes_simulation_artifacts_without_fastapi(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            manifest = build_trigger_gate_simulation_response(
+                {
+                    "target_frequency_pool": {
+                        "pool_version": "target_frequency_pool.v2",
+                        "selected": [
+                            {
+                                "module_id": "module_a",
+                                "strategy_name": "strategy_a",
+                                "strategy_spec_hash": "hash_a",
+                                "timeframe": "15m",
+                                "trades_per_day": 1.0,
+                                "proxy_win_rate": 0.61,
+                            }
+                        ],
+                    },
+                    "from": "2026-04-25",
+                    "to": "2026-04-26",
+                    "output_dir": str(root / "trigger_gate"),
+                    "enable_llm": True,
+                }
+            )
+
+        self.assertEqual(manifest["mode"], "llm_enabled")
+        self.assertEqual(manifest["llm_call_count"], manifest["trigger_count"])
 
     def test_cost_calibration_api_helper_builds_artifact_without_fastapi(self) -> None:
         artifact = build_cost_calibration_response(
