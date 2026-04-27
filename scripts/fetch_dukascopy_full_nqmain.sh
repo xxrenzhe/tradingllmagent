@@ -16,6 +16,8 @@ STATUS_FILE="${LOG_DIR}/${RUN_ID}.status.tsv"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 SKIP_PREVIOUS_FAILED_DAYS="${SKIP_PREVIOUS_FAILED_DAYS:-0}"
 FAILED_DAY_CACHE="${LOG_DIR}/${RUN_ID}.failed-days.txt"
+HOUR_RETRIES="${HOUR_RETRIES:-3}"
+HOUR_TIMEOUT_SECONDS="${HOUR_TIMEOUT_SECONDS:-30}"
 
 mkdir -p "${LOG_DIR}"
 
@@ -92,6 +94,8 @@ run_cli() {
   printf "ssl_cert_file\t%s\n" "${SSL_CERT_FILE:-}"
   printf "python_bin\t%s\n" "$PYTHON_BIN"
   printf "skip_previous_failed_days\t%s\n" "$SKIP_PREVIOUS_FAILED_DAYS"
+  printf "hour_retries\t%s\n" "$HOUR_RETRIES"
+  printf "hour_timeout_seconds\t%s\n" "$HOUR_TIMEOUT_SECONDS"
   printf "started_at\t%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "$LOG_FILE"
 
@@ -124,7 +128,7 @@ for day in $(date_range); do
   while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     start_epoch="$(date +%s)"
     printf "\n[%s] download %s attempt %s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$day" "$attempt" >> "$LOG_FILE"
-    if run_cli data download --symbol "$SYMBOL" --from "$day" --to "$day" --granularity tick >> "$LOG_FILE" 2>&1; then
+    if run_cli data download --symbol "$SYMBOL" --from "$day" --to "$day" --granularity tick --hour-retries "$HOUR_RETRIES" --hour-timeout-seconds "$HOUR_TIMEOUT_SECONDS" >> "$LOG_FILE" 2>&1; then
       if [ "$BUILD_BARS" = "1" ]; then
         run_cli data build-bars --symbol "$SYMBOL" --from "$day" --to "$day" --timeframe 1m >> "$LOG_FILE" 2>&1
         run_cli data build-bars --symbol "$SYMBOL" --from "$day" --to "$day" --timeframe 5m >> "$LOG_FILE" 2>&1

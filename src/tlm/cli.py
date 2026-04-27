@@ -103,7 +103,13 @@ def cmd_data_download(args: argparse.Namespace) -> int:
         start, end = day_bounds(day)
         day_ticks = []
         for hour in iter_hours(start, end):
-            result = download_hour(symbol, hour, data_root)
+            result = download_hour(
+                symbol,
+                hour,
+                data_root,
+                retries=args.hour_retries,
+                timeout_seconds=args.hour_timeout_seconds,
+            )
             if result.status in {"downloaded", "cached"}:
                 raw_paths.append(result.path)
                 ticks = parse_bi5_file(result.path, hour, symbol.price_scale)
@@ -590,6 +596,8 @@ def build_parser() -> argparse.ArgumentParser:
     download.add_argument("--from", dest="date_from", required=True)
     download.add_argument("--to", dest="date_to", required=True)
     download.add_argument("--granularity", default="tick")
+    download.add_argument("--hour-retries", type=int, default=3)
+    download.add_argument("--hour-timeout-seconds", type=int, default=30)
     download.set_defaults(func=cmd_data_download)
 
     build_bars = data_subparsers.add_parser("build-bars")

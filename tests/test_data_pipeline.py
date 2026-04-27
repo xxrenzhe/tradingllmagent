@@ -8,6 +8,7 @@ import unittest
 from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import duckdb
 
@@ -17,7 +18,7 @@ from tlm.bars import (
     build_timeframe_bars_from_1m_parquet,
 )
 from tlm.cli import main
-from tlm.dukascopy import TICK_STRUCT, dukascopy_url, parse_bi5_ticks
+from tlm.dukascopy import DownloadResult, TICK_STRUCT, dukascopy_url, parse_bi5_ticks
 from tlm.quality import build_quality_report
 from tlm.storage import normalized_tick_path, write_ticks_parquet
 
@@ -238,6 +239,49 @@ class BarAndQualityTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         self.assertIn("data_version_hash=", output.getvalue())
+
+    def test_cli_download_passes_hour_retry_and_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            calls = []
+
+            def fake_download(symbol, hour, target_root, retries=3, timeout_seconds=30):
+                calls.append((symbol.instrument, hour, target_root, retries, timeout_seconds))
+                return DownloadResult(
+                    url=f"https://example.test/{hour.hour:02d}",
+                    path=data_root / "raw" / f"{hour.hour:02d}.bi5",
+                    status="empty_hour",
+                    bytes_written=0,
+                )
+
+            output = io.StringIO()
+            with patch("tlm.cli.download_hour", side_effect=fake_download):
+                with redirect_stdout(output):
+                    code = main(
+                        [
+                            "--data-root",
+                            str(data_root),
+                            "data",
+                            "download",
+                            "--symbol",
+                            "NQmain",
+                            "--from",
+                            "2025-03-19",
+                            "--to",
+                            "2025-03-19",
+                            "--hour-retries",
+                            "1",
+                            "--hour-timeout-seconds",
+                            "7",
+                        ]
+                    )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 24)
+        self.assertTrue(all(call[0] == "USATECHIDXUSD" for call in calls))
+        self.assertTrue(all(call[2] == data_root for call in calls))
+        self.assertTrue(all(call[3] == 1 for call in calls))
+        self.assertTrue(all(call[4] == 7 for call in calls))
 
 
 if __name__ == "__main__":

@@ -105,6 +105,8 @@ def execute_data_download(payload: dict[str, Any]) -> dict[str, Any]:
     symbol = get_symbol(symbol_alias, config_dir)
     date_from = parse_date(_required(payload, "date_from", "from"))
     date_to = parse_date(_required(payload, "date_to", "to"))
+    hour_retries = int(payload.get("hour_retries", 3))
+    hour_timeout_seconds = int(payload.get("hour_timeout_seconds", 30))
 
     total_ticks = 0
     status_counts: dict[str, int] = {}
@@ -115,7 +117,13 @@ def execute_data_download(payload: dict[str, Any]) -> dict[str, Any]:
         raw_paths: list[Path] = []
         day_status_counts: dict[str, int] = {}
         for hour in iter_hours(start, end):
-            result = download_hour(symbol, hour, data_root)
+            result = download_hour(
+                symbol,
+                hour,
+                data_root,
+                retries=hour_retries,
+                timeout_seconds=hour_timeout_seconds,
+            )
             status_counts[result.status] = status_counts.get(result.status, 0) + 1
             day_status_counts[result.status] = day_status_counts.get(result.status, 0) + 1
             if result.status in {"downloaded", "cached"}:
