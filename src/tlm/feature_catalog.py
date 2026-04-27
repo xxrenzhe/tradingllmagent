@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -9,6 +10,28 @@ class FeatureDefinition:
     category: str
     data_level: str
     description: str
+    required_inputs: tuple[str, ...] = ()
+    lookback_bars: int = 0
+    warmup_days: int = 0
+    implementation_status: str = "candidate"
+    leakage_risk: str = "low"
+    supported_timeframes: tuple[str, ...] = ("1m",)
+    source_notes: str = "Seeded from intraday trading feature research."
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "category": self.category,
+            "data_level": self.data_level,
+            "description": self.description,
+            "required_inputs": list(self.required_inputs),
+            "lookback_bars": self.lookback_bars,
+            "warmup_days": self.warmup_days,
+            "implementation_status": self.implementation_status,
+            "leakage_risk": self.leakage_risk,
+            "supported_timeframes": list(self.supported_timeframes),
+            "source_notes": self.source_notes,
+        }
 
 
 _FEATURE_ROWS = [
@@ -126,12 +149,116 @@ _FEATURE_ROWS = [
     ("order_book_imbalance_l1", "microstructure", "quote", "Level-one bid size versus ask size imbalance."),
 ]
 
-FEATURE_CATALOG = tuple(FeatureDefinition(*row) for row in _FEATURE_ROWS)
-
-
 def feature_catalog_by_name() -> dict[str, FeatureDefinition]:
     return {feature.name: feature for feature in FEATURE_CATALOG}
 
 
 def features_for_data_levels(data_levels: set[str]) -> tuple[FeatureDefinition, ...]:
     return tuple(feature for feature in FEATURE_CATALOG if feature.data_level in data_levels)
+
+
+def feature_readiness_report() -> dict[str, Any]:
+    by_status: dict[str, int] = {}
+    by_data_level: dict[str, int] = {}
+    by_leakage_risk: dict[str, int] = {}
+    by_category: dict[str, int] = {}
+    for feature in FEATURE_CATALOG:
+        by_status[feature.implementation_status] = by_status.get(feature.implementation_status, 0) + 1
+        by_data_level[feature.data_level] = by_data_level.get(feature.data_level, 0) + 1
+        by_leakage_risk[feature.leakage_risk] = by_leakage_risk.get(feature.leakage_risk, 0) + 1
+        by_category[feature.category] = by_category.get(feature.category, 0) + 1
+    usable_for_bar_research = [
+        feature.name
+        for feature in FEATURE_CATALOG
+        if feature.implementation_status == "implemented" and feature.data_level in {"bar", "calendar"}
+    ]
+    external_required = [
+        feature.name
+        for feature in FEATURE_CATALOG
+        if feature.implementation_status == "external_required"
+    ]
+    return {
+        "feature_count": len(FEATURE_CATALOG),
+        "by_status": dict(sorted(by_status.items())),
+        "by_data_level": dict(sorted(by_data_level.items())),
+        "by_leakage_risk": dict(sorted(by_leakage_risk.items())),
+        "by_category": dict(sorted(by_category.items())),
+        "usable_for_bar_research_count": len(usable_for_bar_research),
+        "external_required_count": len(external_required),
+        "usable_for_bar_research": usable_for_bar_research,
+        "external_required": external_required,
+    }
+
+
+def _feature_from_row(row: tuple[str, str, str, str]) -> FeatureDefinition:
+    name, category, data_level, description = row
+    return FeatureDefinition(
+        name=name,
+        category=category,
+        data_level=data_level,
+        description=description,
+        required_inputs=_required_inputs(data_level, category),
+        lookback_bars=_lookback_bars(name),
+        warmup_days=_warmup_days(name, data_level),
+        implementation_status=_implementation_status(data_level),
+        leakage_risk=_leakage_risk(name, category, data_level),
+        supported_timeframes=_supported_timeframes(data_level),
+    )
+
+
+def _required_inputs(data_level: str, category: str) -> tuple[str, ...]:
+    if data_level == "bar":
+        if category in {"volume", "vwap"}:
+            return ("timestamp", "open", "high", "low", "close", "volume")
+        return ("timestamp", "open", "high", "low", "close")
+    if data_level == "calendar":
+        return ("timestamp", "session_calendar")
+    if data_level == "external_bar":
+        return ("timestamp", "external_symbol_ohlcv")
+    if data_level == "tick":
+        return ("timestamp", "price", "volume")
+    if data_level == "quote":
+        return ("timestamp", "bid", "ask", "bid_size", "ask_size")
+    return ("timestamp",)
+
+
+def _lookback_bars(name: str) -> int:
+    for token in reversed(name.split("_")):
+        digits = "".join(character for character in token if character.isdigit())
+        if digits:
+            return int(digits)
+    if name.startswith(("overnight_", "prior_", "premarket_")):
+        return 390
+    return 1
+
+
+def _warmup_days(name: str, data_level: str) -> int:
+    if data_level in {"external_bar", "tick", "quote"}:
+        return 5
+    if any(token in name for token in ("20d", "prior_day", "overnight", "premarket")):
+        return 20
+    lookback = _lookback_bars(name)
+    return max(1, min(5, (lookback // 390) + 1))
+
+
+def _implementation_status(data_level: str) -> str:
+    if data_level in {"bar", "calendar"}:
+        return "implemented"
+    return "external_required"
+
+
+def _leakage_risk(name: str, category: str, data_level: str) -> str:
+    if data_level in {"external_bar", "quote"}:
+        return "medium"
+    if category == "event" or "expected" in name:
+        return "medium"
+    return "low"
+
+
+def _supported_timeframes(data_level: str) -> tuple[str, ...]:
+    if data_level in {"tick", "quote"}:
+        return ("tick",)
+    return ("1m", "5m", "15m")
+
+
+FEATURE_CATALOG = tuple(_feature_from_row(row) for row in _FEATURE_ROWS)

@@ -27,6 +27,7 @@ from .events import (
     validate_event_calendar,
     write_event_context_parquet,
 )
+from .feature_catalog import feature_readiness_report
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .monitor import build_monitor_report, write_monitor_outputs
 from .modules import (
@@ -567,6 +568,15 @@ def cmd_research_generate_feature_seeds(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_research_feature_readiness(args: argparse.Namespace) -> int:
+    report = feature_readiness_report()
+    output = Path(args.output) if args.output else None
+    if output:
+        write_json(output, report)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_research_discover_target(args: argparse.Namespace) -> int:
     if args.spec:
         spec = load_strategy_spec(Path(args.spec))
@@ -1077,6 +1087,10 @@ def build_parser() -> argparse.ArgumentParser:
     generate_feature_seeds.add_argument("--timeframe", default="1m")
     generate_feature_seeds.add_argument("--prefix", default="generated_feature_combo")
     generate_feature_seeds.set_defaults(func=cmd_research_generate_feature_seeds)
+
+    feature_readiness = research_subparsers.add_parser("feature-readiness")
+    feature_readiness.add_argument("--output")
+    feature_readiness.set_defaults(func=cmd_research_feature_readiness)
 
     discover = research_subparsers.add_parser("discover-target")
     discover.add_argument("--spec")
