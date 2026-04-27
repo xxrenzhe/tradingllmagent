@@ -59,6 +59,15 @@ export default function App() {
   const [costCalibration, setCostCalibration] = useState(null);
   const [costSampleJson, setCostSampleJson] = useState("[]");
   const [moduleMemory, setModuleMemory] = useState(null);
+  const [triggerGateForm, setTriggerGateForm] = useState({
+    dateFrom: "2026-04-25",
+    dateTo: "2026-04-26",
+    outputDir: "experiments/trigger_gate/latest",
+    enableLlm: true,
+    dailyTokenBudget: "30000"
+  });
+  const [triggerGateSimulation, setTriggerGateSimulation] = useState(null);
+  const [triggerGateReport, setTriggerGateReport] = useState(null);
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
   const [filters, setFilters] = useState({ minSharpe: "2", onlyPassed: false });
@@ -146,6 +155,10 @@ export default function App() {
 
   function updateReadinessForm(key, value) {
     setReadinessForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateTriggerGateForm(key, value) {
+    setTriggerGateForm((current) => ({ ...current, [key]: value }));
   }
 
   async function runAction(label, fn) {
@@ -273,6 +286,31 @@ export default function App() {
     const payload = await apiRequest(apiBase, API_PATHS.modulesMemory);
     setModuleMemory(payload);
     return { task_id: "module memory refreshed" };
+  }
+
+  async function runTriggerGateSimulation() {
+    const payload = await apiRequest(apiBase, API_PATHS.triggerGateSimulations, {
+      method: "POST",
+      body: JSON.stringify({
+        target_frequency_pool: moduleMemory?.target_frequency_pool,
+        from: triggerGateForm.dateFrom,
+        to: triggerGateForm.dateTo,
+        output_dir: triggerGateForm.outputDir,
+        enable_llm: triggerGateForm.enableLlm,
+        daily_token_budget: optionalNumber(triggerGateForm.dailyTokenBudget)
+      })
+    });
+    setTriggerGateSimulation(payload);
+    return { task_id: "trigger gate simulation completed" };
+  }
+
+  async function loadTriggerGateReport() {
+    const payload = await apiRequest(apiBase, API_PATHS.triggerGateReports, {
+      method: "POST",
+      body: JSON.stringify({ output_dir: triggerGateForm.outputDir })
+    });
+    setTriggerGateReport(payload);
+    return { task_id: "trigger gate report loaded" };
   }
 
   async function refreshQuality() {
@@ -637,6 +675,44 @@ export default function App() {
         </div>
         {moduleMemory ? <ModuleMemorySummary summary={moduleMemory} /> : <EmptyState title="No module memory loaded" text="Refresh after research writes module performance records." />}
       </Panel>
+
+      <Panel title="Trigger Gate" kicker="Target pool, token budget, forward test">
+        <p className="body-copy">
+          Trigger gate simulations use selected module-memory pool rows and write local evidence, decision, token, and forward-test artifacts. No live commands are emitted.
+        </p>
+        <div className="form-grid compact-form">
+          <TextField label="From" value={triggerGateForm.dateFrom} onChange={(value) => updateTriggerGateForm("dateFrom", value)} />
+          <TextField label="To" value={triggerGateForm.dateTo} onChange={(value) => updateTriggerGateForm("dateTo", value)} />
+          <TextField
+            label="Output Dir"
+            className="wide"
+            value={triggerGateForm.outputDir}
+            onChange={(value) => updateTriggerGateForm("outputDir", value)}
+          />
+          <TextField
+            label="Daily Token Budget"
+            value={triggerGateForm.dailyTokenBudget}
+            onChange={(value) => updateTriggerGateForm("dailyTokenBudget", value)}
+          />
+          <label className="field checkbox-field">
+            <input
+              type="checkbox"
+              checked={triggerGateForm.enableLlm}
+              onChange={(event) => updateTriggerGateForm("enableLlm", event.target.checked)}
+            />
+            <span>Enable LLM gate simulation</span>
+          </label>
+        </div>
+        <div className="button-row">
+          <ActionButton variant="secondary" disabled={isPending || !moduleMemory?.target_frequency_pool} onClick={() => runAction("Trigger gate simulation", runTriggerGateSimulation)}>
+            Run Trigger Gate Simulation
+          </ActionButton>
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Trigger gate report", loadTriggerGateReport)}>
+            Load Forward Report
+          </ActionButton>
+        </div>
+        <TriggerGateSummary pool={moduleMemory?.target_frequency_pool} simulation={triggerGateSimulation} report={triggerGateReport} />
+      </Panel>
     </main>
   );
 }
@@ -969,26 +1045,65 @@ function GatewayReadinessSummary({ overview, approvalQueue }) {
 function ModuleMemorySummary({ summary }) {
   const modules = summary.modules ?? [];
   return (
-    <div className="module-memory-grid">
-      {modules.slice(0, 12).map((module) => (
-        <article key={module.module_id} className="module-memory-card">
-          <div className="strategy-card-topline">
-            <span className={`status-pill ${moduleStatusClass(module.status)}`}>{module.status ?? "summary"}</span>
-            <span>{formatPercent(module.pass_rate ?? 0)}</span>
-          </div>
-          <h3>{module.module_id}</h3>
-          <p>{module.catalog?.description ?? "No catalog description."}</p>
-          <div className="module-memory-stats">
-            <Metric label="Records" value={formatCompact(module.evaluated_records)} detail={`${formatCompact(module.passed_records)} passed`} />
-            <Metric label="Trades" value={formatCompact(module.total_trade_count)} detail={module.best_experiment_id ?? "no best experiment"} />
-          </div>
-          <div className="gate-list">
-            {Object.entries(module.rejection_reasons ?? {}).slice(0, 4).map(([reason, count]) => (
-              <span key={reason} className="failed">{reason}: {count}</span>
-            ))}
-          </div>
-        </article>
-      ))}
+    <div>
+      <TriggerPoolSummary pool={summary.target_frequency_pool} />
+      <div className="module-memory-grid">
+        {modules.slice(0, 12).map((module) => (
+          <article key={module.module_id} className="module-memory-card">
+            <div className="strategy-card-topline">
+              <span className={`status-pill ${moduleStatusClass(module.status)}`}>{module.status ?? "summary"}</span>
+              <span>{formatPercent(module.pass_rate ?? 0)}</span>
+            </div>
+            <h3>{module.module_id}</h3>
+            <p>{module.catalog?.description ?? "No catalog description."}</p>
+            <div className="module-memory-stats">
+              <Metric label="Records" value={formatCompact(module.evaluated_records)} detail={`${formatCompact(module.passed_records)} passed`} />
+              <Metric label="Trades" value={formatCompact(module.total_trade_count)} detail={module.best_experiment_id ?? "no best experiment"} />
+            </div>
+            <div className="gate-list">
+              {Object.entries(module.rejection_reasons ?? {}).slice(0, 4).map(([reason, count]) => (
+                <span key={reason} className="failed">{reason}: {count}</span>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TriggerPoolSummary({ pool }) {
+  if (!pool) {
+    return null;
+  }
+  return (
+    <div className="module-memory-stats">
+      <Metric label="Pool Status" value={pool.status ?? "-"} detail={`${formatCompact(pool.selected_count)} selected`} />
+      <Metric label="Signals / Day" value={formatNumber(pool.selected_trades_per_day ?? 0)} detail={`${formatNumber(pool.target_min_per_day ?? 0)}-${formatNumber(pool.target_max_per_day ?? 0)} target`} />
+      <Metric label="Proxy Win" value={formatPercent(pool.weighted_proxy_win_rate ?? 0)} detail={`min ${formatPercent(pool.min_proxy_win_rate ?? 0)}`} />
+    </div>
+  );
+}
+
+function TriggerGateSummary({ pool, simulation, report }) {
+  return (
+    <div className="artifact-dashboard">
+      {pool ? <TriggerPoolSummary pool={pool} /> : <EmptyState title="No target pool loaded" text="Refresh module memory before running a trigger gate simulation." />}
+      {simulation ? (
+        <div className="artifact-summary">
+          <Metric label="Mode" value={simulation.mode ?? "-"} detail={simulation.simulation_id ? shortHash(simulation.simulation_id) : "no id"} />
+          <Metric label="Triggers" value={formatCompact(simulation.trigger_count)} detail={`${formatNumber(simulation.trigger_per_day)} / day`} />
+          <Metric label="LLM Calls" value={formatCompact(simulation.llm_call_count)} detail={`${formatCompact(simulation.token_budget?.token_total)} tokens`} />
+        </div>
+      ) : null}
+      {report ? (
+        <div className="artifact-summary">
+          <Metric label="Allow" value={formatPercent(report.allow_rate ?? 0)} detail="decision rate" />
+          <Metric label="Block" value={formatPercent(report.block_rate ?? 0)} detail="decision rate" />
+          <Metric label="Observe" value={formatPercent(report.observe_rate ?? 0)} detail={`${formatCompact(report.token_total)} tokens`} />
+          <Metric label="Live Commands" value={formatCompact(report.live_gateway_command_count ?? 0)} detail="must remain zero" />
+        </div>
+      ) : null}
     </div>
   );
 }

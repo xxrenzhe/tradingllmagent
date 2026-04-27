@@ -31,7 +31,9 @@ export const API_PATHS = {
   taskCancel: (taskId) => `/api/tasks/${taskId}/cancel`,
   taskEvents: (taskId) => `/api/tasks/${taskId}/events`,
   taskRun: (taskId) => `/api/tasks/${taskId}/run`,
-  tasks: (limit = 50) => `/api/tasks?limit=${limit}`
+  tasks: (limit = 50) => `/api/tasks?limit=${limit}`,
+  triggerGateReports: "/api/trigger-gate/reports",
+  triggerGateSimulations: "/api/trigger-gate/simulations"
 };
 
 export async function apiRequest(apiBase, path, options = {}) {
