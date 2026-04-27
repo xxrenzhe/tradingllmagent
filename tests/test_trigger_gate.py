@@ -211,6 +211,17 @@ class TriggerGateMemoryTests(unittest.TestCase):
             report["proxy_outcome_drift"]["strategy_rows"][0]["status"],
             "proxy_overstates_outcomes",
         )
+        recommendations = report["adaptive_recommendations"]
+        self.assertFalse(recommendations["auto_apply"])
+        self.assertEqual(recommendations["status"], "review_required")
+        self.assertIn(
+            "downgrade_proxy_weight",
+            {row["action"] for row in recommendations["recommendations"]},
+        )
+        self.assertIn(
+            "pause_or_downgrade_pool",
+            {row["action"] for row in recommendations["recommendations"]},
+        )
         self.assertEqual(report["decision_outcome_confusion"]["rows"]["allow"]["allowed_loser"], 1)
         self.assertEqual(report["live_gateway_command_count"], 0)
 
@@ -279,6 +290,14 @@ class TriggerGateMemoryTests(unittest.TestCase):
         self.assertEqual(cost["missed_winner_count"], 1)
         self.assertEqual(cost["opportunity_cost"], 125.0)
         self.assertEqual(cost["strategy_rows"][0]["strategy_spec_hash"], "hash_a")
+        self.assertIn(
+            "review_block_threshold",
+            {row["action"] for row in report["adaptive_recommendations"]["recommendations"]},
+        )
+        self.assertEqual(
+            report["adaptive_recommendations"]["strategy_review_flags"][0]["flags"],
+            ["blocked_winners"],
+        )
 
     def test_cli_trigger_gate_simulate_uses_pool_file(self) -> None:
         pool = {

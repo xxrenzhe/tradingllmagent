@@ -430,7 +430,11 @@ def build_forward_test_report(
     decisions = memory.get("decisions", [])
     outcomes = memory.get("outcomes", [])
     selected_pool = list(manifest.get("selected_strategy_pool", []))
-    token_budget = build_token_budget_report(decisions)
+    manifest_token_budget = manifest.get("token_budget") if isinstance(manifest.get("token_budget"), dict) else {}
+    token_budget = build_token_budget_report(
+        decisions,
+        daily_token_budget=manifest_token_budget.get("daily_token_budget"),
+    )
     outcome_rows = [row for row in outcomes if row.get("net_pnl") is not None]
     actual_paper_win_rate = (
         sum(1 for row in outcome_rows if float(row.get("net_pnl") or 0) > 0) / len(outcome_rows)
@@ -438,7 +442,7 @@ def build_forward_test_report(
         else None
     )
     proxy_win_rate = _pool_weighted_proxy_win_rate(manifest.get("target_frequency_pool", {}), selected_pool)
-    return {
+    report = {
         "schema_version": 1,
         "lookback_days": manifest.get("duration_days"),
         "forward_days": manifest.get("duration_days"),
@@ -465,6 +469,146 @@ def build_forward_test_report(
         "llm_calls_match_triggers": len(decisions) == len(evidence) if manifest.get("mode") == "llm_enabled" else None,
         "live_gateway_command_count": 0,
     }
+    report["adaptive_recommendations"] = build_adaptive_forward_recommendations(report)
+    return report
+
+
+def build_adaptive_forward_recommendations(
+    report: dict[str, Any],
+    *,
+    target_min_per_day: float = 2.0,
+    target_max_per_day: float = 3.0,
+    min_actual_win_rate: float = 0.53,
+    max_token_per_trigger: int = 6000,
+) -> dict[str, Any]:
+    recommendations = []
+    trigger_per_day = _optional_float(report.get("trigger_per_day"))
+    if trigger_per_day is not None and trigger_per_day < target_min_per_day:
+        recommendations.append(
+            _recommendation(
+                "increase_pool_frequency",
+                "medium",
+                "Pool frequency is below the 2-3 trigger/day target.",
+                {"trigger_per_day": trigger_per_day, "target_min_per_day": target_min_per_day},
+            )
+        )
+    if trigger_per_day is not None and trigger_per_day > target_max_per_day:
+        recommendations.append(
+            _recommendation(
+                "reduce_pool_frequency",
+                "high",
+                "Pool frequency is above the 2-3 trigger/day target.",
+                {"trigger_per_day": trigger_per_day, "target_max_per_day": target_max_per_day},
+            )
+        )
+    actual_win_rate = _optional_float(report.get("actual_paper_win_rate"))
+    if actual_win_rate is not None and actual_win_rate < min_actual_win_rate:
+        recommendations.append(
+            _recommendation(
+                "pause_or_downgrade_pool",
+                "high",
+                "Paper outcomes are below the minimum win-rate target.",
+                {"actual_paper_win_rate": actual_win_rate, "min_actual_win_rate": min_actual_win_rate},
+            )
+        )
+    token_per_trigger = _optional_float(report.get("token_per_trigger"))
+    if token_per_trigger is not None and token_per_trigger > max_token_per_trigger:
+        recommendations.append(
+            _recommendation(
+                "compress_llm_prompt",
+                "medium",
+                "Token cost per trigger is above the configured guardrail.",
+                {"token_per_trigger": token_per_trigger, "max_token_per_trigger": max_token_per_trigger},
+            )
+        )
+    drift = report.get("proxy_outcome_drift") if isinstance(report.get("proxy_outcome_drift"), dict) else {}
+    if drift.get("status") == "proxy_overstates_outcomes":
+        recommendations.append(
+            _recommendation(
+                "downgrade_proxy_weight",
+                "high",
+                "Proxy win rate is overstating recorded paper outcomes.",
+                {"drift": drift.get("drift"), "outcome_count": drift.get("outcome_count")},
+            )
+        )
+    block_cost = report.get("block_opportunity_cost") if isinstance(report.get("block_opportunity_cost"), dict) else {}
+    if block_cost.get("status") == "missed_winners_found":
+        recommendations.append(
+            _recommendation(
+                "review_block_threshold",
+                "medium",
+                "Blocked decisions include winners; quantify whether LLM is too conservative.",
+                {
+                    "opportunity_cost": block_cost.get("opportunity_cost"),
+                    "missed_winner_count": block_cost.get("missed_winner_count"),
+                },
+            )
+        )
+    strategy_flags = _strategy_review_flags(drift, block_cost)
+    if not recommendations:
+        recommendations.append(
+            _recommendation(
+                "keep_pool_observing",
+                "low",
+                "No frequency, outcome, token, or block-cost breach detected.",
+                {},
+            )
+        )
+    return {
+        "schema_version": 1,
+        "status": "review_required" if any(row["severity"] in {"high", "medium"} for row in recommendations) else "ok",
+        "auto_apply": False,
+        "recommendations": recommendations,
+        "strategy_review_flags": strategy_flags,
+    }
+
+
+def _recommendation(action: str, severity: str, reason: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "action": action,
+        "severity": severity,
+        "reason": reason,
+        "evidence": evidence,
+    }
+
+
+def _strategy_review_flags(
+    drift: dict[str, Any],
+    block_cost: dict[str, Any],
+) -> list[dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    for row in drift.get("strategy_rows", []):
+        strategy_hash = str(row.get("strategy_spec_hash") or "unknown")
+        if row.get("status") == "proxy_overstates_outcomes":
+            flag = rows.setdefault(
+                strategy_hash,
+                {
+                    "strategy_spec_hash": strategy_hash,
+                    "strategy_name": row.get("strategy_name"),
+                    "module_id": row.get("module_id"),
+                    "flags": [],
+                },
+            )
+            flag["flags"].append("proxy_overstates_outcomes")
+            flag["drift"] = row.get("drift")
+            flag["outcome_count"] = row.get("outcome_count")
+    for row in block_cost.get("strategy_rows", []):
+        if float(row.get("opportunity_cost") or 0) <= 0:
+            continue
+        strategy_hash = str(row.get("strategy_spec_hash") or "unknown")
+        flag = rows.setdefault(
+            strategy_hash,
+            {
+                "strategy_spec_hash": strategy_hash,
+                "strategy_name": row.get("strategy_name"),
+                "module_id": row.get("module_id"),
+                "flags": [],
+            },
+        )
+        flag["flags"].append("blocked_winners")
+        flag["opportunity_cost"] = row.get("opportunity_cost")
+        flag["missed_winner_count"] = row.get("missed_winner_count")
+    return sorted(rows.values(), key=lambda row: row["strategy_spec_hash"])
 
 
 def build_block_opportunity_cost_report(
@@ -636,6 +780,15 @@ def _drift_status(drift: float | None, tolerance: float, *, has_outcomes: bool) 
     if drift > abs(tolerance):
         return "proxy_understates_outcomes"
     return "within_tolerance"
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def build_decision_outcome_confusion(
