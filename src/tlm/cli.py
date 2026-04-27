@@ -49,7 +49,7 @@ from .storage import (
     write_ticks_parquet,
 )
 from .strategy import StrategySpecError, load_strategy_spec
-from .trigger_gate import load_trigger_gate_forward_report, run_trigger_gate_simulation
+from .trigger_gate import build_forward_test_schedule, load_trigger_gate_forward_report, run_trigger_gate_simulation
 from .variants import DEFAULT_PARAMETER_BUDGET, ParameterBudgetError
 
 
@@ -270,6 +270,32 @@ def cmd_trigger_gate_report(args: argparse.Namespace) -> int:
     previous_pool = json.loads(Path(args.previous_pool).read_text(encoding="utf-8")) if args.previous_pool else None
     report = load_trigger_gate_forward_report(Path(args.output_dir), previous_pool=previous_pool)
     print(json.dumps(report, indent=2, sort_keys=True, default=str))
+    return 0
+
+
+def cmd_trigger_gate_schedule(args: argparse.Namespace) -> int:
+    if args.pool:
+        target_frequency_pool = json.loads(Path(args.pool).read_text(encoding="utf-8"))
+    else:
+        records = load_module_performance_memory(discover_module_memory_files(Path(args.experiments_root)))
+        target_frequency_pool = build_target_frequency_pool(
+            records,
+            target_min_per_day=args.target_min_per_day,
+            target_max_per_day=args.target_max_per_day,
+            min_proxy_win_rate=args.min_proxy_win_rate,
+            lookback_days=args.lookback_days,
+            require_passed=not args.include_rejected,
+        )
+    schedule = build_forward_test_schedule(
+        target_frequency_pool=target_frequency_pool,
+        as_of=args.as_of,
+        output_root=Path(args.output_root),
+        enable_llm=args.enable_llm,
+        daily_token_budget=args.daily_token_budget,
+    )
+    if args.output:
+        write_json(Path(args.output), schedule)
+    print(json.dumps(schedule, indent=2, sort_keys=True, default=str))
     return 0
 
 
@@ -704,6 +730,20 @@ def build_parser() -> argparse.ArgumentParser:
     trigger_gate_report.add_argument("--output-dir", required=True)
     trigger_gate_report.add_argument("--previous-pool")
     trigger_gate_report.set_defaults(func=cmd_trigger_gate_report)
+    trigger_gate_schedule = trigger_gate_subparsers.add_parser("schedule")
+    trigger_gate_schedule.add_argument("--pool")
+    trigger_gate_schedule.add_argument("--experiments-root", default="experiments")
+    trigger_gate_schedule.add_argument("--as-of", required=True)
+    trigger_gate_schedule.add_argument("--output-root", required=True)
+    trigger_gate_schedule.add_argument("--output")
+    trigger_gate_schedule.add_argument("--enable-llm", action="store_true")
+    trigger_gate_schedule.add_argument("--daily-token-budget", type=int)
+    trigger_gate_schedule.add_argument("--target-min-per-day", type=float, default=2.0)
+    trigger_gate_schedule.add_argument("--target-max-per-day", type=float, default=3.0)
+    trigger_gate_schedule.add_argument("--min-proxy-win-rate", type=float, default=0.53)
+    trigger_gate_schedule.add_argument("--lookback-days", type=int, default=90)
+    trigger_gate_schedule.add_argument("--include-rejected", action="store_true")
+    trigger_gate_schedule.set_defaults(func=cmd_trigger_gate_schedule)
 
     backtest = subparsers.add_parser("backtest")
     backtest_subparsers = backtest.add_subparsers(dest="backtest_command", required=True)

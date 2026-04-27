@@ -68,6 +68,7 @@ export default function App() {
   });
   const [triggerGateSimulation, setTriggerGateSimulation] = useState(null);
   const [triggerGateReport, setTriggerGateReport] = useState(null);
+  const [triggerGateSchedule, setTriggerGateSchedule] = useState(null);
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
   const [filters, setFilters] = useState({ minSharpe: "2", onlyPassed: false });
@@ -311,6 +312,21 @@ export default function App() {
     });
     setTriggerGateReport(payload);
     return { task_id: "trigger gate report loaded" };
+  }
+
+  async function buildTriggerGateSchedule() {
+    const payload = await apiRequest(apiBase, API_PATHS.triggerGateSchedules, {
+      method: "POST",
+      body: JSON.stringify({
+        target_frequency_pool: moduleMemory?.target_frequency_pool,
+        as_of: triggerGateForm.dateTo,
+        output_root: triggerGateForm.outputDir,
+        enable_llm: triggerGateForm.enableLlm,
+        daily_token_budget: optionalNumber(triggerGateForm.dailyTokenBudget)
+      })
+    });
+    setTriggerGateSchedule(payload);
+    return { task_id: "trigger gate schedule built" };
   }
 
   async function refreshQuality() {
@@ -710,8 +726,11 @@ export default function App() {
           <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Trigger gate report", loadTriggerGateReport)}>
             Load Forward Report
           </ActionButton>
+          <ActionButton variant="secondary" disabled={isPending || !moduleMemory?.target_frequency_pool} onClick={() => runAction("Trigger gate schedule", buildTriggerGateSchedule)}>
+            Build 48h/7d/30d/90d Schedule
+          </ActionButton>
         </div>
-        <TriggerGateSummary pool={moduleMemory?.target_frequency_pool} simulation={triggerGateSimulation} report={triggerGateReport} />
+        <TriggerGateSummary pool={moduleMemory?.target_frequency_pool} simulation={triggerGateSimulation} report={triggerGateReport} schedule={triggerGateSchedule} />
       </Panel>
     </main>
   );
@@ -1085,7 +1104,7 @@ function TriggerPoolSummary({ pool }) {
   );
 }
 
-function TriggerGateSummary({ pool, simulation, report }) {
+function TriggerGateSummary({ pool, simulation, report, schedule }) {
   return (
     <div className="artifact-dashboard">
       {pool ? <TriggerPoolSummary pool={pool} /> : <EmptyState title="No target pool loaded" text="Refresh module memory before running a trigger gate simulation." />}
@@ -1102,6 +1121,13 @@ function TriggerGateSummary({ pool, simulation, report }) {
           <Metric label="Block" value={formatPercent(report.block_rate ?? 0)} detail="decision rate" />
           <Metric label="Observe" value={formatPercent(report.observe_rate ?? 0)} detail={`${formatCompact(report.token_total)} tokens`} />
           <Metric label="Live Commands" value={formatCompact(report.live_gateway_command_count ?? 0)} detail="must remain zero" />
+        </div>
+      ) : null}
+      {schedule ? (
+        <div className="gate-list">
+          {(schedule.runs ?? []).map((run) => (
+            <span key={run.label} className="passed">{run.label}: {run.payload?.from} to {run.payload?.to}</span>
+          ))}
         </div>
       ) : null}
     </div>

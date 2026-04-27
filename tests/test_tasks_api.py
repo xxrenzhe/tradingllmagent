@@ -14,6 +14,7 @@ from tlm.api import (
     build_nt_export_signal_response,
     build_paper_replay_response,
     build_trigger_gate_report_response,
+    build_trigger_gate_schedule_response,
     build_trigger_gate_simulation_response,
     create_app,
 )
@@ -543,6 +544,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/modules/memory", paths)
         self.assertIn("/api/trigger-gate/simulations", paths)
         self.assertIn("/api/trigger-gate/reports", paths)
+        self.assertIn("/api/trigger-gate/schedules", paths)
         self.assertIn("/api/gateways/nt8/order-updates", paths)
         self.assertIn("/api/gateways/nt8/incidents", paths)
 
@@ -575,6 +577,22 @@ class APIImportTests(unittest.TestCase):
         self.assertEqual(manifest["mode"], "llm_enabled")
         self.assertEqual(manifest["llm_call_count"], manifest["trigger_count"])
         self.assertEqual(report["llm_calls_match_triggers"], True)
+
+    def test_trigger_gate_schedule_api_helper_builds_standard_windows(self) -> None:
+        schedule = build_trigger_gate_schedule_response(
+            {
+                "target_frequency_pool": {
+                    "pool_version": "target_frequency_pool.v2",
+                    "selected": [{"strategy_spec_hash": "hash_a", "trades_per_day": 1.0, "proxy_win_rate": 0.61}],
+                },
+                "as_of": "2026-04-27",
+                "output_root": "experiments/trigger_gate/scheduled",
+                "enable_llm": True,
+            }
+        )
+
+        self.assertEqual(schedule["run_count"], 4)
+        self.assertEqual(schedule["runs"][-1]["label"], "90d")
 
     def test_cost_calibration_api_helper_builds_artifact_without_fastapi(self) -> None:
         artifact = build_cost_calibration_response(

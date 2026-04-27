@@ -11,6 +11,7 @@ from pathlib import Path
 from tlm.cli import main
 from tlm.trigger_gate import (
     append_trigger_gate_memory,
+    build_forward_test_schedule,
     build_token_budget_report,
     build_trigger_decision_record,
     build_trigger_evidence_record,
@@ -261,6 +262,25 @@ class TriggerGateMemoryTests(unittest.TestCase):
         self.assertEqual(manifest["mode"], "llm_enabled")
         self.assertEqual(report["llm_calls_match_triggers"], True)
         self.assertTrue(manifest_exists)
+
+    def test_forward_test_schedule_builds_standard_windows(self) -> None:
+        pool = {
+            "pool_version": "target_frequency_pool.v2",
+            "selected": [{"strategy_spec_hash": "hash_a", "trades_per_day": 1.0, "proxy_win_rate": 0.61}],
+        }
+        schedule = build_forward_test_schedule(
+            target_frequency_pool=pool,
+            as_of="2026-04-27",
+            output_root=Path("experiments/trigger_gate/scheduled"),
+            enable_llm=True,
+            daily_token_budget=30_000,
+        )
+
+        self.assertEqual(schedule["run_count"], 4)
+        self.assertEqual([run["label"] for run in schedule["runs"]], ["48h", "7d", "30d", "90d"])
+        self.assertEqual(schedule["runs"][0]["payload"]["from"], "2026-04-26")
+        self.assertEqual(schedule["runs"][0]["payload"]["to"], "2026-04-27")
+        self.assertEqual(schedule["runs"][0]["task_type"], "trigger_gate.simulate")
 
 
 if __name__ == "__main__":

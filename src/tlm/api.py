@@ -48,7 +48,7 @@ from .tasks import (
     get_task_logs,
     list_tasks,
 )
-from .trigger_gate import load_trigger_gate_forward_report, run_trigger_gate_simulation
+from .trigger_gate import build_forward_test_schedule, load_trigger_gate_forward_report, run_trigger_gate_simulation
 from .worker import run_task, worker_loop
 
 
@@ -237,6 +237,35 @@ def build_trigger_gate_report_response(payload: dict) -> dict:
     return load_trigger_gate_forward_report(
         Path(output_dir),
         previous_pool=payload.get("previous_pool"),
+    )
+
+
+def build_trigger_gate_schedule_response(payload: dict) -> dict:
+    target_frequency_pool = payload.get("target_frequency_pool")
+    if not isinstance(target_frequency_pool, dict):
+        experiments_root = Path(payload.get("experiments_root", "experiments"))
+        records = load_module_performance_memory(discover_module_memory_files(experiments_root))
+        target_frequency_pool = build_target_frequency_pool(
+            records,
+            target_min_per_day=float(payload.get("target_min_per_day", 2.0)),
+            target_max_per_day=float(payload.get("target_max_per_day", 3.0)),
+            min_proxy_win_rate=float(payload.get("min_proxy_win_rate", 0.53)),
+            lookback_days=int(payload.get("lookback_days", 90)),
+            require_passed=not bool(payload.get("include_rejected", False)),
+        )
+    output_root = payload.get("output_root")
+    if not output_root:
+        raise ValueError("output_root is required")
+    return build_forward_test_schedule(
+        target_frequency_pool=target_frequency_pool,
+        as_of=str(payload.get("as_of") or ""),
+        output_root=Path(output_root),
+        enable_llm=bool(payload.get("enable_llm", False)),
+        daily_token_budget=(
+            int(payload["daily_token_budget"])
+            if payload.get("daily_token_budget") is not None
+            else None
+        ),
     )
 
 
@@ -591,6 +620,13 @@ def create_app():
         try:
             return build_trigger_gate_report_response(payload)
         except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/trigger-gate/schedules")
+    def trigger_gate_schedules(payload: dict = Body(...)) -> dict:
+        try:
+            return build_trigger_gate_schedule_response(payload)
+        except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/gateways/nt8/health")

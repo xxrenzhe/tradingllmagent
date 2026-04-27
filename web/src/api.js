@@ -33,6 +33,7 @@ export const API_PATHS = {
   taskRun: (taskId) => `/api/tasks/${taskId}/run`,
   tasks: (limit = 50) => `/api/tasks?limit=${limit}`,
   triggerGateReports: "/api/trigger-gate/reports",
+  triggerGateSchedules: "/api/trigger-gate/schedules",
   triggerGateSimulations: "/api/trigger-gate/simulations"
 };
 

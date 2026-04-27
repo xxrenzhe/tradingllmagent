@@ -15,6 +15,7 @@ TRIGGER_GATE_MEMORY_FILES = {
     "decisions": "memory_decisions.jsonl",
     "outcomes": "memory_outcomes.jsonl",
 }
+DEFAULT_FORWARD_TEST_WINDOWS = (("48h", 2), ("7d", 7), ("30d", 30), ("90d", 90))
 
 
 def build_trigger_evidence_record(
@@ -490,6 +491,56 @@ def build_strategy_pool_change_report(
         "added_strategy_hashes": sorted(current_hashes - previous_hashes),
         "removed_strategy_hashes": sorted(previous_hashes - current_hashes),
         "unchanged_strategy_hashes": sorted(previous_hashes.intersection(current_hashes)),
+    }
+
+
+def build_forward_test_schedule(
+    *,
+    target_frequency_pool: dict[str, Any],
+    as_of: date | datetime | str,
+    output_root: Path,
+    enable_llm: bool = False,
+    daily_token_budget: int | None = None,
+    windows: Sequence[tuple[str, int]] = DEFAULT_FORWARD_TEST_WINDOWS,
+) -> dict[str, Any]:
+    as_of_date = _coerce_datetime(as_of, end_of_day=True).date()
+    runs = []
+    for label, days in windows:
+        date_to = as_of_date
+        date_from = as_of_date - timedelta(days=max(days, 1) - 1)
+        output_dir = output_root / label
+        runs.append(
+            {
+                "label": label,
+                "days": days,
+                "task_type": "trigger_gate.simulate",
+                "payload": {
+                    "target_frequency_pool": target_frequency_pool,
+                    "from": date_from.isoformat(),
+                    "to": date_to.isoformat(),
+                    "output_dir": str(output_dir),
+                    "enable_llm": enable_llm,
+                    "daily_token_budget": daily_token_budget,
+                },
+                "report_payload": {
+                    "output_dir": str(output_dir),
+                },
+            }
+        )
+    return {
+        "schema_version": 1,
+        "schedule_id": stable_hash(
+            {
+                "target_frequency_pool": target_frequency_pool,
+                "as_of": as_of_date.isoformat(),
+                "windows": list(windows),
+                "enable_llm": enable_llm,
+            }
+        ),
+        "as_of": as_of_date.isoformat(),
+        "run_count": len(runs),
+        "runs": runs,
+        "created_at": datetime.now(UTC).isoformat(),
     }
 
 
