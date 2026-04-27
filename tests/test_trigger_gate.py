@@ -204,6 +204,13 @@ class TriggerGateMemoryTests(unittest.TestCase):
             report = load_trigger_gate_forward_report(root)
 
         self.assertEqual(report["actual_paper_win_rate"], 0.0)
+        self.assertEqual(report["proxy_outcome_drift"]["status"], "proxy_overstates_outcomes")
+        self.assertEqual(report["proxy_outcome_drift"]["sample_status"], "insufficient")
+        self.assertAlmostEqual(report["proxy_outcome_drift"]["drift"], -0.61)
+        self.assertEqual(
+            report["proxy_outcome_drift"]["strategy_rows"][0]["status"],
+            "proxy_overstates_outcomes",
+        )
         self.assertEqual(report["decision_outcome_confusion"]["rows"]["allow"]["allowed_loser"], 1)
         self.assertEqual(report["live_gateway_command_count"], 0)
 

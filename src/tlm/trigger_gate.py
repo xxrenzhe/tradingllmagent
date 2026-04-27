@@ -437,6 +437,7 @@ def build_forward_test_report(
         if outcome_rows
         else None
     )
+    proxy_win_rate = _pool_weighted_proxy_win_rate(manifest.get("target_frequency_pool", {}), selected_pool)
     return {
         "schema_version": 1,
         "lookback_days": manifest.get("duration_days"),
@@ -444,8 +445,14 @@ def build_forward_test_report(
         "selected_strategy_pool": selected_pool,
         "trigger_per_day": manifest.get("trigger_per_day"),
         "trigger_count": len(evidence),
-        "proxy_win_rate": manifest.get("target_frequency_pool", {}).get("weighted_proxy_win_rate"),
+        "proxy_win_rate": proxy_win_rate,
         "actual_paper_win_rate": actual_paper_win_rate,
+        "proxy_outcome_drift": build_proxy_outcome_drift_report(
+            selected_pool=selected_pool,
+            decisions=decisions,
+            outcomes=outcomes,
+            pool_proxy_win_rate=proxy_win_rate,
+        ),
         "allow_rate": token_budget["allow_rate"],
         "block_rate": token_budget["block_rate"],
         "observe_rate": token_budget["observe_rate"],
@@ -457,6 +464,101 @@ def build_forward_test_report(
         "llm_calls_match_triggers": len(decisions) == len(evidence) if manifest.get("mode") == "llm_enabled" else None,
         "live_gateway_command_count": 0,
     }
+
+
+def build_proxy_outcome_drift_report(
+    *,
+    selected_pool: Sequence[dict[str, Any]],
+    decisions: Sequence[dict[str, Any]],
+    outcomes: Sequence[dict[str, Any]],
+    pool_proxy_win_rate: float | None,
+    tolerance: float = 0.05,
+    minimum_sample_size: int = 10,
+) -> dict[str, Any]:
+    outcomes_by_decision = {str(row.get("decision_id")): row for row in outcomes if row.get("decision_id")}
+    matched = [
+        (decision, outcomes_by_decision[str(decision.get("decision_id"))])
+        for decision in decisions
+        if decision.get("decision_id") and str(decision.get("decision_id")) in outcomes_by_decision
+    ]
+    actual_win_rate = _win_rate_from_outcomes([outcome for _, outcome in matched])
+    drift = (
+        actual_win_rate - float(pool_proxy_win_rate)
+        if actual_win_rate is not None and pool_proxy_win_rate is not None
+        else None
+    )
+    sample_size = len(matched)
+    strategy_rows = []
+    for strategy in selected_pool:
+        strategy_hash = strategy.get("strategy_spec_hash")
+        strategy_decisions = [
+            (decision, outcome)
+            for decision, outcome in matched
+            if strategy_hash and decision.get("strategy_spec_hash") == strategy_hash
+        ]
+        actual = _win_rate_from_outcomes([outcome for _, outcome in strategy_decisions])
+        proxy = strategy.get("proxy_win_rate")
+        row_drift = actual - float(proxy) if actual is not None and proxy is not None else None
+        strategy_rows.append(
+            {
+                "strategy_spec_hash": strategy_hash,
+                "strategy_name": strategy.get("strategy_name"),
+                "module_id": strategy.get("module_id"),
+                "proxy_win_rate": proxy,
+                "actual_paper_win_rate": actual,
+                "drift": row_drift,
+                "outcome_count": len(strategy_decisions),
+                "status": _drift_status(row_drift, tolerance, has_outcomes=bool(strategy_decisions)),
+            }
+        )
+    return {
+        "schema_version": 1,
+        "status": _drift_status(drift, tolerance, has_outcomes=bool(matched)),
+        "sample_status": "sufficient" if sample_size >= minimum_sample_size else "insufficient",
+        "minimum_sample_size": minimum_sample_size,
+        "outcome_count": sample_size,
+        "proxy_win_rate": pool_proxy_win_rate,
+        "actual_paper_win_rate": actual_win_rate,
+        "drift": drift,
+        "tolerance": tolerance,
+        "strategy_rows": strategy_rows,
+    }
+
+
+def _pool_weighted_proxy_win_rate(
+    target_frequency_pool: dict[str, Any],
+    selected_pool: Sequence[dict[str, Any]],
+) -> float | None:
+    if target_frequency_pool.get("weighted_proxy_win_rate") is not None:
+        return float(target_frequency_pool["weighted_proxy_win_rate"])
+    weighted_rows = [
+        (float(row.get("trades_per_day") or 0), row.get("proxy_win_rate"))
+        for row in selected_pool
+        if row.get("proxy_win_rate") is not None
+    ]
+    total_rate = sum(rate for rate, _ in weighted_rows)
+    if total_rate <= 0:
+        return None
+    return sum(rate * float(proxy) for rate, proxy in weighted_rows) / total_rate
+
+
+def _win_rate_from_outcomes(outcomes: Sequence[dict[str, Any]]) -> float | None:
+    scored = [row for row in outcomes if row.get("net_pnl") is not None]
+    if not scored:
+        return None
+    return sum(1 for row in scored if float(row.get("net_pnl") or 0) > 0) / len(scored)
+
+
+def _drift_status(drift: float | None, tolerance: float, *, has_outcomes: bool) -> str:
+    if not has_outcomes:
+        return "no_outcomes"
+    if drift is None:
+        return "missing_proxy"
+    if drift < -abs(tolerance):
+        return "proxy_overstates_outcomes"
+    if drift > abs(tolerance):
+        return "proxy_understates_outcomes"
+    return "within_tolerance"
 
 
 def build_decision_outcome_confusion(
