@@ -14,6 +14,8 @@ RUN_ID="${RUN_ID:-dukascopy-${SYMBOL}-$(date -u +%Y%m%dT%H%M%SZ)}"
 LOG_FILE="${LOG_DIR}/${RUN_ID}.log"
 STATUS_FILE="${LOG_DIR}/${RUN_ID}.status.tsv"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+SKIP_PREVIOUS_FAILED_DAYS="${SKIP_PREVIOUS_FAILED_DAYS:-0}"
+FAILED_DAY_CACHE="${LOG_DIR}/${RUN_ID}.failed-days.txt"
 
 mkdir -p "${LOG_DIR}"
 
@@ -23,6 +25,36 @@ fi
 
 export PYTHONPATH="${PYTHONPATH:-src}"
 read -r -a PYTHON_CMD <<< "$PYTHON_BIN"
+
+build_failed_day_cache() {
+  : > "${FAILED_DAY_CACHE}"
+  if [ "${SKIP_PREVIOUS_FAILED_DAYS}" != "1" ]; then
+    return 0
+  fi
+  awk -F '\t' '
+    FNR == 1 { next }
+    NF < 3 { next }
+    {
+      day = $2
+      ts = $1
+      if (!(day in latest) || ts >= latest[day]) {
+        latest[day] = ts
+        status[day] = $3
+      }
+    }
+    END {
+      for (day in status) {
+        if (status[day] == "failed") {
+          print day
+        }
+      }
+    }
+  ' "${LOG_DIR}"/dukascopy-"${SYMBOL}"-shard-*.status.tsv 2>/dev/null | sort -u > "${FAILED_DAY_CACHE}" || true
+}
+
+failed_day_seen() {
+  [ "${SKIP_PREVIOUS_FAILED_DAYS}" = "1" ] && grep -qx "$1" "${FAILED_DAY_CACHE}" 2>/dev/null
+}
 
 free_gb() {
   df -g . | awk 'NR==2 {print $4}'
@@ -59,12 +91,15 @@ run_cli() {
   printf "build_bars\t%s\n" "$BUILD_BARS"
   printf "ssl_cert_file\t%s\n" "${SSL_CERT_FILE:-}"
   printf "python_bin\t%s\n" "$PYTHON_BIN"
+  printf "skip_previous_failed_days\t%s\n" "$SKIP_PREVIOUS_FAILED_DAYS"
   printf "started_at\t%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "$LOG_FILE"
 
 if [ ! -s "$STATUS_FILE" ]; then
   printf "timestamp_utc\tday\tstatus\tattempt\tfree_gb\telapsed_seconds\n" > "$STATUS_FILE"
 fi
+
+build_failed_day_cache
 
 for day in $(date_range); do
   output="$(tick_output_path "$day")"
@@ -77,6 +112,11 @@ for day in $(date_range); do
 
   if [ -s "$output" ]; then
     printf "%s\t%s\tskipped_existing\t0\t%s\t0\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$day" "$available_gb" >> "$STATUS_FILE"
+    continue
+  fi
+
+  if failed_day_seen "$day"; then
+    printf "%s\t%s\tskipped_failed\t0\t%s\t0\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$day" "$available_gb" >> "$STATUS_FILE"
     continue
   fi
 

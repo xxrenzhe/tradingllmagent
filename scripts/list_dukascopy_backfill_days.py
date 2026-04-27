@@ -29,9 +29,9 @@ def normalized_tick_path(data_root: Path, symbol: str, day: date) -> Path:
     return data_root / "normalized" / "ticks" / symbol / f"date={day.isoformat()}" / "part-000.parquet"
 
 
-def load_latest_statuses(status_dir: Path) -> dict[str, dict[str, str]]:
+def load_latest_statuses(status_dir: Path, symbol: str) -> dict[str, dict[str, str]]:
     by_day: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for path in sorted(status_dir.glob("dukascopy-NQmain-shard-*.status.tsv")):
+    for path in sorted(status_dir.glob(f"dukascopy-{symbol}-shard-*.status.tsv")):
         with path.open("r", encoding="utf-8") as handle:
             reader = csv.DictReader(handle, delimiter="\t")
             for row in reader:
@@ -70,7 +70,7 @@ def main() -> int:
     symbol = args.symbol
     start = date.fromisoformat(args.date_from)
     end = date.fromisoformat(args.date_to)
-    latest = load_latest_statuses(status_dir)
+    latest = load_latest_statuses(status_dir, symbol)
 
     missing_days: list[date] = []
     failed_days: list[date] = []
@@ -83,7 +83,7 @@ def main() -> int:
         if latest_row is None:
             untracked_days.append(day)
             continue
-        if latest_row.get("status") == "failed":
+        if latest_row.get("status") in {"failed", "skipped_failed"}:
             failed_days.append(day)
             continue
         missing_days.append(day)
