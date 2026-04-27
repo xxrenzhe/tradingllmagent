@@ -1,0 +1,148 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_revert_03",
+  "strategy_family": "regime_filtered_mean_reversion",
+  "market_hypothesis": "regime filtered mean reversion candidate generated from random intraday feature combination atr_14, prior_day_low_dist, hammer_score, prior_close_dist; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:40-20:35",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "atr_14",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "Fourteen-bar average true range."
+    },
+    {
+      "name": "prior_day_low_dist",
+      "category": "level",
+      "data_level": "bar",
+      "description": "Close distance from prior session low."
+    },
+    {
+      "name": "hammer_score",
+      "category": "candle",
+      "data_level": "bar",
+      "description": "Long lower wick hammer score."
+    },
+    {
+      "name": "prior_close_dist",
+      "category": "level",
+      "data_level": "bar",
+      "description": "Close distance from prior session close."
+    },
+    {
+      "name": "close_zscore_20",
+      "category": "mean_reversion",
+      "data_level": "bar",
+      "description": "Twenty-bar close z-score."
+    },
+    {
+      "name": "vwap_dist",
+      "category": "vwap",
+      "data_level": "bar",
+      "description": "Close distance from session VWAP."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "global_index": 19,
+    "feature_catalog_size": 112
+  },
+  "regime_filter": {},
+  "indicators": {
+    "z_close": {
+      "type": "z_score",
+      "source": "close",
+      "window": 30,
+      "entry_z": 1.2
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "z_close",
+          "op": "<=",
+          "right": "-entry_z"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "z_close",
+          "op": ">=",
+          "right": "entry_z"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 10
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 14
+    },
+    "max_holding_minutes": 20
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 40,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "mean_reversion_window": {
+      "values": [
+        12,
+        16,
+        20
+      ]
+    },
+    "mean_reversion_entry_z": {
+      "values": [
+        1.0,
+        1.2,
+        1.4
+      ]
+    },
+    "stop_points": {
+      "values": [
+        8,
+        10,
+        12
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        12,
+        14,
+        18
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        14,
+        20
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}

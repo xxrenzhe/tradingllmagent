@@ -1,0 +1,133 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_orb_04",
+  "strategy_family": "opening_range_breakout",
+  "market_hypothesis": "opening range breakout candidate generated from random intraday feature combination opening_range_low_dist, premarket_high_dist, nq_rty_relative_strength, true_range; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:45-20:45",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "opening_range_low_dist",
+      "category": "opening_range",
+      "data_level": "bar",
+      "description": "Close distance from opening range low."
+    },
+    {
+      "name": "premarket_high_dist",
+      "category": "opening_range",
+      "data_level": "bar",
+      "description": "Close distance from premarket high."
+    },
+    {
+      "name": "nq_rty_relative_strength",
+      "category": "cross_asset",
+      "data_level": "external_bar",
+      "description": "NQ return versus RTY return."
+    },
+    {
+      "name": "true_range",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "Current true range."
+    },
+    {
+      "name": "session_bucket",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Discrete open, midday, afternoon, close bucket."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "global_index": 22,
+    "feature_catalog_size": 112
+  },
+  "regime_filter": {},
+  "indicators": {
+    "opening_range": {
+      "type": "opening_range",
+      "minutes": 5
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "close",
+          "op": ">",
+          "right": "opening_range.high"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "close",
+          "op": "<",
+          "right": "opening_range.low"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 14
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 22
+    },
+    "max_holding_minutes": 35
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 24,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "opening_range_minutes": {
+      "values": [
+        5,
+        10,
+        15
+      ]
+    },
+    "stop_points": {
+      "values": [
+        10,
+        14,
+        18
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        16,
+        22,
+        28
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        25,
+        35
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}

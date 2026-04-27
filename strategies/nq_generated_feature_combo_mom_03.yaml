@@ -1,0 +1,135 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_mom_03",
+  "strategy_family": "intraday_momentum",
+  "market_hypothesis": "intraday momentum candidate generated from random intraday feature combination return_60m, prior_close_dist, linear_reg_slope_20, day_of_week; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:35-20:35",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "return_60m",
+      "category": "return",
+      "data_level": "bar",
+      "description": "Sixty-minute close-to-close return."
+    },
+    {
+      "name": "prior_close_dist",
+      "category": "level",
+      "data_level": "bar",
+      "description": "Close distance from prior session close."
+    },
+    {
+      "name": "linear_reg_slope_20",
+      "category": "trend",
+      "data_level": "bar",
+      "description": "Twenty-bar linear regression slope."
+    },
+    {
+      "name": "day_of_week",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Day-of-week seasonality."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "global_index": 18,
+    "feature_catalog_size": 112
+  },
+  "regime_filter": {},
+  "indicators": {
+    "momentum": {
+      "type": "momentum",
+      "lookback_minutes": 8,
+      "threshold_points": 4
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "momentum",
+          "op": ">=",
+          "right": "threshold_points"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "momentum",
+          "op": "<=",
+          "right": "negative_threshold_points"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 8
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 12
+    },
+    "max_holding_minutes": 16
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 60,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "momentum_lookback_minutes": {
+      "values": [
+        2,
+        3,
+        5
+      ]
+    },
+    "momentum_threshold_points": {
+      "values": [
+        3,
+        4,
+        6
+      ]
+    },
+    "stop_points": {
+      "values": [
+        6,
+        8,
+        10
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        10,
+        12,
+        16
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        10,
+        16
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}

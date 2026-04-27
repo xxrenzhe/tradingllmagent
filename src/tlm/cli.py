@@ -58,6 +58,7 @@ from .storage import (
     write_ticks_parquet,
 )
 from .strategy import StrategySpecError, load_strategy_spec
+from .strategy_generation import write_feature_combo_strategy_specs
 from .trigger_gate import (
     append_trigger_gate_outcome_from_payload,
     build_forward_test_schedule,
@@ -535,6 +536,29 @@ def cmd_research_propose(args: argparse.Namespace) -> int:
                 "prompt_hash": proposal.prompt_hash,
                 "response_hash": proposal.response_hash,
                 "feedback_count": len(feedback or []),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def cmd_research_generate_feature_seeds(args: argparse.Namespace) -> int:
+    paths = write_feature_combo_strategy_specs(
+        output_dir=Path(args.output_dir),
+        count=args.count,
+        random_seed=args.random_seed,
+        symbol=args.symbol,
+        timeframe=args.timeframe,
+        prefix=args.prefix,
+    )
+    print(
+        json.dumps(
+            {
+                "count": len(paths),
+                "output_dir": str(Path(args.output_dir)),
+                "strategy_specs": [str(path) for path in paths],
             },
             indent=2,
             sort_keys=True,
@@ -1044,6 +1068,15 @@ def build_parser() -> argparse.ArgumentParser:
     propose.add_argument("--audit-log")
     propose.add_argument("--output")
     propose.set_defaults(func=cmd_research_propose)
+
+    generate_feature_seeds = research_subparsers.add_parser("generate-feature-seeds")
+    generate_feature_seeds.add_argument("--count", type=int, default=28)
+    generate_feature_seeds.add_argument("--random-seed", type=int, default=0)
+    generate_feature_seeds.add_argument("--output-dir", default="strategies")
+    generate_feature_seeds.add_argument("--symbol", default="NQmain")
+    generate_feature_seeds.add_argument("--timeframe", default="1m")
+    generate_feature_seeds.add_argument("--prefix", default="generated_feature_combo")
+    generate_feature_seeds.set_defaults(func=cmd_research_generate_feature_seeds)
 
     discover = research_subparsers.add_parser("discover-target")
     discover.add_argument("--spec")

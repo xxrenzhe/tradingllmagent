@@ -1,0 +1,147 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_mom_02",
+  "strategy_family": "intraday_momentum",
+  "market_hypothesis": "intraday momentum candidate generated from random intraday feature combination minute_of_session_sin, month_turn_flag, minutes_since_open, anchored_vwap_open_dist; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:35-20:35",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "minute_of_session_sin",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Sine transform of session minute."
+    },
+    {
+      "name": "month_turn_flag",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Start or end of month flag."
+    },
+    {
+      "name": "minutes_since_open",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Elapsed minutes since regular session open."
+    },
+    {
+      "name": "anchored_vwap_open_dist",
+      "category": "vwap",
+      "data_level": "bar",
+      "description": "Close distance from open-anchored VWAP."
+    },
+    {
+      "name": "open_close_return_1m",
+      "category": "return",
+      "data_level": "bar",
+      "description": "One-minute open-to-close return."
+    },
+    {
+      "name": "atr_percentile_20d",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "ATR percentile over recent sessions."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "global_index": 11,
+    "feature_catalog_size": 112
+  },
+  "regime_filter": {},
+  "indicators": {
+    "momentum": {
+      "type": "momentum",
+      "lookback_minutes": 5,
+      "threshold_points": 4
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "momentum",
+          "op": ">=",
+          "right": "threshold_points"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "momentum",
+          "op": "<=",
+          "right": "negative_threshold_points"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 8
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 12
+    },
+    "max_holding_minutes": 16
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 60,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "momentum_lookback_minutes": {
+      "values": [
+        2,
+        3,
+        5
+      ]
+    },
+    "momentum_threshold_points": {
+      "values": [
+        3,
+        4,
+        6
+      ]
+    },
+    "stop_points": {
+      "values": [
+        6,
+        8,
+        10
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        10,
+        12,
+        16
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        10,
+        16
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}

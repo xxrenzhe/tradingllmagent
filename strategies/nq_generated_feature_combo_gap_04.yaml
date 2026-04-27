@@ -1,0 +1,140 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_gap_04",
+  "strategy_family": "gap_fade_or_continuation",
+  "market_hypothesis": "gap fade or continuation candidate generated from random intraday feature combination opening_range_low_dist, volume_1m, prior_day_high_dist, close_position_in_bar; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:30-20:20",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "opening_range_low_dist",
+      "category": "opening_range",
+      "data_level": "bar",
+      "description": "Close distance from opening range low."
+    },
+    {
+      "name": "volume_1m",
+      "category": "volume",
+      "data_level": "bar",
+      "description": "One-minute traded volume."
+    },
+    {
+      "name": "prior_day_high_dist",
+      "category": "level",
+      "data_level": "bar",
+      "description": "Close distance from prior session high."
+    },
+    {
+      "name": "close_position_in_bar",
+      "category": "candle",
+      "data_level": "bar",
+      "description": "Close percentile inside current bar range."
+    },
+    {
+      "name": "prior_close_dist",
+      "category": "level",
+      "data_level": "bar",
+      "description": "Close distance from prior session close."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "global_index": 28,
+    "feature_catalog_size": 112
+  },
+  "regime_filter": {},
+  "indicators": {
+    "gap": {
+      "type": "gap",
+      "threshold_points": 6,
+      "mode": "continuation"
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "gap_signal",
+          "op": "==",
+          "right": "long"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "gap_signal",
+          "op": "==",
+          "right": "short"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 12
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 18
+    },
+    "max_holding_minutes": 35
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 6,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "gap_threshold_points": {
+      "values": [
+        4,
+        6,
+        8
+      ]
+    },
+    "gap_mode": {
+      "values": [
+        "fade",
+        "continuation"
+      ]
+    },
+    "stop_points": {
+      "values": [
+        10,
+        12,
+        16
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        16,
+        18,
+        24
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        25,
+        35
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}

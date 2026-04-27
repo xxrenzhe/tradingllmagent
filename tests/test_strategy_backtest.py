@@ -233,7 +233,7 @@ class StrategyValidationTests(unittest.TestCase):
 
     def test_all_strategy_seed_files_are_valid(self) -> None:
         paths = sorted(Path("strategies").glob("*.yaml"))
-        self.assertGreaterEqual(len(paths), 25)
+        self.assertGreaterEqual(len(paths), 50)
         for path in paths:
             with self.subTest(path=str(path)):
                 spec = load_strategy_spec(path)

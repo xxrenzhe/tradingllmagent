@@ -1,0 +1,150 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_trend_03",
+  "strategy_family": "trend_pullback",
+  "market_hypothesis": "trend pullback candidate generated from random intraday feature combination return_15m, minute_of_session_cos, true_range, return_10m; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:35-20:30",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "return_15m",
+      "category": "return",
+      "data_level": "bar",
+      "description": "Fifteen-minute close-to-close return."
+    },
+    {
+      "name": "minute_of_session_cos",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Cosine transform of session minute."
+    },
+    {
+      "name": "true_range",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "Current true range."
+    },
+    {
+      "name": "return_10m",
+      "category": "return",
+      "data_level": "bar",
+      "description": "Ten-minute close-to-close return."
+    },
+    {
+      "name": "ppo",
+      "category": "trend",
+      "data_level": "bar",
+      "description": "Percentage price oscillator."
+    },
+    {
+      "name": "hlc3_return_5m",
+      "category": "return",
+      "data_level": "bar",
+      "description": "Five-minute return of typical price."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "global_index": 16,
+    "feature_catalog_size": 112
+  },
+  "regime_filter": {},
+  "indicators": {
+    "ema_fast": {
+      "type": "ema",
+      "window": 12
+    },
+    "ema_slow": {
+      "type": "ema",
+      "window": 34
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "ema_fast",
+          "op": ">",
+          "right": "ema_slow"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "ema_fast",
+          "op": "<",
+          "right": "ema_slow"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 12
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 20
+    },
+    "max_holding_minutes": 28
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 35,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "ema_fast_window": {
+      "values": [
+        6,
+        8,
+        10
+      ]
+    },
+    "ema_slow_window": {
+      "values": [
+        18,
+        21,
+        26
+      ]
+    },
+    "stop_points": {
+      "values": [
+        10,
+        12,
+        16
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        16,
+        20,
+        24
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        20,
+        28
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}

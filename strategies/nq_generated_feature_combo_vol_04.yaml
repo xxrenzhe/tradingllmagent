@@ -1,0 +1,141 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_vol_04",
+  "strategy_family": "volatility_expansion",
+  "market_hypothesis": "volatility expansion candidate generated from random intraday feature combination plus_di_minus_di_spread, inside_bar_flag, relative_volume_5m, realized_vol_5m; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:35-20:35",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "plus_di_minus_di_spread",
+      "category": "trend",
+      "data_level": "bar",
+      "description": "Positive DI minus negative DI."
+    },
+    {
+      "name": "inside_bar_flag",
+      "category": "candle",
+      "data_level": "bar",
+      "description": "Current bar range inside prior bar range."
+    },
+    {
+      "name": "relative_volume_5m",
+      "category": "volume",
+      "data_level": "bar",
+      "description": "Five-minute volume versus recent baseline."
+    },
+    {
+      "name": "realized_vol_5m",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "Five-minute realized volatility."
+    },
+    {
+      "name": "parkinson_vol_20",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "High-low volatility estimator."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "global_index": 24,
+    "feature_catalog_size": 112
+  },
+  "regime_filter": {},
+  "indicators": {
+    "realized_volatility": {
+      "type": "realized_volatility",
+      "window": 4,
+      "expansion_multiple": 1.2
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "close",
+          "op": ">",
+          "right": "prior.high"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "close",
+          "op": "<",
+          "right": "prior.low"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 10
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 18
+    },
+    "max_holding_minutes": 22
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 45,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "volatility_window": {
+      "values": [
+        4,
+        5,
+        8
+      ]
+    },
+    "volatility_expansion_multiple": {
+      "values": [
+        1.1,
+        1.2,
+        1.35
+      ]
+    },
+    "stop_points": {
+      "values": [
+        8,
+        10,
+        14
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        14,
+        18,
+        24
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        16,
+        22
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}
