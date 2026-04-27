@@ -553,6 +553,7 @@ def cmd_research_generate_feature_seeds(args: argparse.Namespace) -> int:
         symbol=args.symbol,
         timeframe=args.timeframe,
         prefix=args.prefix,
+        manifest_path=Path(args.manifest_output) if args.manifest_output else None,
     )
     print(
         json.dumps(
@@ -1086,6 +1087,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate_feature_seeds.add_argument("--symbol", default="NQmain")
     generate_feature_seeds.add_argument("--timeframe", default="1m")
     generate_feature_seeds.add_argument("--prefix", default="generated_feature_combo")
+    generate_feature_seeds.add_argument("--manifest-output")
     generate_feature_seeds.set_defaults(func=cmd_research_generate_feature_seeds)
 
     feature_readiness = research_subparsers.add_parser("feature-readiness")

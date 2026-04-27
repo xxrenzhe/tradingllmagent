@@ -6,7 +6,12 @@ from pathlib import Path
 
 from tlm.feature_catalog import FEATURE_CATALOG, feature_catalog_by_name, feature_readiness_report
 from tlm.strategy import load_strategy_spec, parse_strategy_spec
-from tlm.strategy_generation import generate_feature_combo_strategy_specs, write_feature_combo_strategy_specs
+from tlm.strategy_generation import (
+    GENERATED_STRATEGY_COMPLEXITY_LIMIT,
+    feature_combo_generation_manifest,
+    generate_feature_combo_strategy_specs,
+    write_feature_combo_strategy_specs,
+)
 from tlm.variants import parameter_grid_metadata
 
 
@@ -53,14 +58,37 @@ class StrategyGenerationTests(unittest.TestCase):
                 spec = parse_strategy_spec(raw)
                 metadata = parameter_grid_metadata(spec, max_trials=1)
                 self.assertGreaterEqual(len(raw["feature_set"]), 4)
+                self.assertIn("generation_id", raw["generation"])
+                self.assertIn("feature_combo_hash", raw["generation"])
+                self.assertEqual(raw["generation"]["parameter_grid_hash"], metadata.parameter_grid_hash)
+                self.assertLessEqual(
+                    raw["generation"]["complexity_score"],
+                    GENERATED_STRATEGY_COMPLEXITY_LIMIT,
+                )
                 self.assertFalse(metadata.high_risk_budget)
 
     def test_write_feature_combo_strategy_specs_outputs_valid_specs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            paths = write_feature_combo_strategy_specs(Path(temp_dir), count=3, random_seed=5)
+            manifest_path = Path(temp_dir) / "manifest.json"
+            paths = write_feature_combo_strategy_specs(
+                Path(temp_dir),
+                count=3,
+                random_seed=5,
+                manifest_path=manifest_path,
+            )
 
             self.assertEqual(len(paths), 3)
+            self.assertTrue(manifest_path.exists())
             for path in paths:
                 spec = load_strategy_spec(path)
                 self.assertEqual(spec.symbol, "NQmain")
                 self.assertEqual(spec.timeframe, "1m")
+
+    def test_feature_combo_generation_manifest_is_stable(self) -> None:
+        specs = generate_feature_combo_strategy_specs(count=2, random_seed=3)
+        first = feature_combo_generation_manifest(specs, random_seed=3)
+        second = feature_combo_generation_manifest(specs, random_seed=3)
+
+        self.assertEqual(first, second)
+        self.assertEqual(first["strategy_count"], 2)
+        self.assertTrue(first["strategy_manifest_hash"])

@@ -51,8 +51,14 @@
   ],
   "generation": {
     "method": "deterministic_random_feature_combo",
+    "generation_id": "e63524651fa88fe4",
+    "feature_combo_hash": "741b91dd6ea3c2f725fb3399a98dda9a2edc9a6ba73b32cdc8b041d6be0169c3",
     "global_index": 27,
-    "feature_catalog_size": 112
+    "feature_catalog_size": 112,
+    "parameter_grid_hash": "b23fde390b27169987a39fc34d0018f93a4f6f1b48aa2a12de16061bd85567d2",
+    "parameter_combinations": 108,
+    "complexity_score": 151,
+    "complexity_limit": 220
   },
   "regime_filter": {},
   "indicators": {

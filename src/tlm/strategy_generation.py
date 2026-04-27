@@ -7,7 +7,7 @@ from typing import Any
 
 from .feature_catalog import FEATURE_CATALOG, FeatureDefinition, features_for_data_levels
 from .strategy import parse_strategy_spec
-from .variants import parameter_grid_metadata
+from .variants import parameter_grid_metadata, stable_hash
 
 
 EXECUTABLE_RANDOM_FEATURE_FAMILIES = (
@@ -19,6 +19,8 @@ EXECUTABLE_RANDOM_FEATURE_FAMILIES = (
     "time_of_day_edge",
     "gap_fade_or_continuation",
 )
+
+GENERATED_STRATEGY_COMPLEXITY_LIMIT = 220
 
 _FAMILY_FEATURE_WEIGHTS = {
     "opening_range_breakout": {"opening_range", "breakout", "volume", "vwap", "time", "volatility"},
@@ -59,11 +61,26 @@ def generate_feature_combo_strategy_specs(
         )
         parsed = parse_strategy_spec(spec)
         metadata = parameter_grid_metadata(parsed, max_trials=1)
+        complexity_score = _complexity_score(spec, metadata.total_combinations)
         if metadata.high_risk_budget:
             raise ValueError(
                 f"generated strategy {parsed.name} exceeds high-risk grid budget: "
                 f"{metadata.total_combinations}"
             )
+        if complexity_score > GENERATED_STRATEGY_COMPLEXITY_LIMIT:
+            raise ValueError(
+                f"generated strategy {parsed.name} exceeds complexity budget: "
+                f"{complexity_score} > {GENERATED_STRATEGY_COMPLEXITY_LIMIT}"
+            )
+        spec["generation"].update(
+            {
+                "parameter_grid_hash": metadata.parameter_grid_hash,
+                "parameter_combinations": metadata.total_combinations,
+                "complexity_score": complexity_score,
+                "complexity_limit": GENERATED_STRATEGY_COMPLEXITY_LIMIT,
+            }
+        )
+        parse_strategy_spec(spec)
         specs.append(spec)
     return specs
 
@@ -75,6 +92,7 @@ def write_feature_combo_strategy_specs(
     symbol: str = "NQmain",
     timeframe: str = "1m",
     prefix: str = "generated_feature_combo",
+    manifest_path: Path | None = None,
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     specs = generate_feature_combo_strategy_specs(
@@ -89,7 +107,66 @@ def write_feature_combo_strategy_specs(
         path = output_dir / f"{spec['name']}.yaml"
         path.write_text(json.dumps(spec, indent=2, sort_keys=False) + "\n", encoding="utf-8")
         paths.append(path)
+    if manifest_path is not None:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(
+            json.dumps(
+                feature_combo_generation_manifest(
+                    specs,
+                    output_paths=paths,
+                    random_seed=random_seed,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    prefix=prefix,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     return paths
+
+
+def feature_combo_generation_manifest(
+    specs: list[dict[str, Any]],
+    output_paths: list[Path] | None = None,
+    random_seed: int | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+    prefix: str | None = None,
+) -> dict[str, Any]:
+    output_paths = output_paths or []
+    records = []
+    for index, spec in enumerate(specs):
+        generation = spec.get("generation", {})
+        records.append(
+            {
+                "name": spec["name"],
+                "strategy_family": spec["strategy_family"],
+                "generation_id": generation.get("generation_id"),
+                "feature_combo_hash": generation.get("feature_combo_hash"),
+                "parameter_grid_hash": generation.get("parameter_grid_hash"),
+                "parameter_combinations": generation.get("parameter_combinations"),
+                "complexity_score": generation.get("complexity_score"),
+                "path": str(output_paths[index]) if index < len(output_paths) else None,
+            }
+        )
+    return {
+        "method": "deterministic_random_feature_combo",
+        "random_seed": random_seed,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "prefix": prefix,
+        "strategy_count": len(specs),
+        "strategy_manifest_hash": stable_hash(records),
+        "complexity_limit": GENERATED_STRATEGY_COMPLEXITY_LIMIT,
+        "max_complexity_score": max(
+            (int(record["complexity_score"]) for record in records if record["complexity_score"] is not None),
+            default=0,
+        ),
+        "strategies": records,
+    }
 
 
 def _sample_features(
@@ -121,6 +198,17 @@ def _build_spec(
 ) -> dict[str, Any]:
     template = _family_template(family, family_index)
     feature_names = [feature.name for feature in features]
+    feature_combo_hash = stable_hash(feature_names)
+    generation_id = stable_hash(
+        {
+            "family": family,
+            "feature_combo_hash": feature_combo_hash,
+            "global_index": global_index,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prefix": prefix,
+        }
+    )[:16]
     name = f"nq_{prefix}_{_family_slug(family)}_{family_index:02d}"
     hypothesis = (
         f"{family.replace('_', ' ')} candidate generated from random intraday feature "
@@ -151,6 +239,8 @@ def _build_spec(
         ],
         "generation": {
             "method": "deterministic_random_feature_combo",
+            "generation_id": generation_id,
+            "feature_combo_hash": feature_combo_hash,
             "global_index": global_index,
             "feature_catalog_size": len(FEATURE_CATALOG),
         },
@@ -351,3 +441,11 @@ def _family_slug(family: str) -> str:
         "time_of_day_edge": "tod",
         "gap_fade_or_continuation": "gap",
     }[family]
+
+
+def _complexity_score(spec: dict[str, Any], parameter_combinations: int) -> int:
+    feature_count = len(spec.get("feature_set", []))
+    parameter_count = len(spec.get("parameters", {}))
+    indicator_count = len(spec.get("indicators", {}))
+    direction_multiplier = 2 if spec.get("direction") == "long_short" else 1
+    return parameter_combinations + feature_count * 5 + parameter_count * 2 + indicator_count + direction_multiplier
