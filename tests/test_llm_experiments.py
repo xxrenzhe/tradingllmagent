@@ -28,6 +28,7 @@ from tlm.research import (
     ResearchRunResult,
     ResearchSplitArtifact,
     StrategyTargetCriteria,
+    build_strategy_optimization_gate_report,
     discover_strategy_seed_specs,
     evaluate_strategy_target,
     run_llm_seed_pool_target_discovery,
@@ -273,6 +274,24 @@ class LLMAndExperimentTests(unittest.TestCase):
             ],
         )
         self.assertEqual(passing.to_dict()["win_probability_test"], 0.54)
+
+    def test_optimization_gate_report_includes_profit_factor_and_overfit_inputs(self) -> None:
+        result = fake_research_result(
+            "target_profit_factor_fail",
+            annual_trades=1200,
+            sharpe=2.4,
+            winning_trades=54,
+            losing_trades=46,
+        )
+        target = StrategyTargetCriteria(min_profit_factor=2.5)
+
+        report = build_strategy_optimization_gate_report(result, target)
+        evaluation = evaluate_strategy_target(result, target)
+
+        self.assertFalse(report["passed"])
+        self.assertIn("profit_factor_below_target", report["reasons"])
+        self.assertIn("anti_overfit_inputs", report)
+        self.assertEqual(evaluation.reasons, report["reasons"])
 
     def test_llm_target_discovery_stops_when_candidate_meets_target(self) -> None:
         seed = parse_strategy_spec(base_spec())

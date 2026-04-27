@@ -31,6 +31,7 @@ from .snapshot import research_snapshot
 from .storage import bar_path, normalized_tick_path
 from .strategy import StrategySpec, StrategySpecError, load_strategy_spec, parse_strategy_spec
 from .variants import (
+    DEFAULT_HIGH_RISK_PARAMETER_LIMIT,
     DEFAULT_PARAMETER_BUDGET,
     ParameterGridMetadata,
     expand_strategy_variants,
@@ -158,6 +159,12 @@ class StrategyTargetCriteria:
     min_annual_trades: float = 1000
     min_sharpe: float = 2
     min_win_probability: float = 0.53
+    min_profit_factor: float = 1.2
+    max_drawdown: float = 10_000
+    min_positive_year_ratio: float = 0.6
+    max_final_holdout_sharpe_decay: float = 0.5
+    max_parameter_combinations: int = DEFAULT_HIGH_RISK_PARAMETER_LIMIT
+    min_non_overlap_test_folds: int = 1
     split: str = "test"
 
     def to_dict(self) -> dict:
@@ -165,6 +172,12 @@ class StrategyTargetCriteria:
             "min_annual_trades": self.min_annual_trades,
             "min_sharpe": self.min_sharpe,
             "min_win_probability": self.min_win_probability,
+            "min_profit_factor": self.min_profit_factor,
+            "max_drawdown": self.max_drawdown,
+            "min_positive_year_ratio": self.min_positive_year_ratio,
+            "max_final_holdout_sharpe_decay": self.max_final_holdout_sharpe_decay,
+            "max_parameter_combinations": self.max_parameter_combinations,
+            "min_non_overlap_test_folds": self.min_non_overlap_test_folds,
             "split": self.split,
         }
 
@@ -341,21 +354,15 @@ def evaluate_strategy_target(
     target = target or StrategyTargetCriteria()
     if target.split != "test":
         raise ValueError(f"Unsupported target split: {target.split}")
+    readiness = build_strategy_optimization_gate_report(result, target)
     metrics = result.aggregate_test_metrics
     win_probability = test_trade_win_rate(result)
-    reasons = []
-    if metrics.annual_trades <= target.min_annual_trades:
-        reasons.append("annual_trades_below_target")
-    if metrics.sharpe is None or metrics.sharpe <= target.min_sharpe:
-        reasons.append("sharpe_below_target")
-    if win_probability is None or win_probability <= target.min_win_probability:
-        reasons.append("win_probability_below_target")
     return StrategyTargetEvaluation(
         experiment_id=result.experiment_id,
         strategy_name=result.strategy_name,
         strategy_spec_hash=result.strategy_spec_hash,
-        passed=not reasons,
-        reasons=reasons,
+        passed=readiness["passed"],
+        reasons=readiness["reasons"],
         metrics={
             "annual_trades": metrics.annual_trades,
             "sharpe": metrics.sharpe,
@@ -364,9 +371,124 @@ def evaluate_strategy_target(
             "net_pnl": metrics.net_pnl,
             "profit_factor": metrics.profit_factor,
             "max_drawdown": metrics.max_drawdown,
+            "final_holdout_sharpe": result.final_holdout_metrics.sharpe,
+            "positive_year_ratio": result.positive_year_ratio,
+            "parameter_combination_count": result.parameter_combination_count,
+            "non_overlap_test_fold_count": len(result.non_overlap_test_fold_indexes),
+            "optimization_gate_report": readiness,
         },
         target=target,
     )
+
+
+def build_strategy_optimization_gate_report(
+    result: ResearchRunResult,
+    target: StrategyTargetCriteria | None = None,
+) -> dict[str, Any]:
+    target = target or StrategyTargetCriteria()
+    metrics = result.aggregate_test_metrics
+    win_probability = test_trade_win_rate(result)
+    gates = [
+        target_gate_row(
+            "annual_trades_test",
+            metrics.annual_trades,
+            f"> {target.min_annual_trades}",
+            metrics.annual_trades > target.min_annual_trades,
+            "annual_trades_below_target",
+        ),
+        target_gate_row(
+            "sharpe_test",
+            metrics.sharpe,
+            f"> {target.min_sharpe}",
+            metrics.sharpe is not None and metrics.sharpe > target.min_sharpe,
+            "sharpe_below_target",
+        ),
+        target_gate_row(
+            "win_probability_test",
+            win_probability,
+            f"> {target.min_win_probability}",
+            win_probability is not None and win_probability > target.min_win_probability,
+            "win_probability_below_target",
+        ),
+        target_gate_row(
+            "profit_factor_test",
+            metrics.profit_factor,
+            f"> {target.min_profit_factor}",
+            metrics.profit_factor is not None and metrics.profit_factor > target.min_profit_factor,
+            "profit_factor_below_target",
+        ),
+        target_gate_row(
+            "max_drawdown_test",
+            metrics.max_drawdown,
+            f"<= {target.max_drawdown}",
+            metrics.max_drawdown <= target.max_drawdown,
+            "max_drawdown_above_target",
+        ),
+        target_gate_row(
+            "positive_year_ratio",
+            result.positive_year_ratio,
+            f">= {target.min_positive_year_ratio}",
+            result.positive_year_ratio >= target.min_positive_year_ratio,
+            "positive_year_ratio_below_target",
+        ),
+        target_gate_row(
+            "final_holdout_sharpe_decay",
+            result.test_to_holdout_sharpe_decay,
+            f"<= {target.max_final_holdout_sharpe_decay}",
+            result.test_to_holdout_sharpe_decay is not None
+            and result.test_to_holdout_sharpe_decay <= target.max_final_holdout_sharpe_decay,
+            "final_holdout_sharpe_decay_above_target",
+        ),
+        target_gate_row(
+            "parameter_complexity",
+            result.parameter_combination_count,
+            f"<= {target.max_parameter_combinations}",
+            result.parameter_combination_count <= target.max_parameter_combinations,
+            "parameter_complexity_above_target",
+        ),
+        target_gate_row(
+            "non_overlap_test_fold_count",
+            len(result.non_overlap_test_fold_indexes),
+            f">= {target.min_non_overlap_test_folds}",
+            len(result.non_overlap_test_fold_indexes) >= target.min_non_overlap_test_folds,
+            "non_overlap_test_folds_below_target",
+        ),
+    ]
+    reasons = [gate["reason"] for gate in gates if not gate["passed"]]
+    overfitting_reasons = set((result.overfitting_report or {}).get("reasons", []))
+    reasons.extend(sorted(f"overfit_{reason}" for reason in overfitting_reasons))
+    cost_report = result.cost_sensitivity_report or {}
+    if cost_report and cost_report.get("worst_case_survives") is False:
+        reasons.append("cost_sensitivity_failed")
+    return {
+        "passed": not reasons,
+        "reasons": reasons,
+        "gates": gates,
+        "target": target.to_dict(),
+        "anti_overfit_inputs": {
+            "overfitting_report": result.overfitting_report,
+            "cost_sensitivity_report": result.cost_sensitivity_report,
+            "parameter_stability_report": result.parameter_stability_report,
+            "validation_to_test_sharpe_decay": result.validation_to_test_sharpe_decay,
+            "test_to_holdout_sharpe_decay": result.test_to_holdout_sharpe_decay,
+        },
+    }
+
+
+def target_gate_row(
+    name: str,
+    actual: Any,
+    threshold: str,
+    passed: bool,
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        "name": name,
+        "actual": actual,
+        "threshold": threshold,
+        "passed": passed,
+        "reason": reason,
+    }
 
 
 def run_llm_target_discovery(
