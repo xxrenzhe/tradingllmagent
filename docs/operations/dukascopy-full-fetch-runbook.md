@@ -37,6 +37,7 @@ for file in logs/data-fetch/dukascopy-NQmain-shard-*.log; do echo "== $file"; ta
 find data/normalized/ticks/NQmain -mindepth 1 -maxdepth 1 -type d | wc -l
 du -sh data
 df -h .
+python3 scripts/list_dukascopy_backfill_days.py --data-root data --status-dir logs/data-fetch --symbol NQmain --from 2012-02-01 --to 2026-04-26
 ```
 
 ## Stop
@@ -58,3 +59,14 @@ tmux new-session -d -s tlm_dukascopy_2025_2026 "cd /Users/jason/Documents/Kiro/t
 ```
 
 The script skips existing non-empty daily tick parquet files, retries failed dates up to `MAX_ATTEMPTS`, and stops automatically when free disk space drops below `MIN_FREE_GB`.
+
+## Backfill Queue
+
+Use the backfill helper to summarize failed days without parquet output:
+
+```bash
+python3 scripts/list_dukascopy_backfill_days.py --data-root data --status-dir logs/data-fetch --symbol NQmain --from 2012-02-01 --to 2026-04-26
+```
+
+`failed_ranges` are dates with a latest logged `failed` status and no normalized parquet.
+`untracked_ranges` are future dates not yet attempted by any shard.
