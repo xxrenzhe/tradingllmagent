@@ -1095,16 +1095,20 @@ function TriggerPoolSummary({ pool }) {
   if (!pool) {
     return null;
   }
+  const diversity = pool.diversity_report ?? {};
   return (
     <div className="module-memory-stats">
       <Metric label="Pool Status" value={pool.status ?? "-"} detail={`${formatCompact(pool.selected_count)} selected`} />
       <Metric label="Signals / Day" value={formatNumber(pool.selected_trades_per_day ?? 0)} detail={`${formatNumber(pool.target_min_per_day ?? 0)}-${formatNumber(pool.target_max_per_day ?? 0)} target`} />
       <Metric label="Proxy Win" value={formatPercent(pool.weighted_proxy_win_rate ?? 0)} detail={`min ${formatPercent(pool.min_proxy_win_rate ?? 0)}`} />
+      <Metric label="Correlation Groups" value={formatCompact(diversity.selected_correlation_group_count ?? 0)} detail={`${formatCompact(diversity.selected_near_duplicate_pair_count ?? 0)} selected near-dupes`} />
     </div>
   );
 }
 
 function TriggerGateSummary({ pool, simulation, report, schedule }) {
+  const drift = report?.proxy_outcome_drift;
+  const opportunityCost = report?.block_opportunity_cost;
   return (
     <div className="artifact-dashboard">
       {pool ? <TriggerPoolSummary pool={pool} /> : <EmptyState title="No target pool loaded" text="Refresh module memory before running a trigger gate simulation." />}
@@ -1121,6 +1125,8 @@ function TriggerGateSummary({ pool, simulation, report, schedule }) {
           <Metric label="Block" value={formatPercent(report.block_rate ?? 0)} detail="decision rate" />
           <Metric label="Observe" value={formatPercent(report.observe_rate ?? 0)} detail={`${formatCompact(report.token_total)} tokens`} />
           <Metric label="Live Commands" value={formatCompact(report.live_gateway_command_count ?? 0)} detail="must remain zero" />
+          <Metric label="Proxy Drift" value={drift?.drift === null || drift?.drift === undefined ? "-" : formatPercent(drift.drift)} detail={drift?.status ?? "no drift report"} />
+          <Metric label="Block Cost" value={formatNumber(opportunityCost?.opportunity_cost ?? 0)} detail={`${formatCompact(opportunityCost?.missed_winner_count ?? 0)} missed winners`} />
         </div>
       ) : null}
       {schedule ? (
