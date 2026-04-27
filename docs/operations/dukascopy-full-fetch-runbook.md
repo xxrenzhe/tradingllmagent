@@ -6,8 +6,16 @@
 - Instrument: `USATECHIDXUSD`
 - Date range: `2012-02-01` to `2026-04-26`
 - Data root: `data`
-- tmux session: `tlm_dukascopy_full`
-- Run id: `dukascopy-NQmain-full-20120201-20260426`
+- tmux sessions:
+  - `tlm_dukascopy_2012_2015`
+  - `tlm_dukascopy_2016_2019`
+  - `tlm_dukascopy_2020_2022`
+  - `tlm_dukascopy_2023_2026`
+- Run ids:
+  - `dukascopy-NQmain-shard-2012-2015`
+  - `dukascopy-NQmain-shard-2016-2019`
+  - `dukascopy-NQmain-shard-2020-2022`
+  - `dukascopy-NQmain-shard-2023-2026`
 - Python command: `arch -arm64 python3`
 - Sleep prevention: `caffeinate -dimsu`
 - Current pass: `MAX_ATTEMPTS=1` initial sweep, so provider timeout/503 dates are skipped quickly and left for later backfill.
@@ -17,9 +25,9 @@
 
 ```bash
 tmux list-sessions
-tmux capture-pane -t tlm_dukascopy_full -p | tail -n 40
-tail -n 40 logs/data-fetch/dukascopy-NQmain-full-20120201-20260426.status.tsv
-tail -n 80 logs/data-fetch/dukascopy-NQmain-full-20120201-20260426.log
+for session in tlm_dukascopy_2012_2015 tlm_dukascopy_2016_2019 tlm_dukascopy_2020_2022 tlm_dukascopy_2023_2026; do tmux capture-pane -t "$session" -p | tail -n 20; done
+for file in logs/data-fetch/dukascopy-NQmain-shard-*.status.tsv; do echo "== $file"; tail -n 20 "$file"; done
+for file in logs/data-fetch/dukascopy-NQmain-shard-*.log; do echo "== $file"; tail -n 40 "$file"; done
 find data/normalized/ticks/NQmain -mindepth 1 -maxdepth 1 -type d | wc -l
 du -sh data
 df -h .
@@ -28,13 +36,16 @@ df -h .
 ## Stop
 
 ```bash
-tmux kill-session -t tlm_dukascopy_full
+for session in tlm_dukascopy_2012_2015 tlm_dukascopy_2016_2019 tlm_dukascopy_2020_2022 tlm_dukascopy_2023_2026; do tmux kill-session -t "$session"; done
 ```
 
 ## Resume
 
 ```bash
-tmux new-session -d -s tlm_dukascopy_full "cd /Users/jason/Documents/Kiro/tradingllmagent && RUN_ID=dukascopy-NQmain-full-20120201-20260426 DATA_ROOT=data DATE_FROM=2012-02-01 DATE_TO=2026-04-26 BUILD_BARS=0 MIN_FREE_GB=8 MAX_ATTEMPTS=1 PYTHON_BIN='arch -arm64 python3' caffeinate -dimsu bash scripts/fetch_dukascopy_full_nqmain.sh"
+tmux new-session -d -s tlm_dukascopy_2012_2015 "cd /Users/jason/Documents/Kiro/tradingllmagent && RUN_ID=dukascopy-NQmain-shard-2012-2015 DATA_ROOT=data DATE_FROM=2012-02-01 DATE_TO=2015-12-31 BUILD_BARS=0 MIN_FREE_GB=8 MAX_ATTEMPTS=1 PYTHON_BIN='arch -arm64 python3' caffeinate -dimsu bash scripts/fetch_dukascopy_full_nqmain.sh"
+tmux new-session -d -s tlm_dukascopy_2016_2019 "cd /Users/jason/Documents/Kiro/tradingllmagent && RUN_ID=dukascopy-NQmain-shard-2016-2019 DATA_ROOT=data DATE_FROM=2016-01-01 DATE_TO=2019-12-31 BUILD_BARS=0 MIN_FREE_GB=8 MAX_ATTEMPTS=1 PYTHON_BIN='arch -arm64 python3' caffeinate -dimsu bash scripts/fetch_dukascopy_full_nqmain.sh"
+tmux new-session -d -s tlm_dukascopy_2020_2022 "cd /Users/jason/Documents/Kiro/tradingllmagent && RUN_ID=dukascopy-NQmain-shard-2020-2022 DATA_ROOT=data DATE_FROM=2020-01-01 DATE_TO=2022-12-31 BUILD_BARS=0 MIN_FREE_GB=8 MAX_ATTEMPTS=1 PYTHON_BIN='arch -arm64 python3' caffeinate -dimsu bash scripts/fetch_dukascopy_full_nqmain.sh"
+tmux new-session -d -s tlm_dukascopy_2023_2026 "cd /Users/jason/Documents/Kiro/tradingllmagent && RUN_ID=dukascopy-NQmain-shard-2023-2026 DATA_ROOT=data DATE_FROM=2023-01-01 DATE_TO=2026-04-26 BUILD_BARS=0 MIN_FREE_GB=8 MAX_ATTEMPTS=1 PYTHON_BIN='arch -arm64 python3' caffeinate -dimsu bash scripts/fetch_dukascopy_full_nqmain.sh"
 ```
 
 The script skips existing non-empty daily tick parquet files, retries failed dates up to `MAX_ATTEMPTS`, and stops automatically when free disk space drops below `MIN_FREE_GB`.
