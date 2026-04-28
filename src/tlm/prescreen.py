@@ -13,8 +13,11 @@ def build_pre_screen_report(
     *,
     round_trip_cost: float,
     inverse_metrics: BacktestMetrics | None = None,
+    mid_trade_pnls: Sequence[float] | None = None,
     min_trade_count: int = 30,
     min_cost_coverage: float = 2.0,
+    min_avg_mid_trade: float = 15.0,
+    max_stop_loss_ratio: float = 0.65,
     max_top_day_pnl_share: float = 0.4,
 ) -> dict:
     trade_count = len(trades)
@@ -22,10 +25,21 @@ def build_pre_screen_report(
     net_pnl = sum(trade.net_pnl for trade in trades)
     avg_gross_trade = gross_pnl / trade_count if trade_count else None
     avg_net_trade = net_pnl / trade_count if trade_count else None
+    avg_explicit_cost_trade = (
+        sum(trade.fees + trade.slippage_cost for trade in trades) / trade_count if trade_count else None
+    )
+    avg_mid_trade = sum(mid_trade_pnls) / len(mid_trade_pnls) if mid_trade_pnls else None
     cost_coverage = avg_gross_trade / round_trip_cost if avg_gross_trade is not None and round_trip_cost else None
     by_day: dict[str, float] = defaultdict(float)
     side_counts = Counter(trade.side for trade in trades)
     entry_reason_counts = Counter(trade.entry_reason for trade in trades)
+    exit_reason_counts = Counter(trade.exit_reason for trade in trades)
+    stop_loss_ratio = exit_reason_counts.get("stop_loss", 0) / trade_count if trade_count else None
+    holding_minutes = [
+        max((trade.exit_time - trade.entry_time).total_seconds() / 60, 0)
+        for trade in trades
+    ]
+    avg_holding_minutes = sum(holding_minutes) / len(holding_minutes) if holding_minutes else None
     for trade in trades:
         by_day[trade.entry_time.date().isoformat()] += trade.net_pnl
     top_day_pnl = max(by_day.values(), default=0.0)
@@ -37,6 +51,10 @@ def build_pre_screen_report(
         reasons.append("negative_gross_edge")
     if cost_coverage is None or cost_coverage < min_cost_coverage:
         reasons.append("insufficient_cost_coverage")
+    if avg_mid_trade is not None and avg_mid_trade < min_avg_mid_trade:
+        reasons.append("insufficient_mid_price_edge")
+    if stop_loss_ratio is not None and stop_loss_ratio > max_stop_loss_ratio:
+        reasons.append("stop_loss_ratio_above_limit")
     if top_day_pnl_share is not None and top_day_pnl_share > max_top_day_pnl_share:
         reasons.append("top_day_pnl_concentration")
     if inverse_metrics is not None and inverse_metrics.net_pnl > metrics.net_pnl:
@@ -48,6 +66,8 @@ def build_pre_screen_report(
         "thresholds": {
             "min_trade_count": min_trade_count,
             "min_cost_coverage": min_cost_coverage,
+            "min_avg_mid_trade": min_avg_mid_trade,
+            "max_stop_loss_ratio": max_stop_loss_ratio,
             "max_top_day_pnl_share": max_top_day_pnl_share,
         },
         "metrics": {
@@ -56,9 +76,13 @@ def build_pre_screen_report(
             "net_pnl": net_pnl,
             "avg_gross_trade": avg_gross_trade,
             "avg_net_trade": avg_net_trade,
+            "avg_explicit_cost_trade": avg_explicit_cost_trade,
+            "avg_mid_trade": avg_mid_trade,
             "cost_coverage": cost_coverage,
             "top_day_pnl": top_day_pnl,
             "top_day_pnl_share": top_day_pnl_share,
+            "stop_loss_ratio": stop_loss_ratio,
+            "avg_holding_minutes": avg_holding_minutes,
             "annual_trades": metrics.annual_trades,
             "sharpe": metrics.sharpe,
             "profit_factor": metrics.profit_factor,
@@ -66,6 +90,7 @@ def build_pre_screen_report(
         },
         "side_counts": dict(sorted(side_counts.items())),
         "entry_reason_counts": dict(sorted(entry_reason_counts.items())),
+        "exit_reason_counts": dict(sorted(exit_reason_counts.items())),
         "inverse_metrics": inverse_metrics.to_dict() if inverse_metrics is not None else None,
     }
 

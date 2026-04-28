@@ -1066,7 +1066,7 @@ def run_research_bar_validation(
     final_holdout_policy = build_final_holdout_policy(plan)
     promotion_report = build_direct_promotion_report(execution_mode)
     next_round_suggestions = build_next_round_suggestions(
-        gates_payload["reasons"],
+        list(gates_payload["reasons"]) + list(pre_screen_report.get("reasons", [])),
         overfitting_report,
         cost_sensitivity_report,
         grid_metadata,
@@ -1653,6 +1653,10 @@ def build_next_round_suggestions(
         suggestions.append("Tighten regime filters or exit timing; do not widen the parameter grid to chase Sharpe.")
     if "avg_trade_net_pnl" in reason_set:
         suggestions.append("Improve per-trade edge before costs; avoid strategies whose edge is smaller than round-trip cost.")
+    if "insufficient_mid_price_edge" in reason_set:
+        suggestions.append("Reject this signal shape early; it does not move enough on mid-price before execution costs.")
+    if "stop_loss_ratio_above_limit" in reason_set:
+        suggestions.append("Widen confirmation filters or exits; the current setup is stopped out too often to cover costs.")
     if "positive_year_ratio" in reason_set or "positive_test_fold_ratio" in overfitting_report.get("reasons", []):
         suggestions.append("Prefer hypotheses that work across more years and folds rather than one narrow market regime.")
     if "final_holdout_sharpe_decay" in reason_set or "test_to_holdout_sharpe_decay" in reason_set:
