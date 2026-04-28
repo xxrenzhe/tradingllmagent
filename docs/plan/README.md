@@ -19,6 +19,7 @@ Older documents remain useful as design history, but they should not override ne
 - `docs/plan/7.current-trading-system-optimization-roadmap.md`: authoritative for current completeness assessment, remaining optimization priorities, and next implementation milestones.
 - `docs/plan/8.llm-trigger-gate-optimization-plan.md`: authoritative for triggered LLM gating, target-frequency strategy pool selection, token-cost control, memory backfill, and forward-test iteration.
 - `docs/plan/9.llm-trading-optimization-factory.md`: authoritative for the full feature-mining, strategy-generation, backtest-validation, paper/sim/live replay, anti-overfit, and LLM-assisted optimization loop.
+- `docs/plan/10.strategy-search-best-practices-optimization-plan.md`: authoritative for first-search failure analysis, online best-practice research synthesis, executable feature/grammar upgrades, inverse mutation, pre-screening, and the next strategy-search optimization plan.
 
 ## 3. Version Boundaries
 
