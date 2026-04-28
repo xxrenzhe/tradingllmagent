@@ -35,7 +35,7 @@ from .storage import (
     write_json,
     write_ticks_parquet,
 )
-from .strategy import load_strategy_spec
+from .strategy import load_strategy_spec, with_strategy_symbol
 from .tasks import append_task_log, claim_queued_task, get_task, next_queued_task, update_task
 from .trigger_gate import load_trigger_gate_forward_report, run_trigger_gate_simulation
 from .variants import strategy_logic_hash
@@ -302,6 +302,7 @@ def execute_backtest(payload: dict[str, Any], execution_mode: str) -> dict[str, 
     date_from = parse_date(_required(payload, "date_from", "from"))
     date_to = parse_date(_required(payload, "date_to", "to"))
     symbol = get_symbol(payload.get("symbol", spec.symbol), config_dir)
+    spec = with_strategy_symbol(spec, symbol.alias)
     cost_model = get_cost_model(spec.cost_model, config_dir)
     if execution_mode == "bar":
         files = bar_parquet_files(data_root, spec.symbol, spec.timeframe, date_from, date_to)

@@ -61,7 +61,7 @@ from .storage import (
     write_json,
     write_ticks_parquet,
 )
-from .strategy import StrategySpecError, load_strategy_spec
+from .strategy import StrategySpecError, load_strategy_spec, with_strategy_symbol
 from .strategy_generation import write_feature_combo_strategy_specs
 from .trigger_gate import (
     append_trigger_gate_outcome_from_payload,
@@ -496,6 +496,7 @@ def cmd_trigger_gate_outcome(args: argparse.Namespace) -> int:
 def cmd_backtest_bar(args: argparse.Namespace) -> int:
     spec = load_strategy_spec(Path(args.spec))
     symbol = get_symbol(args.symbol or spec.symbol, Path(args.config_dir))
+    spec = with_strategy_symbol(spec, symbol.alias)
     cost_model = get_cost_model(spec.cost_model, Path(args.config_dir))
     data_root = Path(args.data_root)
     date_from = parse_date(args.date_from)
@@ -522,6 +523,7 @@ def cmd_backtest_bar(args: argparse.Namespace) -> int:
 def cmd_backtest_tick(args: argparse.Namespace) -> int:
     spec = load_strategy_spec(Path(args.spec))
     symbol = get_symbol(args.symbol or spec.symbol, Path(args.config_dir))
+    spec = with_strategy_symbol(spec, symbol.alias)
     cost_model = get_cost_model(spec.cost_model, Path(args.config_dir))
     data_root = Path(args.data_root)
     date_from = parse_date(args.date_from)

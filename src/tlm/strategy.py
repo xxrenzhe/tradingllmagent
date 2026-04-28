@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +95,12 @@ class StrategySpec:
     parameters: dict[str, Any]
     cost_model: str
     raw: dict[str, Any]
+
+
+def with_strategy_symbol(spec: StrategySpec, symbol: str) -> StrategySpec:
+    if spec.symbol == symbol:
+        return spec
+    return replace(spec, symbol=symbol, raw={**spec.raw, "symbol": symbol})
 
 
 def load_strategy_spec(path: Path) -> StrategySpec:

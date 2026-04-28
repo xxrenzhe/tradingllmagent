@@ -32,7 +32,7 @@ from .mutations import generate_controlled_mutations
 from .prescreen import build_pre_screen_report
 from .snapshot import research_snapshot
 from .storage import bar_path, normalized_tick_path
-from .strategy import StrategySpec, StrategySpecError, load_strategy_spec, parse_strategy_spec
+from .strategy import StrategySpec, StrategySpecError, load_strategy_spec, parse_strategy_spec, with_strategy_symbol
 from .variants import (
     DEFAULT_HIGH_RISK_PARAMETER_LIMIT,
     DEFAULT_PARAMETER_BUDGET,
@@ -789,6 +789,7 @@ def run_research_bar_validation(
     llm_model: str = "local-deterministic-template",
     llm_parameters: dict | None = None,
 ) -> ResearchRunResult:
+    spec = with_strategy_symbol(spec, symbol_config.alias)
     grid_metadata = grid_metadata or parameter_grid_metadata(spec, max_trials=1)
     if execution_mode not in {"bar", "tick"}:
         raise ValueError(f"Unsupported execution_mode: {execution_mode}")

@@ -59,7 +59,7 @@ def symbol_config() -> SymbolConfig:
     )
 
 
-def write_breakout_day(data_root: Path, day: date) -> None:
+def write_breakout_day(data_root: Path, day: date, symbol: str = "NQmain") -> None:
     start = datetime(day.year, day.month, day.day, 13, 30)
     rows = []
     prices = [
@@ -87,7 +87,8 @@ def write_breakout_day(data_root: Path, day: date) -> None:
                 0.2,
             )
         )
-    write_bars_parquet(bar_path(data_root, "NQmain", "1m", day), rows)
+    rows = [(symbol, *row[1:]) for row in rows]
+    write_bars_parquet(bar_path(data_root, symbol, "1m", day), rows)
 
 
 def write_breakout_ticks(data_root: Path, day: date) -> None:
@@ -133,6 +134,34 @@ class RollingValidationTests(unittest.TestCase):
             plan.to_dict()["non_overlap_test_fold_indexes"],
             [fold.index for fold in plan.folds],
         )
+
+    def test_research_validation_honors_symbol_config_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            start = date(2025, 3, 1)
+            for offset in range(25):
+                write_breakout_day(data_root, start + timedelta(days=offset), symbol="NQ_1M")
+
+            result = run_research_bar_validation(
+                spec=parse_strategy_spec(base_spec()),
+                symbol_config=replace(symbol_config(), alias="NQ_1M", provider="firstratedata", instrument="NQ"),
+                data_root=data_root,
+                experiment_id="override_symbol",
+                date_from=start,
+                date_to=start + timedelta(days=24),
+                train_days=5,
+                validation_days=5,
+                test_days=5,
+                step_days=5,
+                embargo_days=0,
+                final_holdout_days=5,
+                min_folds=1,
+                indicator_warmup_days=0,
+            )
+
+        self.assertEqual(result.strategy_spec["symbol"], "NQ_1M")
+        self.assertTrue(result.split_artifacts)
+        self.assertGreater(result.aggregate_test_metrics.trade_count, 0)
 
     def test_generate_rolling_folds_marks_overlapping_tests(self) -> None:
         plan = generate_rolling_folds(

@@ -106,6 +106,77 @@ class DukascopyParsingTests(unittest.TestCase):
 
 
 class BarAndQualityTests(unittest.TestCase):
+    def test_cli_backtest_bar_honors_symbol_override(self) -> None:
+        spec_payload = {
+            "schema_version": 0,
+            "name": "override_orb",
+            "strategy_family": "opening_range_breakout",
+            "market_hypothesis": "Opening range breakouts can persist during active intraday sessions.",
+            "symbol": "NQmain",
+            "timeframe": "1m",
+            "direction": "long",
+            "session": {"timezone": "UTC", "trade": "13:30-20:45", "flatten": "20:55"},
+            "indicators": {"opening_range": {"type": "opening_range", "minutes": 3}},
+            "entry": {"long": {"all": [{"left": "close", "op": ">", "right": "opening_range.high"}]}},
+            "exit": {
+                "stop_loss": {"type": "points", "value": 2},
+                "take_profit": {"type": "points", "value": 3},
+                "max_holding_minutes": 10,
+            },
+            "risk": {
+                "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+                "max_position_contracts": 1,
+                "max_trades_per_day": 5,
+                "max_daily_loss_r": 3,
+            },
+            "anti_martingale_constraints": {
+                "forbid_loss_doubling": True,
+                "forbid_position_increase_when_unrealized_loss": True,
+                "max_grid_levels": 0,
+            },
+            "parameters": {"opening_range_minutes": {"values": [3]}},
+            "cost_model": "nq_conservative_v1",
+        }
+        day = datetime(2025, 3, 19).date()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            spec_path = root / "strategy.json"
+            spec_path.write_text(json.dumps(spec_payload), encoding="utf-8")
+            write_bars_parquet(
+                bar_path(data_root, "NQ_1M", "1m", day),
+                [
+                    ("NQ_1M", datetime(2025, 3, 19, 13, 30), 100.0, 100.5, 99.5, 100.0, 99.9, 100.1, 10, 1.0, 1.0, 0.2),
+                    ("NQ_1M", datetime(2025, 3, 19, 13, 31), 100.0, 100.4, 99.7, 100.1, 100.0, 100.2, 10, 1.0, 1.0, 0.2),
+                    ("NQ_1M", datetime(2025, 3, 19, 13, 32), 100.1, 100.6, 99.8, 100.2, 100.1, 100.3, 10, 1.0, 1.0, 0.2),
+                    ("NQ_1M", datetime(2025, 3, 19, 13, 33), 100.2, 104.4, 100.2, 104.0, 103.9, 104.1, 10, 1.0, 1.0, 0.2),
+                    ("NQ_1M", datetime(2025, 3, 19, 13, 34), 104.0, 107.2, 103.8, 106.8, 106.7, 106.9, 10, 1.0, 1.0, 0.2),
+                ],
+            )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "backtest",
+                        "bar",
+                        "--spec",
+                        str(spec_path),
+                        "--symbol",
+                        "NQ_1M",
+                        "--from",
+                        day.isoformat(),
+                        "--to",
+                        day.isoformat(),
+                    ]
+                )
+            payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["symbol"], "NQ_1M")
+        self.assertEqual(len(payload["trades"]), 1)
+
     def test_build_minute_bars_from_ticks(self) -> None:
         hour = datetime(2025, 3, 19, 13, tzinfo=UTC)
         ticks = parse_bi5_ticks(
