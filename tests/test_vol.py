@@ -131,6 +131,7 @@ class VolResearchArtifactTests(unittest.TestCase):
             data_root = root / "data"
             strategies_root = root / "strategies"
             output_dir = root / "artifacts"
+            event_calendar = root / "macro_events.json"
             strategy_paths = write_vol_strategy_specs(strategies_root, count=2)
             start = datetime(2025, 1, 2, 13, 30)
             rows = []
@@ -154,6 +155,27 @@ class VolResearchArtifactTests(unittest.TestCase):
                     )
                 )
             write_bars_parquet(bar_path(data_root, "NQ_CME", "1m", start.date()), rows)
+            event_calendar.write_text(
+                json.dumps(
+                    {
+                        "calendar_id": "test_macro",
+                        "events": [
+                            {
+                                "event_id": "test_event",
+                                "name": "Test event",
+                                "timestamp_utc": "2025-01-02T13:45:00Z",
+                                "importance": "high",
+                                "affected_symbols": ["NQ_CME"],
+                                "pre_event_minutes": 30,
+                                "release_window_minutes": 10,
+                                "post_event_minutes": 30,
+                                "policy_ref": "high_impact_macro_v1",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             report = run_vol_prescreen(
                 strategy_paths=strategy_paths,
@@ -163,6 +185,7 @@ class VolResearchArtifactTests(unittest.TestCase):
                 date_from=start.date(),
                 date_to=start.date(),
                 output_dir=output_dir,
+                event_calendar_path=event_calendar,
             )
 
             leaderboard = report["leaderboard"]
@@ -172,6 +195,9 @@ class VolResearchArtifactTests(unittest.TestCase):
             self.assertTrue((output_dir / "vol_mutation_memory.json").exists())
             self.assertIn("family_attribution", leaderboard)
             self.assertIn("data_version_hash", leaderboard["artifact_hashes"])
+            self.assertIn("event_calendar_hash", leaderboard["artifact_hashes"])
+            self.assertIn("session_attribution", leaderboard["rows"][0])
+            self.assertEqual(leaderboard["rows"][0]["event_non_event_view"]["status"], "ready")
 
 
 if __name__ == "__main__":

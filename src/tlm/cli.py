@@ -789,6 +789,7 @@ def cmd_research_vol_prescreen(args: argparse.Namespace) -> int:
         timeframe=args.timeframe,
         output_dir=Path(args.output_dir) if args.output_dir else None,
         starting_equity=args.starting_equity,
+        event_calendar_path=Path(args.event_calendar) if args.event_calendar else None,
     )
     print(json.dumps(report, indent=2, sort_keys=True, default=str))
     return 0
@@ -1404,6 +1405,7 @@ def build_parser() -> argparse.ArgumentParser:
     vol_prescreen.add_argument("--strategies-root", default="strategies")
     vol_prescreen.add_argument("--specs", nargs="*")
     vol_prescreen.add_argument("--cost-model", default="nq_conservative_v1")
+    vol_prescreen.add_argument("--event-calendar", default="configs/macro_events.yaml")
     vol_prescreen.add_argument("--starting-equity", type=float, default=100_000)
     vol_prescreen.add_argument("--output-dir", default="experiments/vol_execution_artifacts")
     vol_prescreen.set_defaults(func=cmd_research_vol_prescreen)

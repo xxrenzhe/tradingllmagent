@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 from typing import Any, Sequence
+from zoneinfo import ZoneInfo
 
 from .backtest import (
     _close_position,
@@ -17,6 +19,7 @@ from .backtest import (
 )
 from .cli_dates import iter_dates
 from .config import CostModelConfig, SymbolConfig
+from .events import context_for_timestamp, load_event_calendar
 from .feature_catalog import feature_readiness_report
 from .features import compute_executable_features, feature_value
 from .metrics import calculate_metrics
@@ -132,6 +135,7 @@ def run_vol_prescreen(
     timeframe: str = "1m",
     output_dir: Path | None = None,
     starting_equity: float = 100_000,
+    event_calendar_path: Path | None = None,
 ) -> dict[str, Any]:
     specs = [load_strategy_spec(path) for path in strategy_paths]
     if not specs:
@@ -148,6 +152,8 @@ def run_vol_prescreen(
         raise ValueError(f"No bar files found for {symbol_config.alias} {timeframe} between {date_from} and {date_to}")
 
     trades_by_strategy: dict[str, list] = {spec.name: [] for spec in specs}
+    calendar = load_event_calendar(event_calendar_path) if event_calendar_path and event_calendar_path.exists() else None
+    macro_events = calendar["events"] if calendar else []
     feature_hashes = []
     calendar_days = 0
     yearly_rows = []
@@ -187,6 +193,15 @@ def run_vol_prescreen(
         metrics = _metrics_for_trades(trades, starting_equity, calendar_days)
         win_probability = _win_probability(trades)
         gate = _vol_prescreen_gate(metrics.to_dict(), win_probability)
+        event_non_event_view = _vol_event_non_event_view(
+            trades,
+            symbol_config.alias,
+            macro_events,
+            starting_equity,
+            calendar_days,
+            event_calendar_hash=calendar.get("event_calendar_hash") if calendar else None,
+        )
+        session_attribution = _vol_session_attribution(trades, starting_equity, calendar_days)
         row = {
             "experiment_id": f"vol_prescreen_{spec.name}",
             "execution_mode": "bar",
@@ -194,12 +209,14 @@ def run_vol_prescreen(
             "strategy_family": spec.strategy_family,
             "strategy_spec_hash": strategy_spec_hash(spec),
             "vol_feature_card": _vol_feature_card(spec, feature_hashes),
-            "strategy_card": _vol_strategy_card(spec),
+            "strategy_card": _vol_strategy_card(spec, session_attribution),
             "execution_card": _vol_execution_card(cost_model),
-            "event_non_event_view": _vol_event_non_event_view(),
+            "event_non_event_view": event_non_event_view,
+            "session_attribution": session_attribution,
             "parameter_heatmap": _vol_parameter_heatmap(spec),
             "cost_model": cost_model.to_dict(),
             "cost_model_hash": stable_hash(cost_model.to_dict()),
+            "event_calendar_hash": calendar.get("event_calendar_hash") if calendar else None,
             "data_version_hash": compute_data_version_hash(
                 existing_files,
                 {
@@ -272,6 +289,7 @@ def run_vol_prescreen(
             "data_version_hash": stable_hash([row["data_version_hash"] for row in rows]),
             "feature_snapshot_hash": stable_hash(feature_hashes),
             "cost_model_hash": stable_hash(cost_model.to_dict()),
+            "event_calendar_hash": calendar.get("event_calendar_hash") if calendar else None,
         },
     }
     report = {
@@ -932,8 +950,9 @@ def _vol_next_round_suggestions(reasons: Sequence[str]) -> list[str]:
     return suggestions or ["Promote to quote replay before any paper shadow decision."]
 
 
-def _vol_strategy_card(spec: StrategySpec) -> dict[str, Any]:
+def _vol_strategy_card(spec: StrategySpec, session_attribution: Sequence[dict[str, Any]] | None = None) -> dict[str, Any]:
     regime = "trend" if spec.strategy_family in {"vol_breakout_trend", "ma_pullback_volume_confirm", "macd_ma_volume_confirm"} else "mean_reversion"
+    best_session = _best_session_bucket(session_attribution or [])
     return {
         "name": spec.name,
         "strategy_family": spec.strategy_family,
@@ -943,6 +962,7 @@ def _vol_strategy_card(spec: StrategySpec) -> dict[str, Any]:
         "market_hypothesis": spec.market_hypothesis,
         "event_window_policy": spec.raw.get("generation", {}).get("event_window_policy"),
         "execution_assumption": spec.raw.get("generation", {}).get("execution_assumption"),
+        "session_dependency": best_session,
         "core_feature_count": len(spec.raw.get("feature_set", [])),
         "parameter_keys": sorted((spec.raw.get("parameters") or {}).keys()),
     }
@@ -975,13 +995,95 @@ def _vol_execution_card(cost_model: CostModelConfig) -> dict[str, Any]:
     }
 
 
-def _vol_event_non_event_view() -> dict[str, Any]:
+def _vol_event_non_event_view(
+    trades: Sequence[Any],
+    symbol: str,
+    macro_events: Sequence[Any],
+    starting_equity: float,
+    calendar_days: int,
+    *,
+    event_calendar_hash: str | None,
+) -> dict[str, Any]:
+    event_trades = []
+    non_event_trades = []
+    event_ids: dict[str, int] = {}
+    for trade in trades:
+        context = context_for_timestamp(symbol, trade.entry_time, macro_events)
+        if context.event_state == "normal":
+            non_event_trades.append(trade)
+            continue
+        event_trades.append(trade)
+        for event_id in context.active_event_ids:
+            event_ids[event_id] = event_ids.get(event_id, 0) + 1
+    event_metrics = _metrics_for_trades(event_trades, starting_equity, calendar_days).to_dict()
+    non_event_metrics = _metrics_for_trades(non_event_trades, starting_equity, calendar_days).to_dict()
+    total = len(event_trades) + len(non_event_trades)
     return {
-        "status": "not_available_in_ohlcv_prescreen",
-        "non_event_sharpe": None,
-        "event_dependency_ratio": None,
-        "event_window_drawdown": None,
-        "requires_macro_event_context": True,
+        "status": "ready" if event_calendar_hash else "missing_event_calendar",
+        "event_calendar_hash": event_calendar_hash,
+        "event_trade_count": len(event_trades),
+        "non_event_trade_count": len(non_event_trades),
+        "event_dependency_ratio": len(event_trades) / total if total else 0.0,
+        "non_event_sharpe": non_event_metrics.get("sharpe"),
+        "event_window_drawdown": event_metrics.get("max_drawdown"),
+        "event_window_metrics": event_metrics,
+        "non_event_metrics": non_event_metrics,
+        "active_event_trade_counts": dict(sorted(event_ids.items())),
+        "requires_macro_event_context": False,
+    }
+
+
+def _vol_session_attribution(
+    trades: Sequence[Any],
+    starting_equity: float,
+    calendar_days: int,
+) -> list[dict[str, Any]]:
+    buckets = {
+        "asia_2000_0000_ny": [],
+        "london_0200_0500_ny": [],
+        "new_york_0800_1100_ny": [],
+        "other": [],
+    }
+    for trade in trades:
+        buckets[_ny_session_bucket(trade.entry_time)].append(trade)
+    rows = []
+    for bucket, bucket_trades in buckets.items():
+        metrics = _metrics_for_trades(bucket_trades, starting_equity, calendar_days).to_dict()
+        rows.append(
+            {
+                "session_bucket": bucket,
+                **metrics,
+                "win_probability": _win_probability(bucket_trades),
+            }
+        )
+    return rows
+
+
+def _ny_session_bucket(timestamp) -> str:
+    ny_time = timestamp.replace(tzinfo=UTC).astimezone(ZoneInfo("America/New_York")).time()
+    minutes = ny_time.hour * 60 + ny_time.minute
+    if 20 * 60 <= minutes < 24 * 60:
+        return "asia_2000_0000_ny"
+    if 2 * 60 <= minutes < 5 * 60:
+        return "london_0200_0500_ny"
+    if 8 * 60 <= minutes < 11 * 60:
+        return "new_york_0800_1100_ny"
+    return "other"
+
+
+def _best_session_bucket(session_attribution: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
+    populated = [row for row in session_attribution if int(row.get("trade_count") or 0) > 0]
+    if not populated:
+        return None
+    best = max(
+        populated,
+        key=lambda row: row.get("sharpe") if row.get("sharpe") is not None else -999,
+    )
+    return {
+        "session_bucket": best["session_bucket"],
+        "sharpe": best.get("sharpe"),
+        "trade_count": best.get("trade_count"),
+        "net_pnl": best.get("net_pnl"),
     }
 
 

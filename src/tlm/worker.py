@@ -527,6 +527,7 @@ def execute_research_vol_prescreen(payload: dict[str, Any]) -> dict[str, Any]:
         timeframe=str(payload.get("timeframe", "1m")),
         output_dir=Path(str(payload.get("output_dir", "experiments/vol_execution_artifacts"))),
         starting_equity=float(payload.get("starting_equity", 100_000)),
+        event_calendar_path=Path(str(payload["event_calendar"])) if payload.get("event_calendar") else Path("configs/macro_events.yaml"),
     )
 
 
