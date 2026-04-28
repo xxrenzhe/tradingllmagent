@@ -72,6 +72,7 @@ from .trigger_gate import (
     run_trigger_gate_simulation,
 )
 from .variants import DEFAULT_PARAMETER_BUDGET, ParameterBudgetError
+from .vol import write_vol_research_artifacts
 from .validation import generate_rolling_folds
 
 
@@ -753,6 +754,23 @@ def cmd_research_feature_readiness(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_research_vol_artifacts(args: argparse.Namespace) -> int:
+    symbol = get_symbol(args.symbol, Path(args.config_dir))
+    spec_paths = [Path(path) for path in args.specs] if args.specs else sorted(Path(args.strategies_root).glob("nq_vol_execution_*.yaml"))
+    specs = [load_strategy_spec(path).raw for path in spec_paths]
+    paths = write_vol_research_artifacts(
+        Path(args.output_dir),
+        experiments_root=Path(args.experiments_root),
+        symbol_config=symbol,
+        specs=specs,
+        quote_files=[Path(path) for path in (args.quote_files or [])],
+        quote_reports=[Path(path) for path in (args.quote_reports or [])],
+        paper_reports=[Path(path) for path in (args.paper_reports or [])],
+    )
+    print(json.dumps({"artifacts": paths}, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_research_discover_target(args: argparse.Namespace) -> int:
     if args.spec:
         spec = load_strategy_spec(Path(args.spec))
@@ -1341,6 +1359,17 @@ def build_parser() -> argparse.ArgumentParser:
     feature_readiness = research_subparsers.add_parser("feature-readiness")
     feature_readiness.add_argument("--output")
     feature_readiness.set_defaults(func=cmd_research_feature_readiness)
+
+    vol_artifacts = research_subparsers.add_parser("vol-artifacts")
+    vol_artifacts.add_argument("--output-dir", default="experiments/vol_execution_artifacts")
+    vol_artifacts.add_argument("--experiments-root", default="experiments")
+    vol_artifacts.add_argument("--strategies-root", default="strategies")
+    vol_artifacts.add_argument("--specs", nargs="*")
+    vol_artifacts.add_argument("--symbol", default="NQ_CME")
+    vol_artifacts.add_argument("--quote-files", action="append")
+    vol_artifacts.add_argument("--quote-reports", action="append")
+    vol_artifacts.add_argument("--paper-reports", action="append")
+    vol_artifacts.set_defaults(func=cmd_research_vol_artifacts)
 
     discover = research_subparsers.add_parser("discover-target")
     discover.add_argument("--spec")
