@@ -27,6 +27,7 @@ from tlm.dukascopy import (
     parse_bi5_ticks,
     raw_tick_path,
 )
+from tlm.firstrate import parse_firstrate_csv
 from tlm.quality import build_quality_report
 from tlm.storage import normalized_tick_path, write_ticks_parquet
 
@@ -191,6 +192,64 @@ class BarAndQualityTests(unittest.TestCase):
             code = main(["data", "discover", "--provider", "twelvedata", "--query", "NQmain"])
         self.assertEqual(code, 0)
         self.assertEqual(output.getvalue(), "")
+
+    def test_parse_firstrate_csv_header_timestamp(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "nq.csv"
+            path.write_text(
+                "timestamp,open,high,low,close,volume\n"
+                "2025-03-19 13:30:00,20000.00,20002.25,19999.75,20001.50,123\n",
+                encoding="utf-8",
+            )
+
+            bars = parse_firstrate_csv(path)
+
+        self.assertEqual(len(bars), 1)
+        self.assertEqual(bars[0].timestamp, datetime(2025, 3, 19, 13, 30))
+        self.assertAlmostEqual(bars[0].close, 20001.5)
+        self.assertAlmostEqual(bars[0].volume, 123)
+
+    def test_cli_import_firstrate_writes_daily_bar_partitions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            csv_path = Path(temp_dir) / "nq.csv"
+            csv_path.write_text(
+                "date,time,open,high,low,close,volume\n"
+                "2025-03-19,13:30:00,20000.00,20002.25,19999.75,20001.50,123\n"
+                "2025-03-20,13:30:00,20100.00,20102.25,20099.75,20101.50,456\n",
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "data",
+                        "import-firstrate",
+                        "--symbol",
+                        "NQ_1M",
+                        "--input",
+                        str(csv_path),
+                    ]
+                )
+
+            first_day_path = data_root / "bars" / "1m" / "NQ_1M" / "date=2025-03-19" / "part-000.parquet"
+            second_day_path = data_root / "bars" / "1m" / "NQ_1M" / "date=2025-03-20" / "part-000.parquet"
+            con = duckdb.connect(":memory:")
+            try:
+                rows = con.execute(
+                    "SELECT symbol, open, close, tick_count, avg_spread FROM read_parquet(?)",
+                    [str(first_day_path)],
+                ).fetchall()
+            finally:
+                con.close()
+
+            self.assertEqual(code, 0)
+            self.assertTrue(first_day_path.exists())
+            self.assertTrue(second_day_path.exists())
+            self.assertEqual(rows, [("NQ_1M", 20000.0, 20001.5, 123, None)])
+            self.assertIn("written", output.getvalue())
 
     def test_build_higher_timeframe_bars_from_1m_bars(self) -> None:
         hour = datetime(2025, 3, 19, 13, tzinfo=UTC)

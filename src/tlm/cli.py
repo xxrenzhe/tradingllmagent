@@ -28,6 +28,7 @@ from .events import (
     write_event_context_parquet,
 )
 from .feature_catalog import feature_readiness_report
+from .firstrate import import_firstrate_bars
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .monitor import build_monitor_report, write_monitor_outputs
 from .modules import (
@@ -195,6 +196,21 @@ def cmd_data_build_bars(args: argparse.Namespace) -> int:
         )
         print(f"wrote\t{output}\trows={count}\tdata_version_hash={data_version_hash}")
     print(f"bar build complete: rows={total}")
+    return 0
+
+
+def cmd_data_import_firstrate(args: argparse.Namespace) -> int:
+    symbol = get_symbol(args.symbol, Path(args.config_dir))
+    if symbol.provider.lower() != "firstratedata":
+        raise SystemExit(f"Symbol {args.symbol} provider must be firstratedata, got {symbol.provider}")
+    outputs = import_firstrate_bars(
+        csv_paths=[Path(path) for path in args.input],
+        data_root=Path(args.data_root),
+        symbol=args.symbol,
+        source_timezone=args.source_timezone,
+        force=args.force,
+    )
+    print(json.dumps({"symbol": args.symbol, "outputs": outputs}, indent=2, sort_keys=True))
     return 0
 
 
@@ -941,6 +957,13 @@ def build_parser() -> argparse.ArgumentParser:
     build_bars.add_argument("--to", dest="date_to", required=True)
     build_bars.add_argument("--timeframe", default="1m")
     build_bars.set_defaults(func=cmd_data_build_bars)
+
+    import_firstrate = data_subparsers.add_parser("import-firstrate")
+    import_firstrate.add_argument("--symbol", required=True)
+    import_firstrate.add_argument("--input", action="append", required=True)
+    import_firstrate.add_argument("--source-timezone", default="UTC")
+    import_firstrate.add_argument("--force", action="store_true")
+    import_firstrate.set_defaults(func=cmd_data_import_firstrate)
 
     quality = data_subparsers.add_parser("quality")
     quality.add_argument("--symbol", required=True)
