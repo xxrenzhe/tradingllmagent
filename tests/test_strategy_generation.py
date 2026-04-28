@@ -7,9 +7,11 @@ from pathlib import Path
 from tlm.feature_catalog import FEATURE_CATALOG, feature_catalog_by_name, feature_readiness_report
 from tlm.strategy import load_strategy_spec, parse_strategy_spec
 from tlm.strategy_generation import (
+    DEFAULT_SPREAD_GATE_TICKS,
     GENERATED_STRATEGY_COMPLEXITY_LIMIT,
     feature_combo_generation_manifest,
     generate_feature_combo_strategy_specs,
+    spread_gate_ticks_for_symbol,
     write_feature_combo_strategy_specs,
 )
 from tlm.variants import parameter_grid_metadata
@@ -61,6 +63,10 @@ class StrategyGenerationTests(unittest.TestCase):
                 self.assertIn("signal_grammar", raw)
                 grammar_text = str(raw["signal_grammar"])
                 self.assertIn("spread_ticks", grammar_text)
+                spread_filter = raw["signal_grammar"]["filters"]["all"][0]
+                self.assertEqual(spread_filter["feature"], "spread_ticks")
+                self.assertEqual(spread_filter["value"], 16)
+                self.assertEqual(raw["generation"]["spread_gate_ticks"], 16)
                 self.assertIn("atr_14", grammar_text)
                 self.assertIn("generation_id", raw["generation"])
                 self.assertIn("feature_combo_hash", raw["generation"])
@@ -70,6 +76,10 @@ class StrategyGenerationTests(unittest.TestCase):
                     GENERATED_STRATEGY_COMPLEXITY_LIMIT,
                 )
                 self.assertFalse(metadata.high_risk_budget)
+
+    def test_spread_gate_uses_symbol_specific_calibration(self) -> None:
+        self.assertEqual(spread_gate_ticks_for_symbol("NQmain"), 16)
+        self.assertEqual(spread_gate_ticks_for_symbol("UNKNOWN"), DEFAULT_SPREAD_GATE_TICKS)
 
     def test_write_feature_combo_strategy_specs_outputs_valid_specs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

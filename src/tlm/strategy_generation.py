@@ -21,6 +21,14 @@ EXECUTABLE_RANDOM_FEATURE_FAMILIES = (
 )
 
 GENERATED_STRATEGY_COMPLEXITY_LIMIT = 260
+DEFAULT_SPREAD_GATE_TICKS = 8
+
+_SYMBOL_SPREAD_GATE_TICKS = {
+    # NQmain is a Dukascopy USATECHIDXUSD CFD proxy in configs/symbols.yaml.
+    # Its observed 2018 RTH spread is around 12 ticks at tick_size=0.25, so
+    # the futures-like 8 tick gate rejects every test-session bar.
+    "NQmain": 16,
+}
 
 _FAMILY_FEATURE_WEIGHTS = {
     "opening_range_breakout": {"opening_range", "breakout", "volume", "vwap", "time", "volatility"},
@@ -197,7 +205,8 @@ def _build_spec(
     prefix: str,
 ) -> dict[str, Any]:
     template = _family_template(family, family_index)
-    grammar = _signal_grammar(family)
+    spread_gate_ticks = spread_gate_ticks_for_symbol(symbol)
+    grammar = _signal_grammar(family, spread_gate_ticks=spread_gate_ticks)
     features = _ensure_grammar_features(features, grammar)
     feature_names = [feature.name for feature in features]
     feature_combo_hash = stable_hash(feature_names)
@@ -245,6 +254,7 @@ def _build_spec(
             "feature_combo_hash": feature_combo_hash,
             "global_index": global_index,
             "feature_catalog_size": len(FEATURE_CATALOG),
+            "spread_gate_ticks": spread_gate_ticks,
         },
         "regime_filter": {},
         "indicators": template["indicators"],
@@ -316,10 +326,14 @@ def _grammar_feature_names(node) -> set[str]:
     return names
 
 
-def _signal_grammar(family: str) -> dict[str, Any]:
+def spread_gate_ticks_for_symbol(symbol: str) -> int:
+    return _SYMBOL_SPREAD_GATE_TICKS.get(symbol, DEFAULT_SPREAD_GATE_TICKS)
+
+
+def _signal_grammar(family: str, spread_gate_ticks: int = DEFAULT_SPREAD_GATE_TICKS) -> dict[str, Any]:
     base_filters = {
         "all": [
-            {"feature": "spread_ticks", "op": "<=", "value": 8},
+            {"feature": "spread_ticks", "op": "<=", "value": spread_gate_ticks},
             {"feature": "minutes_to_close", "op": ">=", "value": 20},
         ]
     }
