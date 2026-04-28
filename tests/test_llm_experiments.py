@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import date, timedelta
 from datetime import datetime
 from pathlib import Path
 
 from tlm.backtest import Trade
+from tlm.cli import main
 from tlm.experiments import (
     load_experiment_audit_logs,
     load_experiment_summary,
@@ -188,6 +191,80 @@ class LLMAndExperimentTests(unittest.TestCase):
         self.assertEqual(seeds, [])
         self.assertEqual(report["selected_count"], 0)
         self.assertTrue(report["skipped"])
+
+    def test_cli_seed_pool_target_discovery_without_explicit_spec(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            strategies_root = root / "strategies"
+            experiments_root = root / "experiments"
+            experiment_db = root / "experiments.sqlite3"
+            strategies_root.mkdir()
+            (strategies_root / "seed.json").write_text(json.dumps(base_spec()), encoding="utf-8")
+            for offset in range(40):
+                write_breakout_day(data_root, date(2025, 1, 1) + timedelta(days=offset))
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "research",
+                        "discover-target",
+                        "--experiments-root",
+                        str(experiments_root),
+                        "--experiment-db",
+                        str(experiment_db),
+                        "--strategies-root",
+                        str(strategies_root),
+                        "--symbol",
+                        "NQmain",
+                        "--timeframe",
+                        "1m",
+                        "--from",
+                        "2025-01-01",
+                        "--to",
+                        "2025-02-09",
+                        "--experiment-id",
+                        "cli_seed_pool_target_discovery",
+                        "--max-seed-strategies",
+                        "1",
+                        "--max-rounds",
+                        "1",
+                        "--trials-per-round",
+                        "1",
+                        "--min-annual-trades",
+                        "-1",
+                        "--min-sharpe",
+                        "-100",
+                        "--min-win-probability",
+                        "-1",
+                        "--train-days",
+                        "5",
+                        "--validation-days",
+                        "5",
+                        "--test-days",
+                        "5",
+                        "--step-days",
+                        "5",
+                        "--embargo-days",
+                        "1",
+                        "--final-holdout-days",
+                        "5",
+                        "--min-folds",
+                        "1",
+                    ]
+                )
+
+            summary_path = experiments_root / "cli_seed_pool_target_discovery" / "target_discovery.json"
+            summary_exists = summary_path.exists()
+            summary = load_experiment_summary(experiment_db, "cli_seed_pool_target_discovery")
+
+        self.assertEqual(code, 0)
+        self.assertTrue(summary_exists)
+        self.assertEqual(summary["experiment"]["status"], "completed")
+        self.assertIn("seed_selection_report", output.getvalue())
 
     def test_experiment_database_records_trials_and_audit_events(self) -> None:
         spec = parse_strategy_spec(base_spec())

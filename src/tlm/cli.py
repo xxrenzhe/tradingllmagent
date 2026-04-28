@@ -681,7 +681,7 @@ def cmd_research_discover_target(args: argparse.Namespace) -> int:
             "target_count": args.target_count,
             "llm_model": args.llm_model,
             "llm_parameters": args.llm_parameters,
-            "seed_spec": str(Path(args.spec)),
+            "seed_spec": str(Path(args.spec)) if args.spec else None,
             "seed_selection_report": seed_selection_report,
         },
     )
