@@ -27,6 +27,7 @@ from .modules import (
     module_summary_for_spec,
     write_module_performance_memory,
 )
+from .prescreen import build_pre_screen_report
 from .snapshot import research_snapshot
 from .storage import bar_path, normalized_tick_path
 from .strategy import StrategySpec, StrategySpecError, load_strategy_spec, parse_strategy_spec
@@ -104,6 +105,7 @@ class ResearchRunResult:
     strategy_card: dict
     next_round_suggestions: list[str]
     final_holdout_policy: dict
+    pre_screen_report: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -151,6 +153,7 @@ class ResearchRunResult:
             "strategy_card": self.strategy_card,
             "next_round_suggestions": self.next_round_suggestions,
             "final_holdout_policy": self.final_holdout_policy,
+            "pre_screen_report": self.pre_screen_report,
         }
 
 
@@ -951,6 +954,11 @@ def run_research_bar_validation(
         )
     )
     round_trip_cost = calculate_round_trip_cost(active_cost_model)
+    pre_screen_report = build_pre_screen_report(
+        all_test_trades,
+        aggregate_test_metrics,
+        round_trip_cost=round_trip_cost,
+    )
     validation_to_test_decay = calculate_sharpe_decay(
         aggregate_validation_metrics.sharpe,
         aggregate_test_metrics.sharpe,
@@ -1073,6 +1081,7 @@ def run_research_bar_validation(
         strategy_card=strategy_card,
         next_round_suggestions=next_round_suggestions,
         final_holdout_policy=final_holdout_policy,
+        pre_screen_report=pre_screen_report,
     )
 
 
