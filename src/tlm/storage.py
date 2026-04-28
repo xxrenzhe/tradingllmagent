@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import uuid
 from datetime import date
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -47,14 +49,17 @@ def _write_parquet(
     rows: Sequence[tuple],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
     con = duckdb.connect(":memory:")
     try:
         con.execute(f"CREATE TABLE {table_name} ({schema_sql})")
         if rows:
             con.executemany(insert_sql, rows)
-        con.execute(f"COPY {table_name} TO ? (FORMAT PARQUET)", [str(path)])
+        con.execute(f"COPY {table_name} TO ? (FORMAT PARQUET)", [str(temp_path)])
+        os.replace(temp_path, path)
     finally:
         con.close()
+        temp_path.unlink(missing_ok=True)
 
 
 def write_ticks_parquet(path: Path, symbol_alias: str, ticks: Sequence[Tick]) -> None:

@@ -18,8 +18,10 @@ SKIP_PREVIOUS_FAILED_DAYS="${SKIP_PREVIOUS_FAILED_DAYS:-0}"
 FAILED_DAY_CACHE="${LOG_DIR}/${RUN_ID}.failed-days.txt"
 HOUR_RETRIES="${HOUR_RETRIES:-3}"
 HOUR_TIMEOUT_SECONDS="${HOUR_TIMEOUT_SECONDS:-30}"
+LOCK_DIR="${LOCK_DIR:-${LOG_DIR}/locks}"
 
 mkdir -p "${LOG_DIR}"
+mkdir -p "${LOCK_DIR}"
 
 if [ -f /etc/ssl/cert.pem ] && [ -z "${SSL_CERT_FILE:-}" ]; then
   export SSL_CERT_FILE=/etc/ssl/cert.pem
@@ -80,6 +82,10 @@ tick_output_path() {
   printf "%s/normalized/ticks/%s/date=%s/part-000.parquet" "$DATA_ROOT" "$SYMBOL" "$1"
 }
 
+day_lock_path() {
+  printf "%s/%s-%s.lock" "$LOCK_DIR" "$SYMBOL" "$1"
+}
+
 run_cli() {
   "${PYTHON_CMD[@]}" -m tlm.cli --data-root "$DATA_ROOT" "$@"
 }
@@ -96,6 +102,7 @@ run_cli() {
   printf "skip_previous_failed_days\t%s\n" "$SKIP_PREVIOUS_FAILED_DAYS"
   printf "hour_retries\t%s\n" "$HOUR_RETRIES"
   printf "hour_timeout_seconds\t%s\n" "$HOUR_TIMEOUT_SECONDS"
+  printf "lock_dir\t%s\n" "$LOCK_DIR"
   printf "started_at\t%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "$LOG_FILE"
 
@@ -124,6 +131,13 @@ for day in $(date_range); do
     continue
   fi
 
+  day_lock="$(day_lock_path "$day")"
+  if ! mkdir "$day_lock" 2>/dev/null; then
+    printf "%s\t%s\tskipped_locked\t0\t%s\t0\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$day" "$available_gb" >> "$STATUS_FILE"
+    continue
+  fi
+  trap 'rmdir "$day_lock" 2>/dev/null || true' EXIT
+
   attempt=1
   while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     start_epoch="$(date +%s)"
@@ -147,6 +161,9 @@ for day in $(date_range); do
   if [ "$attempt" -gt "$MAX_ATTEMPTS" ]; then
     printf "[%s] giving up on %s after %s attempts; continuing\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$day" "$MAX_ATTEMPTS" >> "$LOG_FILE"
   fi
+
+  rmdir "$day_lock" 2>/dev/null || true
+  trap - EXIT
 done
 
 printf "finished_at\t%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LOG_FILE"

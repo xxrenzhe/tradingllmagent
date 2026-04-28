@@ -170,6 +170,20 @@ def execute_data_download(payload: dict[str, Any]) -> dict[str, Any]:
     status_counts: dict[str, int] = {}
     outputs: list[dict[str, Any]] = []
     for day in iter_dates(date_from, date_to):
+        output = normalized_tick_path(data_root, symbol_alias, day)
+        if output.exists() and output.stat().st_size > 0 and not payload.get("force", False):
+            outputs.append(
+                {
+                    "date": day.isoformat(),
+                    "path": str(output),
+                    "rows": 0,
+                    "raw_files": 0,
+                    "status_counts": {"skipped_existing_day": 1},
+                    "data_version_hash": None,
+                }
+            )
+            status_counts["skipped_existing_day"] = status_counts.get("skipped_existing_day", 0) + 1
+            continue
         start, end = day_bounds(day)
         day_ticks = []
         raw_paths: list[Path] = []
@@ -201,7 +215,6 @@ def execute_data_download(payload: dict[str, Any]) -> dict[str, Any]:
                 + ", ".join(f"{item['hour']}={item['error']}" for item in failed_hours)
             )
 
-        output = normalized_tick_path(data_root, symbol_alias, day)
         write_ticks_parquet(output, symbol_alias, day_ticks)
         total_ticks += len(day_ticks)
         metadata = {

@@ -83,6 +83,18 @@ class DukascopyParsingTests(unittest.TestCase):
         self.assertEqual(result.status, "cached")
         self.assertEqual(result.bytes_written, 0)
 
+    def test_download_hour_times_out_when_lock_is_held(self) -> None:
+        symbol = get_symbol("NQmain")
+        hour = datetime(2025, 3, 22, 0, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            target = raw_tick_path(data_root, symbol.instrument, hour)
+            target.parent.mkdir(parents=True)
+            target.with_suffix(f"{target.suffix}.lock").write_text("pid=other\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(RuntimeError, "Timed out waiting for download lock"):
+                download_hour(symbol, hour, data_root, lock_wait_seconds=0)
+
 
 class BarAndQualityTests(unittest.TestCase):
     def test_build_minute_bars_from_ticks(self) -> None:
@@ -306,6 +318,36 @@ class BarAndQualityTests(unittest.TestCase):
         self.assertTrue(all(call[2] == data_root for call in calls))
         self.assertTrue(all(call[3] == 1 for call in calls))
         self.assertTrue(all(call[4] == 7 for call in calls))
+
+    def test_cli_download_skips_existing_normalized_day(self) -> None:
+        hour = datetime(2025, 3, 19, 13, tzinfo=UTC)
+        ticks = parse_bi5_ticks(make_bi5([(100, 100_200, 100_000, 1.0, 2.0)]), hour, 1000)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            tick_path = normalized_tick_path(data_root, "NQmain", hour.date())
+            write_ticks_parquet(tick_path, "NQmain", ticks)
+
+            output = io.StringIO()
+            with patch("tlm.cli.download_hour") as download:
+                with redirect_stdout(output):
+                    code = main(
+                        [
+                            "--data-root",
+                            str(data_root),
+                            "data",
+                            "download",
+                            "--symbol",
+                            "NQmain",
+                            "--from",
+                            "2025-03-19",
+                            "--to",
+                            "2025-03-19",
+                        ]
+                    )
+
+        self.assertEqual(code, 0)
+        download.assert_not_called()
+        self.assertIn("skipped_existing_day", output.getvalue())
 
     def test_cli_download_continues_after_hour_failure_before_failing_day(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

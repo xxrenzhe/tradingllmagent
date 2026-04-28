@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import lzma
+import os
 import struct
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -82,39 +84,74 @@ def download_hour(
     data_root: Path,
     retries: int = 3,
     timeout_seconds: int = 30,
+    lock_wait_seconds: int = 300,
 ) -> DownloadResult:
     target = raw_tick_path(data_root, symbol.instrument, hour)
+    url = dukascopy_url(symbol.instrument, hour)
     if target.exists():
         return DownloadResult(
-            url=dukascopy_url(symbol.instrument, hour),
+            url=url,
             path=target,
             status="cached",
             bytes_written=target.stat().st_size,
         )
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    url = dukascopy_url(symbol.instrument, hour)
-    last_error: Exception | None = None
-    for attempt in range(retries + 1):
+    lock_path = target.with_suffix(f"{target.suffix}.lock")
+    deadline = time.monotonic() + max(lock_wait_seconds, 0)
+    while True:
         try:
-            with urlopen(url, timeout=timeout_seconds) as response:
-                payload = response.read()
-            target.write_bytes(payload)
-            return DownloadResult(url=url, path=target, status="downloaded", bytes_written=len(payload))
-        except HTTPError as exc:
-            if exc.code == 404:
-                return DownloadResult(url=url, path=target, status="empty_hour")
-            last_error = exc
-        except URLError as exc:
-            last_error = exc
-        except TimeoutError as exc:
-            last_error = exc
-        except OSError as exc:
-            last_error = exc
-        if attempt < retries:
-            time.sleep(min(2**attempt, 8))
+            lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            with os.fdopen(lock_fd, "w", encoding="utf-8") as handle:
+                handle.write(f"pid={os.getpid()}\nhour={hour.isoformat()}\n")
+            break
+        except FileExistsError:
+            if target.exists():
+                return DownloadResult(
+                    url=url,
+                    path=target,
+                    status="cached",
+                    bytes_written=target.stat().st_size,
+                )
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"Timed out waiting for download lock {lock_path}")
+            time.sleep(0.25)
 
-    raise RuntimeError(f"Failed to download {url}: {last_error}")
+    temp_path = target.with_name(f".{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    last_error: Exception | None = None
+    try:
+        if target.exists():
+            return DownloadResult(
+                url=url,
+                path=target,
+                status="cached",
+                bytes_written=target.stat().st_size,
+            )
+        for attempt in range(retries + 1):
+            try:
+                with urlopen(url, timeout=timeout_seconds) as response:
+                    payload = response.read()
+                temp_path.write_bytes(payload)
+                os.replace(temp_path, target)
+                return DownloadResult(url=url, path=target, status="downloaded", bytes_written=len(payload))
+            except HTTPError as exc:
+                if exc.code == 404:
+                    return DownloadResult(url=url, path=target, status="empty_hour")
+                last_error = exc
+            except URLError as exc:
+                last_error = exc
+            except TimeoutError as exc:
+                last_error = exc
+            except OSError as exc:
+                last_error = exc
+            finally:
+                temp_path.unlink(missing_ok=True)
+            if attempt < retries:
+                time.sleep(min(2**attempt, 8))
+
+        raise RuntimeError(f"Failed to download {url}: {last_error}")
+    finally:
+        lock_path.unlink(missing_ok=True)
 
 
 def parse_bi5_ticks(payload: bytes, hour_start: datetime, price_scale: int) -> list[Tick]:

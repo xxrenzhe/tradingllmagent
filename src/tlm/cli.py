@@ -117,10 +117,14 @@ def cmd_data_download(args: argparse.Namespace) -> int:
     date_to = parse_date(args.date_to)
 
     total_ticks = 0
-    raw_paths: list[Path] = []
     for day in iter_dates(date_from, date_to):
+        output = normalized_tick_path(data_root, args.symbol, day)
+        if output.exists() and output.stat().st_size > 0 and not args.force:
+            print(f"skipped_existing_day\t{output}")
+            continue
         start, end = day_bounds(day)
         day_ticks = []
+        raw_paths: list[Path] = []
         failed_hours: list[tuple[datetime, str]] = []
         for hour in iter_hours(start, end):
             try:
@@ -145,7 +149,6 @@ def cmd_data_download(args: argparse.Namespace) -> int:
             failures = ", ".join(f"{hour.isoformat()}={error}" for hour, error in failed_hours)
             raise RuntimeError(f"Failed to download all hours for {day.isoformat()}: {failures}")
 
-        output = normalized_tick_path(data_root, args.symbol, day)
         write_ticks_parquet(output, args.symbol, day_ticks)
         total_ticks += len(day_ticks)
         metadata = {
@@ -927,6 +930,7 @@ def build_parser() -> argparse.ArgumentParser:
     download.add_argument("--granularity", default="tick")
     download.add_argument("--hour-retries", type=int, default=3)
     download.add_argument("--hour-timeout-seconds", type=int, default=30)
+    download.add_argument("--force", action="store_true", help="rebuild existing non-empty normalized day outputs")
     download.set_defaults(func=cmd_data_download)
 
     build_bars = data_subparsers.add_parser("build-bars")
