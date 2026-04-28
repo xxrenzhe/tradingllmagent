@@ -13,6 +13,7 @@ from tlm.vol import (
     VOL_ARTIFACT_FILENAMES,
     build_vol_cost_stress_report,
     build_vol_feature_readiness,
+    build_vol_llm_trigger_audit,
     build_vol_mutation_memory,
     build_vol_paper_shadow_review,
     build_vol_quote_replay_report,
@@ -37,12 +38,14 @@ class VolResearchArtifactTests(unittest.TestCase):
         quote = build_vol_quote_replay_report(quote_files=[])
         paper = build_vol_paper_shadow_review([])
         memory = build_vol_mutation_memory(leaderboard)
+        audit = build_vol_llm_trigger_audit(leaderboard, memory)
 
         self.assertEqual(leaderboard["summary"]["generated_seed_count"], 5)
         self.assertEqual(cost["candidate_count"], 0)
         self.assertEqual(quote["status"], "blocked")
         self.assertEqual(paper["status"], "blocked")
         self.assertEqual(memory["record_count"], 0)
+        self.assertEqual(audit["status"], "blocked")
 
     def test_write_vol_research_artifacts_outputs_required_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -57,6 +60,59 @@ class VolResearchArtifactTests(unittest.TestCase):
             for path in paths.values():
                 payload = json.loads(Path(path).read_text(encoding="utf-8"))
                 self.assertIn("artifact", payload)
+
+    def test_vol_llm_trigger_audit_records_required_review_contract(self) -> None:
+        leaderboard = {
+            "candidate_leaderboard": [
+                {
+                    "experiment_id": "vol_prescreen_candidate",
+                    "strategy_name": "nq_vol_execution_candidate",
+                    "strategy_family": "vol_breakout_trend",
+                    "strategy_spec_hash": "candidate_hash",
+                    "passed": True,
+                    "final_target_passed": False,
+                    "annual_trades_test": 1200,
+                    "sharpe_test": 1.2,
+                    "win_probability_test": 0.54,
+                    "reasons": [],
+                    "next_round_suggestions": [],
+                    "vol_feature_card": {"feature_names": ["bar_volume"]},
+                    "strategy_card": {"strategy_family": "vol_breakout_trend"},
+                    "execution_card": {"round_trip_cost_usd": 28.0},
+                    "data_version_hash": "data_hash",
+                    "feature_snapshot_hash": "feature_hash",
+                    "cost_model_hash": "cost_hash",
+                }
+            ],
+            "rejected": [
+                {
+                    "experiment_id": "vol_prescreen_rejected",
+                    "strategy_name": "nq_vol_execution_rejected",
+                    "strategy_family": "vol_absorption_reversal",
+                    "strategy_spec_hash": "rejected_hash",
+                    "passed": False,
+                    "final_target_passed": False,
+                    "annual_trades_test": 120,
+                    "sharpe_test": -0.4,
+                    "win_probability_test": 0.49,
+                    "reasons": ["annual_trades_test"],
+                    "next_round_suggestions": ["tighten_volume_threshold"],
+                }
+            ],
+        }
+
+        audit = build_vol_llm_trigger_audit(leaderboard)
+
+        self.assertEqual(audit["status"], "ready_for_llm_review")
+        self.assertEqual(audit["record_count"], 2)
+        self.assertGreater(audit["token_cost_report"]["estimated_total_tokens"], 0)
+        candidate = audit["records"][0]
+        self.assertEqual(candidate["trigger_reason"], "candidate_prescreen_complete")
+        self.assertEqual(candidate["llm_call_status"], "queued_not_called")
+        self.assertIn("request_quote_replay", candidate["allowed_actions"])
+        self.assertIn("direct_live_order", candidate["blocked_actions"])
+        self.assertEqual(candidate["mutation_outcome"]["status"], "pending_llm_review")
+        self.assertIn("input_artifact_hash", candidate)
 
     def test_vol_quote_replay_report_summarizes_execution_models(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -193,6 +249,7 @@ class VolResearchArtifactTests(unittest.TestCase):
             self.assertEqual(leaderboard["summary"]["generated_seed_count"], 2)
             self.assertTrue((output_dir / "vol_strategy_leaderboard.json").exists())
             self.assertTrue((output_dir / "vol_mutation_memory.json").exists())
+            self.assertTrue((output_dir / "vol_llm_trigger_audit.json").exists())
             self.assertIn("family_attribution", leaderboard)
             self.assertIn("data_version_hash", leaderboard["artifact_hashes"])
             self.assertIn("event_calendar_hash", leaderboard["artifact_hashes"])

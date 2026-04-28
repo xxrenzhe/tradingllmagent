@@ -36,6 +36,7 @@ VOL_ARTIFACT_FILENAMES = (
     "vol_cost_stress_report.json",
     "vol_quote_replay_report.json",
     "vol_paper_shadow_review.json",
+    "vol_llm_trigger_audit.json",
     "vol_mutation_memory.json",
 )
 
@@ -309,7 +310,9 @@ def run_vol_prescreen(
         write_json(output_dir / "vol_prescreen_report.json", report)
         write_json(output_dir / "vol_strategy_leaderboard.json", leaderboard)
         write_json(output_dir / "vol_cost_stress_report.json", build_vol_cost_stress_report(leaderboard, symbol_config))
-        write_json(output_dir / "vol_mutation_memory.json", build_vol_mutation_memory(leaderboard))
+        mutation_memory = build_vol_mutation_memory(leaderboard)
+        write_json(output_dir / "vol_llm_trigger_audit.json", build_vol_llm_trigger_audit(leaderboard, mutation_memory))
+        write_json(output_dir / "vol_mutation_memory.json", mutation_memory)
     return report
 
 
@@ -543,6 +546,96 @@ def build_vol_mutation_memory(leaderboard_report: dict[str, Any]) -> dict[str, A
     }
 
 
+def build_vol_llm_trigger_audit(
+    leaderboard_report: dict[str, Any],
+    mutation_memory: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    rows = list(leaderboard_report.get("candidate_leaderboard", [])) + [
+        row for row in leaderboard_report.get("rejected", []) if row
+    ]
+    memory_records = {
+        str(record.get("strategy_spec_hash")): record
+        for record in (mutation_memory or build_vol_mutation_memory(leaderboard_report)).get("records", [])
+        if record.get("strategy_spec_hash")
+    }
+    records = []
+    for row in rows:
+        memory_record = memory_records.get(str(row.get("strategy_spec_hash")), {})
+        prompt_payload = _vol_llm_audit_prompt_payload(row, memory_record)
+        token_estimate = _vol_token_estimate(prompt_payload)
+        records.append(
+            {
+                "audit_id": stable_hash(
+                    {
+                        "strategy_spec_hash": row.get("strategy_spec_hash"),
+                        "input_artifact_hash": stable_hash(prompt_payload),
+                        "trigger_reason": _vol_llm_trigger_reason(row),
+                    }
+                ),
+                "experiment_id": row.get("experiment_id"),
+                "strategy_name": row.get("strategy_name"),
+                "strategy_spec_hash": row.get("strategy_spec_hash"),
+                "strategy_family": row.get("strategy_family") or row.get("strategy_card", {}).get("strategy_family"),
+                "trigger_reason": _vol_llm_trigger_reason(row),
+                "llm_call_status": "queued_not_called",
+                "input_artifact_hash": stable_hash(prompt_payload),
+                "token_estimate": token_estimate,
+                "allowed_actions": _vol_llm_allowed_actions(row),
+                "blocked_actions": [
+                    "direct_live_order",
+                    "broker_order_command",
+                    "read_final_holdout_before_freeze",
+                    "remove_cost_model",
+                    "promote_without_quote_replay",
+                    "promote_without_paper_shadow",
+                    "increase_position_size_without_risk_budget",
+                ],
+                "mutation_outcome": {
+                    "status": "pending_llm_review",
+                    "allowed_mutations": memory_record.get("allowed_mutations", _allowed_mutations(row)),
+                    "blocked_mutations": memory_record.get(
+                        "blocked_mutations",
+                        [
+                            "read_final_holdout_before_freeze",
+                            "remove_cost_model",
+                            "promote_without_quote_replay",
+                            "promote_without_paper_shadow",
+                        ],
+                    ),
+                    "applied": False,
+                    "outcome_window": None,
+                },
+            }
+        )
+    total_tokens = sum(int(record["token_estimate"]["total_tokens"]) for record in records)
+    return {
+        "schema_version": 1,
+        "artifact": "vol_llm_trigger_audit",
+        "status": "ready_for_llm_review" if records else "blocked",
+        "record_count": len(records),
+        "token_cost_report": {
+            "estimated_total_tokens": total_tokens,
+            "estimated_input_tokens": sum(int(record["token_estimate"]["input_tokens"]) for record in records),
+            "estimated_output_tokens": sum(int(record["token_estimate"]["output_tokens"]) for record in records),
+            "token_estimate_method": "json_prompt_chars_div_4_plus_fixed_output",
+        },
+        "required_fields": [
+            "trigger_reason",
+            "input_artifact_hash",
+            "token_estimate",
+            "allowed_actions",
+            "mutation_outcome",
+        ],
+        "safety_policy": {
+            "llm_visible_splits": ["train", "validation", "test_summary"],
+            "llm_hidden_splits": ["final_holdout"],
+            "runtime_scope": "review_only",
+            "may_emit_live_orders": False,
+        },
+        "records": records,
+    }
+
+
 def write_vol_research_artifacts(
     output_dir: Path,
     *,
@@ -556,6 +649,7 @@ def write_vol_research_artifacts(
     output_dir.mkdir(parents=True, exist_ok=True)
     feature_readiness = build_vol_feature_readiness()
     leaderboard = build_vol_strategy_leaderboard(experiments_root, specs=specs)
+    mutation_memory = build_vol_mutation_memory(leaderboard)
     artifacts = {
         "vol_feature_readiness.json": feature_readiness,
         "vol_strategy_leaderboard.json": leaderboard,
@@ -565,7 +659,8 @@ def write_vol_research_artifacts(
             existing_reports=quote_reports,
         ),
         "vol_paper_shadow_review.json": build_vol_paper_shadow_review(paper_reports),
-        "vol_mutation_memory.json": build_vol_mutation_memory(leaderboard),
+        "vol_llm_trigger_audit.json": build_vol_llm_trigger_audit(leaderboard, mutation_memory),
+        "vol_mutation_memory.json": mutation_memory,
     }
     paths = {}
     for filename, payload in artifacts.items():
@@ -594,6 +689,88 @@ def _allowed_mutations(row: dict[str, Any]) -> list[str]:
     if "sharpe_test_aggregate" in reasons:
         mutations.append("add_regime_filter")
     return mutations
+
+
+def _vol_llm_trigger_reason(row: dict[str, Any]) -> str:
+    if row.get("final_target_passed"):
+        return "final_target_prescreen_complete"
+    if row.get("passed"):
+        return "candidate_prescreen_complete"
+    return "rejection_diagnostic_required"
+
+
+def _vol_llm_allowed_actions(row: dict[str, Any]) -> list[str]:
+    actions = [
+        "propose_small_parameter_mutation",
+        "propose_session_filter",
+        "propose_event_filter",
+        "abandon_candidate",
+    ]
+    if row.get("passed"):
+        actions.extend(["request_quote_replay", "defer_until_quote_replay"])
+    else:
+        actions.extend(["lower_family_generation_weight", "keep_for_family_diagnostics"])
+    return actions
+
+
+def _vol_llm_audit_prompt_payload(row: dict[str, Any], memory_record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "task": "vol_strategy_review",
+        "experiment_id": row.get("experiment_id"),
+        "strategy_name": row.get("strategy_name"),
+        "strategy_spec_hash": row.get("strategy_spec_hash"),
+        "trigger_reason": _vol_llm_trigger_reason(row),
+        "metrics": {
+            "trade_count": row.get("trade_count"),
+            "annual_trades_test": row.get("annual_trades_test"),
+            "net_pnl_test": row.get("net_pnl_test"),
+            "sharpe_test": row.get("sharpe_test"),
+            "win_probability_test": row.get("win_probability_test"),
+            "profit_factor_test": row.get("profit_factor_test"),
+            "max_drawdown_test": row.get("max_drawdown_test"),
+            "avg_trade_net_pnl": row.get("avg_trade_net_pnl"),
+        },
+        "cards": {
+            "vol_feature_card": row.get("vol_feature_card", {}),
+            "strategy_card": row.get("strategy_card", {}),
+            "execution_card": row.get("execution_card", {}),
+        },
+        "attribution": {
+            "event_non_event_view": row.get("event_non_event_view", {}),
+            "session_attribution": row.get("session_attribution", []),
+            "parameter_heatmap": row.get("parameter_heatmap", []),
+        },
+        "diagnostics": {
+            "reasons": row.get("reasons", []),
+            "next_round_suggestions": row.get("next_round_suggestions", []),
+            "memory_record": memory_record,
+        },
+        "artifact_hashes": {
+            "data_version_hash": row.get("data_version_hash"),
+            "feature_snapshot_hash": row.get("feature_snapshot_hash"),
+            "cost_model_hash": row.get("cost_model_hash"),
+            "event_calendar_hash": row.get("event_calendar_hash"),
+        },
+        "allowed_actions": _vol_llm_allowed_actions(row),
+        "forbidden_outputs": [
+            "direct_live_order",
+            "broker_order_command",
+            "read_final_holdout_before_freeze",
+            "remove_cost_model",
+            "promote_without_quote_replay",
+            "promote_without_paper_shadow",
+        ],
+    }
+
+
+def _vol_token_estimate(prompt_payload: dict[str, Any]) -> dict[str, int]:
+    input_tokens = max(len(json.dumps(prompt_payload, sort_keys=True, default=str)) // 4, 1)
+    output_tokens = 192
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+    }
 
 
 def _vol_family_attribution(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:

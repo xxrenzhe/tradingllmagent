@@ -804,7 +804,7 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(results["execution.quote_fill_replay"]["result"]["status"], "blocked")
         self.assertEqual(results["paper.vol_shadow_review"]["result"]["status"], "blocked")
         self.assertEqual(results["memory.vol_mutation_backfill"]["result"]["record_count"], 0)
-        self.assertEqual(len(artifacts["result"]["artifacts"]), 6)
+        self.assertEqual(len(artifacts["result"]["artifacts"]), 7)
         self.assertTrue(manifest_exists)
 
 
@@ -854,6 +854,7 @@ class APIImportTests(unittest.TestCase):
         self.assertEqual(overview["feature_readiness"]["status"], "ready")
         self.assertEqual(overview["quote_replay"]["status"], "blocked")
         self.assertEqual(overview["paper_shadow"]["status"], "blocked")
+        self.assertEqual(overview["llm_trigger_audit"]["status"], "blocked")
         self.assertIn("strategy_leaderboard", overview)
 
     def test_fastapi_app_registers_research_console_routes_when_installed(self) -> None:

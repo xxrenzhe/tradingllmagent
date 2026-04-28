@@ -64,6 +64,7 @@ from .trigger_gate import (
 from .vol import (
     build_vol_cost_stress_report,
     build_vol_feature_readiness,
+    build_vol_llm_trigger_audit,
     build_vol_mutation_memory,
     build_vol_paper_shadow_review,
     build_vol_quote_replay_report,
@@ -391,6 +392,7 @@ def build_vol_overview_response(
         "cost_stress": build_vol_cost_stress_report(leaderboard, symbol_config),
         "quote_replay": build_vol_quote_replay_report(quote_files=[]),
         "paper_shadow": build_vol_paper_shadow_review([]),
+        "llm_trigger_audit": build_vol_llm_trigger_audit(leaderboard),
         "mutation_memory": build_vol_mutation_memory(leaderboard),
     }
 

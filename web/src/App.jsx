@@ -1262,6 +1262,12 @@ function VolPipelineTable({ overview }) {
       detail: "Paper shadow reports"
     },
     {
+      stage: "LLM trigger audit",
+      status: overview?.llm_trigger_audit?.status ?? "unknown",
+      count: overview?.llm_trigger_audit?.record_count ?? 0,
+      detail: "Review triggers and token estimates"
+    },
+    {
       stage: "Mutation memory",
       status: (overview?.mutation_memory?.record_count ?? 0) ? "ready" : "waiting",
       count: overview?.mutation_memory?.record_count ?? 0,
