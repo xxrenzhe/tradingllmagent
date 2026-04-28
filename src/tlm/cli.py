@@ -63,7 +63,7 @@ from .storage import (
     write_ticks_parquet,
 )
 from .strategy import StrategySpecError, load_strategy_spec, with_strategy_symbol
-from .strategy_generation import write_feature_combo_strategy_specs
+from .strategy_generation import write_feature_combo_strategy_specs, write_vol_strategy_specs
 from .trigger_gate import (
     append_trigger_gate_outcome_from_payload,
     build_forward_test_schedule,
@@ -722,6 +722,28 @@ def cmd_research_generate_feature_seeds(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_research_generate_vol_seeds(args: argparse.Namespace) -> int:
+    paths = write_vol_strategy_specs(
+        output_dir=Path(args.output_dir),
+        symbol=args.symbol,
+        timeframe=args.timeframe,
+        prefix=args.prefix,
+        manifest_path=Path(args.manifest_output) if args.manifest_output else None,
+    )
+    print(
+        json.dumps(
+            {
+                "count": len(paths),
+                "output_dir": str(Path(args.output_dir)),
+                "strategy_specs": [str(path) for path in paths],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def cmd_research_feature_readiness(args: argparse.Namespace) -> int:
     report = feature_readiness_report()
     output = Path(args.output) if args.output else None
@@ -1307,6 +1329,14 @@ def build_parser() -> argparse.ArgumentParser:
     generate_feature_seeds.add_argument("--prefix", default="generated_feature_combo")
     generate_feature_seeds.add_argument("--manifest-output")
     generate_feature_seeds.set_defaults(func=cmd_research_generate_feature_seeds)
+
+    generate_vol_seeds = research_subparsers.add_parser("generate-vol-seeds")
+    generate_vol_seeds.add_argument("--output-dir", default="strategies")
+    generate_vol_seeds.add_argument("--symbol", default="NQ_CME")
+    generate_vol_seeds.add_argument("--timeframe", default="1m")
+    generate_vol_seeds.add_argument("--prefix", default="vol_execution")
+    generate_vol_seeds.add_argument("--manifest-output", default="strategies/generated/vol_execution_manifest.json")
+    generate_vol_seeds.set_defaults(func=cmd_research_generate_vol_seeds)
 
     feature_readiness = research_subparsers.add_parser("feature-readiness")
     feature_readiness.add_argument("--output")

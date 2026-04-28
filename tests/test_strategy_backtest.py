@@ -238,7 +238,7 @@ class StrategyValidationTests(unittest.TestCase):
             with self.subTest(path=str(path)):
                 spec = load_strategy_spec(path)
                 metadata = parameter_grid_metadata(spec, max_trials=1)
-                self.assertEqual(spec.symbol, "NQmain")
+                self.assertIn(spec.symbol, {"NQmain", "NQ_CME"})
                 self.assertEqual(spec.timeframe, "1m")
                 self.assertFalse(metadata.high_risk_budget)
 

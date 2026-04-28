@@ -9,10 +9,14 @@ from tlm.strategy import load_strategy_spec, parse_strategy_spec
 from tlm.strategy_generation import (
     DEFAULT_SPREAD_GATE_TICKS,
     GENERATED_STRATEGY_COMPLEXITY_LIMIT,
+    VOL_EXECUTION_AWARE_FAMILIES,
     feature_combo_generation_manifest,
     generate_feature_combo_strategy_specs,
+    generate_vol_strategy_specs,
     spread_gate_ticks_for_symbol,
     write_feature_combo_strategy_specs,
+    write_vol_strategy_specs,
+    vol_strategy_generation_manifest,
 )
 from tlm.variants import parameter_grid_metadata
 
@@ -106,3 +110,35 @@ class StrategyGenerationTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(first["strategy_count"], 2)
         self.assertTrue(first["strategy_manifest_hash"])
+
+    def test_vol_strategy_generation_outputs_execution_aware_specs(self) -> None:
+        specs = generate_vol_strategy_specs()
+
+        self.assertEqual(len(specs), len(VOL_EXECUTION_AWARE_FAMILIES))
+        self.assertEqual({spec["strategy_family"] for spec in specs}, set(VOL_EXECUTION_AWARE_FAMILIES))
+        for raw in specs:
+            with self.subTest(strategy=raw["name"]):
+                spec = parse_strategy_spec(raw)
+                self.assertEqual(spec.symbol, "NQ_CME")
+                self.assertEqual(spec.timeframe, "1m")
+                self.assertEqual(raw["generation"]["method"], "deterministic_vol_execution_seed")
+                self.assertEqual(
+                    raw["generation"]["execution_assumption"],
+                    "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+                )
+                grammar_text = str(raw["signal_grammar"])
+                self.assertIn("bar_volume", str(raw["feature_set"]))
+                self.assertIn("low_volume_filter", grammar_text)
+                self.assertIn("spread_ticks", grammar_text)
+
+    def test_write_vol_strategy_specs_outputs_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest_path = Path(temp_dir) / "manifest.json"
+            paths = write_vol_strategy_specs(Path(temp_dir), manifest_path=manifest_path)
+            specs = [load_strategy_spec(path) for path in paths]
+            manifest = vol_strategy_generation_manifest([spec.raw for spec in specs])
+
+            self.assertEqual(len(paths), len(VOL_EXECUTION_AWARE_FAMILIES))
+            self.assertTrue(manifest_path.exists())
+            self.assertEqual(manifest["strategy_count"], len(VOL_EXECUTION_AWARE_FAMILIES))
+            self.assertIn("vol_quote_replay_report.json", manifest["required_next_artifacts"])

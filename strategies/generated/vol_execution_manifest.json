@@ -1,0 +1,63 @@
+{
+  "method": "deterministic_vol_execution_seed",
+  "prefix": "vol_execution",
+  "required_next_artifacts": [
+    "vol_feature_readiness.json",
+    "vol_strategy_leaderboard.json",
+    "vol_cost_stress_report.json",
+    "vol_quote_replay_report.json",
+    "vol_paper_shadow_review.json",
+    "vol_mutation_memory.json"
+  ],
+  "strategies": [
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "de5521785ae15bd9",
+      "name": "nq_vol_execution_vol_breakout_01",
+      "path": "strategies/nq_vol_execution_vol_breakout_01.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "a038f7b9fde08b87",
+      "name": "nq_vol_execution_vol_pullback_02",
+      "path": "strategies/nq_vol_execution_vol_pullback_02.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "41f8d5d694fbddeb",
+      "name": "nq_vol_execution_vol_absorb_03",
+      "path": "strategies/nq_vol_execution_vol_absorb_03.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "e68d912d3dfeff6b",
+      "name": "nq_vol_execution_vol_macd_04",
+      "path": "strategies/nq_vol_execution_vol_macd_04.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "e6b4db549a4f6975",
+      "name": "nq_vol_execution_vol_revert_05",
+      "path": "strategies/nq_vol_execution_vol_revert_05.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    }
+  ],
+  "strategy_count": 5,
+  "strategy_manifest_hash": "abedd1dcc53f9e9668b97269099d1aa2d526710b22256b099d033c0ffb07c4fd",
+  "symbol": "NQ_CME",
+  "timeframe": "1m"
+}

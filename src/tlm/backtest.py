@@ -25,6 +25,11 @@ EXECUTABLE_STRATEGY_FAMILIES = {
     "regime_filtered_mean_reversion",
     "time_of_day_edge",
     "gap_fade_or_continuation",
+    "vol_breakout_trend",
+    "ma_pullback_volume_confirm",
+    "volume_absorption_reversion",
+    "macd_ma_volume_confirm",
+    "rsi_reversion_low_volume",
 }
 
 

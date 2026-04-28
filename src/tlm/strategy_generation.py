@@ -20,6 +20,14 @@ EXECUTABLE_RANDOM_FEATURE_FAMILIES = (
     "gap_fade_or_continuation",
 )
 
+VOL_EXECUTION_AWARE_FAMILIES = (
+    "vol_breakout_trend",
+    "ma_pullback_volume_confirm",
+    "volume_absorption_reversion",
+    "macd_ma_volume_confirm",
+    "rsi_reversion_low_volume",
+)
+
 GENERATED_STRATEGY_COMPLEXITY_LIMIT = 260
 DEFAULT_SPREAD_GATE_TICKS = 8
 
@@ -38,6 +46,11 @@ _FAMILY_FEATURE_WEIGHTS = {
     "regime_filtered_mean_reversion": {"mean_reversion", "oscillator", "level", "vwap", "volatility"},
     "time_of_day_edge": {"time", "volume", "event", "return", "volatility"},
     "gap_fade_or_continuation": {"gap", "level", "opening_range", "volume", "event", "volatility"},
+    "vol_breakout_trend": {"volume", "breakout", "trend", "volatility", "time"},
+    "ma_pullback_volume_confirm": {"volume", "trend", "return", "vwap", "volatility"},
+    "volume_absorption_reversion": {"volume", "mean_reversion", "candle", "volatility", "vwap"},
+    "macd_ma_volume_confirm": {"volume", "trend", "return", "time", "volatility"},
+    "rsi_reversion_low_volume": {"volume", "oscillator", "mean_reversion", "vwap", "volatility"},
 }
 
 
@@ -136,6 +149,123 @@ def write_feature_combo_strategy_specs(
     return paths
 
 
+def generate_vol_strategy_specs(
+    *,
+    symbol: str = "NQ_CME",
+    timeframe: str = "1m",
+    prefix: str = "vol_execution",
+) -> list[dict[str, Any]]:
+    features_by_name = feature_catalog_by_name()
+    specs = []
+    for index, family in enumerate(VOL_EXECUTION_AWARE_FAMILIES, start=1):
+        grammar = _vol_signal_grammar(family)
+        feature_names = sorted(_grammar_feature_names(grammar) | {"bar_volume"})
+        features = tuple(
+            features_by_name[_catalog_feature_name(name)]
+            for name in feature_names
+            if _catalog_feature_name(name) in features_by_name
+        )
+        spec = _build_spec(
+            family=family,
+            family_index=index,
+            global_index=index,
+            features=features,
+            symbol=symbol,
+            timeframe=timeframe,
+            prefix=prefix,
+            signal_grammar=grammar,
+        )
+        spec["market_hypothesis"] = _vol_market_hypothesis(family)
+        spec["signal_grammar"] = grammar
+        spec["generation"].update(
+            {
+                "method": "deterministic_vol_execution_seed",
+                "vol_strategy_family": family,
+                "event_window_policy": "avoid_high_impact_event_windows",
+                "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+            }
+        )
+        parse_strategy_spec(spec)
+        specs.append(spec)
+    return specs
+
+
+def write_vol_strategy_specs(
+    output_dir: Path,
+    *,
+    symbol: str = "NQ_CME",
+    timeframe: str = "1m",
+    prefix: str = "vol_execution",
+    manifest_path: Path | None = None,
+) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    specs = generate_vol_strategy_specs(symbol=symbol, timeframe=timeframe, prefix=prefix)
+    paths = []
+    for spec in specs:
+        path = output_dir / f"{spec['name']}.yaml"
+        path.write_text(json.dumps(spec, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+        paths.append(path)
+    if manifest_path is not None:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(
+            json.dumps(
+                vol_strategy_generation_manifest(
+                    specs,
+                    output_paths=paths,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    prefix=prefix,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    return paths
+
+
+def vol_strategy_generation_manifest(
+    specs: list[dict[str, Any]],
+    output_paths: list[Path] | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+    prefix: str | None = None,
+) -> dict[str, Any]:
+    output_paths = output_paths or []
+    records = []
+    for index, spec in enumerate(specs):
+        generation = spec.get("generation", {})
+        records.append(
+            {
+                "name": spec["name"],
+                "strategy_family": spec["strategy_family"],
+                "generation_id": generation.get("generation_id"),
+                "feature_combo_hash": generation.get("feature_combo_hash"),
+                "event_window_policy": generation.get("event_window_policy"),
+                "execution_assumption": generation.get("execution_assumption"),
+                "path": str(output_paths[index]) if index < len(output_paths) else None,
+            }
+        )
+    return {
+        "method": "deterministic_vol_execution_seed",
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "prefix": prefix,
+        "strategy_count": len(specs),
+        "strategy_manifest_hash": stable_hash(records),
+        "required_next_artifacts": [
+            "vol_feature_readiness.json",
+            "vol_strategy_leaderboard.json",
+            "vol_cost_stress_report.json",
+            "vol_quote_replay_report.json",
+            "vol_paper_shadow_review.json",
+            "vol_mutation_memory.json",
+        ],
+        "strategies": records,
+    }
+
+
 def feature_combo_generation_manifest(
     specs: list[dict[str, Any]],
     output_paths: list[Path] | None = None,
@@ -203,10 +333,11 @@ def _build_spec(
     symbol: str,
     timeframe: str,
     prefix: str,
+    signal_grammar: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     template = _family_template(family, family_index)
     spread_gate_ticks = spread_gate_ticks_for_symbol(symbol)
-    grammar = _signal_grammar(family, spread_gate_ticks=spread_gate_ticks)
+    grammar = signal_grammar or _signal_grammar(family, spread_gate_ticks=spread_gate_ticks)
     features = _ensure_grammar_features(features, grammar)
     feature_names = [feature.name for feature in features]
     feature_combo_hash = stable_hash(feature_names)
@@ -382,6 +513,60 @@ def _signal_grammar(family: str, spread_gate_ticks: int = DEFAULT_SPREAD_GATE_TI
     return {"entry": entry, "filters": base_filters, "exit": exits}
 
 
+def _vol_signal_grammar(family: str) -> dict[str, Any]:
+    base_filters = {
+        "all": [
+            {"feature": "spread_ticks", "op": "<=", "value": 8},
+            {"feature": "minutes_since_open", "op": ">=", "value": 5},
+            {"feature": "minutes_to_close", "op": ">=", "value": 20},
+            {"feature": "low_volume_filter", "op": "==", "value": 0},
+        ]
+    }
+    exits = {
+        "stop": {"type": "atr_multiple", "feature": "atr_14", "multiple": 1.1},
+        "take_profit": {"type": "atr_multiple", "feature": "atr_14", "multiple": 1.6},
+        "time_stop": {"minutes": 20},
+    }
+    if family == "vol_breakout_trend":
+        entry = {
+            "long": {"all": [{"feature": "opening_range_high_dist", "op": ">", "value": 0}, {"feature": "relative_volume_20", "op": ">=", "value": 1.8}, {"feature": "multi_timeframe_volume_confirm", "op": "==", "value": 1}, {"feature": "ema_slope_9", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "opening_range_low_dist", "op": "<", "value": 0}, {"feature": "relative_volume_20", "op": ">=", "value": 1.8}, {"feature": "multi_timeframe_volume_confirm", "op": "==", "value": 1}, {"feature": "ema_slope_9", "op": "<", "value": 0}]},
+        }
+    elif family == "ma_pullback_volume_confirm":
+        entry = {
+            "long": {"all": [{"feature": "ema_9_minus_ema_21", "op": ">", "value": 0}, {"feature": "pullback_depth", "op": "<=", "value": 8}, {"feature": "relative_volume_5", "op": ">=", "value": 1.2}, {"feature": "return_1m", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "ema_9_minus_ema_21", "op": "<", "value": 0}, {"feature": "pullback_depth", "op": "<=", "value": 8}, {"feature": "relative_volume_5", "op": ">=", "value": 1.2}, {"feature": "return_1m", "op": "<", "value": 0}]},
+        }
+    elif family == "volume_absorption_reversion":
+        entry = {
+            "long": {"all": [{"feature": "volume_absorption_flag", "op": ">", "value": 0}, {"feature": "close_zscore_20", "op": "<=", "value": -0.8}, {"feature": "vwap_dist", "op": "<", "value": 0}]},
+            "short": {"all": [{"feature": "volume_absorption_flag", "op": "<", "value": 0}, {"feature": "close_zscore_20", "op": ">=", "value": 0.8}, {"feature": "vwap_dist", "op": ">", "value": 0}]},
+        }
+    elif family == "macd_ma_volume_confirm":
+        entry = {
+            "long": {"all": [{"feature": "ema_9_minus_ema_21", "op": ">", "value": 0}, {"feature": "ema_slope_9", "op": ">", "value": 0}, {"feature": "volume_price_confirm", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "ema_9_minus_ema_21", "op": "<", "value": 0}, {"feature": "ema_slope_9", "op": "<", "value": 0}, {"feature": "volume_price_confirm", "op": "<", "value": 0}]},
+        }
+    elif family == "rsi_reversion_low_volume":
+        entry = {
+            "long": {"all": [{"feature": "close_zscore_20", "op": "<=", "value": -1.1}, {"feature": "relative_volume_20", "op": "<=", "value": 1.2}, {"feature": "vwap_dist", "op": "<", "value": 0}]},
+            "short": {"all": [{"feature": "close_zscore_20", "op": ">=", "value": 1.1}, {"feature": "relative_volume_20", "op": "<=", "value": 1.2}, {"feature": "vwap_dist", "op": ">", "value": 0}]},
+        }
+    else:
+        raise ValueError(f"Unsupported VOL strategy family: {family}")
+    return {"entry": entry, "filters": base_filters, "exit": exits}
+
+
+def _vol_market_hypothesis(family: str) -> str:
+    return {
+        "vol_breakout_trend": "NQ breakout continuation should improve when opening-range breaks align with multi-timeframe volume expansion and trend slope.",
+        "ma_pullback_volume_confirm": "NQ trend pullbacks should have better continuation odds when price reclaims the fast MA with renewed traded volume.",
+        "volume_absorption_reversion": "NQ volume spikes with weak price follow-through can signal absorption and short-horizon mean reversion.",
+        "macd_ma_volume_confirm": "NQ momentum entries should be filtered by aligned MA direction and volume-confirmed price movement.",
+        "rsi_reversion_low_volume": "NQ mean reversion should be safer in lower-volume non-breakout regimes where price is extended from VWAP.",
+    }[family]
+
+
 def _family_template(family: str, family_index: int) -> dict[str, Any]:
     if family == "opening_range_breakout":
         minutes = [5, 10, 15, 20][family_index % 4]
@@ -538,6 +723,24 @@ def _family_template(family: str, family_index: int) -> dict[str, Any]:
                 "max_holding_minutes": {"values": [25, 35]},
             },
         }
+    if family in VOL_EXECUTION_AWARE_FAMILIES:
+        return {
+            "direction": "long_short",
+            "trade_session": "13:35-20:35",
+            "max_trades_per_day": 35,
+            "indicators": {"vol_seed": {"type": "momentum", "lookback_minutes": 5, "threshold_points": 1}},
+            "entry": {
+                "long": {"all": [{"left": "vol_seed", "op": ">=", "right": "threshold_points"}]},
+                "short": {"all": [{"left": "vol_seed", "op": "<=", "right": "negative_threshold_points"}]},
+            },
+            "exit": _exit(10, 16, 24),
+            "parameters": {
+                "volume_threshold": {"values": [1.2, 1.5, 1.8, 2.0]},
+                "stop_points": {"values": [8, 10, 12]},
+                "take_profit_points": {"values": [12, 16, 20]},
+                "max_holding_minutes": {"values": [16, 24]},
+            },
+        }
     raise ValueError(f"Unsupported strategy family: {family}")
 
 
@@ -558,6 +761,11 @@ def _family_slug(family: str) -> str:
         "regime_filtered_mean_reversion": "revert",
         "time_of_day_edge": "tod",
         "gap_fade_or_continuation": "gap",
+        "vol_breakout_trend": "vol_breakout",
+        "ma_pullback_volume_confirm": "vol_pullback",
+        "volume_absorption_reversion": "vol_absorb",
+        "macd_ma_volume_confirm": "vol_macd",
+        "rsi_reversion_low_volume": "vol_revert",
     }[family]
 
 
