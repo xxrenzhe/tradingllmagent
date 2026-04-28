@@ -13,6 +13,7 @@ from .backtest import run_bar_backtest, run_tick_backtest
 from .cli import bar_parquet_files, day_bounds, parse_date, tick_parquet_files
 from .cli_dates import iter_dates
 from .config import get_cost_model, get_symbol
+from .databento import import_databento_ohlcv_bars
 from .dukascopy import download_hour, iter_hours, parse_bi5_file
 from .experiments import record_audit_event, record_experiment, record_trial
 from .firstrate import import_firstrate_bars
@@ -96,6 +97,8 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_data_split_manifest(payload)
     if task_type == "data.import_databento_quotes":
         return execute_data_import_databento_quotes(payload)
+    if task_type == "data.import_databento_ohlcv":
+        return execute_data_import_databento_ohlcv(payload)
     if task_type == "data.quote_replay":
         return execute_data_quote_replay(payload)
     if task_type == "strategy.validate":
@@ -311,6 +314,23 @@ def execute_data_import_firstrate(payload: dict[str, Any]) -> dict[str, Any]:
         symbol=symbol_alias,
         source_timezone=str(payload.get("source_timezone", "UTC")),
         force=bool(payload.get("force", False)),
+    )
+    return {"symbol": symbol_alias, "provider": symbol.provider, "outputs": outputs}
+
+
+def execute_data_import_databento_ohlcv(payload: dict[str, Any]) -> dict[str, Any]:
+    config_dir = Path(payload.get("config_dir", "configs"))
+    data_root = Path(payload.get("data_root", "data"))
+    symbol_alias = _required(payload, "symbol")
+    symbol = get_symbol(symbol_alias, config_dir)
+    if symbol.provider.lower() != "databento":
+        raise ValueError(f"Symbol {symbol_alias} provider must be databento, got {symbol.provider}")
+    outputs = import_databento_ohlcv_bars(
+        csv_paths=[Path(path) for path in _required_list(payload, "input", "inputs")],
+        data_root=data_root,
+        symbol=symbol_alias,
+        force=bool(payload.get("force", False)),
+        zip_member=payload.get("member"),
     )
     return {"symbol": symbol_alias, "provider": symbol.provider, "outputs": outputs}
 

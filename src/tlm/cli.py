@@ -13,6 +13,7 @@ from .bars import (
 from .backtest import result_to_json, run_bar_backtest, run_tick_backtest
 from .cli_dates import iter_dates
 from .config import ConfigError, get_cost_model, get_symbol, load_symbols
+from .databento import import_databento_ohlcv_bars
 from .dukascopy import download_hour, iter_hours, parse_bi5_file
 from .experiments import (
     load_experiment_summary,
@@ -231,6 +232,21 @@ def cmd_data_import_databento_quotes(args: argparse.Namespace) -> int:
         symbol=args.symbol,
         source_timezone=args.source_timezone,
         force=args.force,
+    )
+    print(json.dumps({"symbol": args.symbol, "outputs": outputs}, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_data_import_databento_ohlcv(args: argparse.Namespace) -> int:
+    symbol = get_symbol(args.symbol, Path(args.config_dir))
+    if symbol.provider.lower() != "databento":
+        raise SystemExit(f"Symbol {args.symbol} provider must be databento, got {symbol.provider}")
+    outputs = import_databento_ohlcv_bars(
+        csv_paths=[Path(path) for path in args.input],
+        data_root=Path(args.data_root),
+        symbol=args.symbol,
+        force=args.force,
+        zip_member=args.member,
     )
     print(json.dumps({"symbol": args.symbol, "outputs": outputs}, indent=2, sort_keys=True))
     return 0
@@ -1089,6 +1105,13 @@ def build_parser() -> argparse.ArgumentParser:
     import_databento_quotes.add_argument("--source-timezone", default="UTC")
     import_databento_quotes.add_argument("--force", action="store_true")
     import_databento_quotes.set_defaults(func=cmd_data_import_databento_quotes)
+
+    import_databento_ohlcv = data_subparsers.add_parser("import-databento-ohlcv")
+    import_databento_ohlcv.add_argument("--symbol", required=True)
+    import_databento_ohlcv.add_argument("--input", action="append", required=True)
+    import_databento_ohlcv.add_argument("--member")
+    import_databento_ohlcv.add_argument("--force", action="store_true")
+    import_databento_ohlcv.set_defaults(func=cmd_data_import_databento_ohlcv)
 
     quality = data_subparsers.add_parser("quality")
     quality.add_argument("--symbol", required=True)

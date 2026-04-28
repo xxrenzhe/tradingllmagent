@@ -517,6 +517,10 @@ def create_app():
     def data_import_databento_quotes(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "data.import_databento_quotes", payload)
 
+    @app.post("/api/data/import-databento-ohlcv")
+    def data_import_databento_ohlcv(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "data.import_databento_ohlcv", payload)
+
     @app.post("/api/data/quote-replay")
     def data_quote_replay(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "data.quote_replay", payload)

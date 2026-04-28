@@ -92,6 +92,18 @@ paths:
       responses:
         "200":
           description: Queued task.
+  /api/data/import-databento-ohlcv:
+    post:
+      summary: Queue Databento NQ.FUT OHLCV-1m import into continuous daily-volume bar partitions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
   /api/data/quote-replay:
     post:
       summary: Queue quote-level bid/ask execution replay for candidate backtest trades.

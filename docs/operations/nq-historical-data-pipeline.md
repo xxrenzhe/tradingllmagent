@@ -76,7 +76,27 @@ PYTHONPATH=src python3 -m tlm.cli \
 
 The symbol override is intentional: it lets old seed specs remain reusable while the data path and result metadata use `NQ_1M`.
 
-## 5. Import Databento Quotes
+## 5. Import Databento OHLCV Bars
+
+Databento `NQ.FUT` parent exports include outright contracts and calendar spreads. Import OHLCV-1m bars by filtering to outright `NQ[HMUZ][0-9]` contracts and selecting the highest-volume `instrument_id` per UTC day.
+
+```bash
+PYTHONPATH=src python3 -m tlm.cli \
+  --data-root data \
+  data import-databento-ohlcv \
+  --symbol NQ_CME \
+  --input data/raw/databento/GLBX-20260428-YXQY7CP9FT.zip
+```
+
+Output partitions:
+
+```text
+data/bars/1m/NQ_CME/date=YYYY-MM-DD/part-000.parquet
+```
+
+The importer reads `.csv`, `.csv.zst`, or Databento ZIP downloads, drops spread symbols such as `NQH5-NQM5`, and uses `instrument_id` instead of the one-digit `symbol` year code to avoid collisions across decades.
+
+## 6. Import Databento Quotes
 
 After a candidate survives bar-level search, export a Databento `TBBO` or `MBP-1` CSV window and import it.
 
@@ -96,7 +116,7 @@ data/normalized/quotes/NQ_CME/date=YYYY-MM-DD/part-000.parquet
 
 Supported quote columns include `ts_event`, `ts_recv`, `timestamp`, `bid_px_00`, `ask_px_00`, `bid_sz_00`, `ask_sz_00`, `bid`, `ask`, `bid_size`, and `ask_size`.
 
-## 6. Replay Candidate Trades Against Quotes
+## 7. Replay Candidate Trades Against Quotes
 
 ```bash
 PYTHONPATH=src python3 -m tlm.cli \
@@ -111,13 +131,14 @@ PYTHONPATH=src python3 -m tlm.cli \
 
 The report calculates validated trade count, missed fills, quote-based gross PnL, gross PnL drift versus bar replay, and average bid/ask cost.
 
-## 7. Worker/API Task Types
+## 8. Worker/API Task Types
 
 The same pipeline is available through queued tasks:
 
 - `data.import_firstrate`
 - `data.bar_quality`
 - `data.split_manifest`
+- `data.import_databento_ohlcv`
 - `data.import_databento_quotes`
 - `data.quote_replay`
 
@@ -126,9 +147,10 @@ Corresponding API paths:
 - `POST /api/data/import-firstrate`
 - `POST /api/data/bar-quality`
 - `POST /api/data/split-manifest`
+- `POST /api/data/import-databento-ohlcv`
 - `POST /api/data/import-databento-quotes`
 - `POST /api/data/quote-replay`
 
-## 8. Promotion Rule
+## 9. Promotion Rule
 
 A strategy can move from `NQ_1M` discovery to quote validation only after it has positive gross edge, survives conservative bar-level costs, and remains stable across validation/test windows. A strategy can move beyond quote validation only if `NQ_CME` quote replay preserves positive edge after bid/ask costs and extra slippage stress.

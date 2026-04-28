@@ -20,6 +20,7 @@ from tlm.bars import (
 )
 from tlm.cli import main
 from tlm.config import get_symbol
+from tlm.databento import iter_databento_ohlcv_csv
 from tlm.dukascopy import (
     DownloadResult,
     TICK_STRUCT,
@@ -329,6 +330,70 @@ class BarAndQualityTests(unittest.TestCase):
             self.assertTrue(second_day_path.exists())
             self.assertEqual(rows, [("NQ_1M", 20000.0, 20001.5, 123, None)])
             self.assertIn("written", output.getvalue())
+
+    def test_cli_import_databento_ohlcv_writes_daily_volume_continuous_bars(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            csv_path = Path(temp_dir) / "nq_ohlcv.csv"
+            csv_path.write_text(
+                "ts_event,rtype,publisher_id,instrument_id,open,high,low,close,volume,symbol\n"
+                "2025-03-19T13:30:00.000000000Z,33,1,111,20000.00,20001.00,19999.75,20000.50,10,NQH5\n"
+                "2025-03-19T13:30:00.000000000Z,33,1,222,20010.00,20011.00,20009.75,20010.50,20,NQM5\n"
+                "2025-03-19T13:30:00.000000000Z,33,1,333,-1.00,-1.00,-1.00,-1.00,999,NQH5-NQM5\n"
+                "2025-03-20T13:30:00.000000000Z,33,1,111,20100.00,20101.00,20099.75,20100.50,30,NQH5\n"
+                "2025-03-20T13:30:00.000000000Z,33,1,222,20110.00,20111.00,20109.75,20110.50,1,NQM5\n",
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "data",
+                        "import-databento-ohlcv",
+                        "--symbol",
+                        "NQ_CME",
+                        "--input",
+                        str(csv_path),
+                    ]
+                )
+
+            first_day_path = data_root / "bars" / "1m" / "NQ_CME" / "date=2025-03-19" / "part-000.parquet"
+            second_day_path = data_root / "bars" / "1m" / "NQ_CME" / "date=2025-03-20" / "part-000.parquet"
+            con = duckdb.connect(":memory:")
+            try:
+                first_rows = con.execute(
+                    "SELECT symbol, timestamp, open, close, tick_count FROM read_parquet(?)",
+                    [str(first_day_path)],
+                ).fetchall()
+                second_rows = con.execute(
+                    "SELECT symbol, open, close, tick_count FROM read_parquet(?)",
+                    [str(second_day_path)],
+                ).fetchall()
+            finally:
+                con.close()
+
+        self.assertEqual(code, 0)
+        self.assertEqual(first_rows, [("NQ_CME", datetime(2025, 3, 19, 13, 30), 20010.0, 20010.5, 20)])
+        self.assertEqual(second_rows, [("NQ_CME", 20100.0, 20100.5, 30)])
+        self.assertIn("instrument_id", output.getvalue())
+
+    def test_iter_databento_ohlcv_filters_calendar_spreads(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "nq_ohlcv.csv"
+            csv_path.write_text(
+                "ts_event,rtype,publisher_id,instrument_id,open,high,low,close,volume,symbol\n"
+                "2025-03-19T13:30:00.000000000Z,33,1,111,20000.00,20001.00,19999.75,20000.50,10,NQH5\n"
+                "2025-03-19T13:31:00.000000000Z,33,1,333,-1.00,-1.00,-1.00,-1.00,999,NQH5-NQM5\n",
+                encoding="utf-8",
+            )
+
+            bars = list(iter_databento_ohlcv_csv(csv_path))
+
+        self.assertEqual(len(bars), 1)
+        self.assertEqual(bars[0].instrument_id, "111")
+        self.assertEqual(bars[0].raw_symbol, "NQH5")
 
     def test_cli_bar_quality_reports_bar_anomalies(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -330,6 +330,21 @@ class TaskStoreTests(unittest.TestCase):
             )
             quotes = run_task(db_path, "task_import_quotes")
 
+            ohlcv_csv = root / "ohlcv.csv"
+            ohlcv_csv.write_text(
+                "ts_event,rtype,publisher_id,instrument_id,open,high,low,close,volume,symbol\n"
+                "2025-03-19T13:30:00Z,33,1,111,100.00,100.50,99.75,100.25,10,NQH5\n"
+                "2025-03-19T13:30:00Z,33,1,222,101.00,101.50,100.75,101.25,20,NQM5\n",
+                encoding="utf-8",
+            )
+            create_task(
+                db_path,
+                "data.import_databento_ohlcv",
+                {"symbol": "NQ_CME", "input": str(ohlcv_csv), "data_root": str(data_root)},
+                task_id="task_import_ohlcv",
+            )
+            ohlcv = run_task(db_path, "task_import_ohlcv")
+
             backtest_result = root / "backtest.json"
             backtest_result.write_text(
                 json.dumps(
@@ -366,6 +381,7 @@ class TaskStoreTests(unittest.TestCase):
 
             firstrate_path_exists = bar_path(data_root, "NQ_1M", "1m", datetime(2025, 3, 19).date()).exists()
             quote_path_exists = normalized_quote_path(data_root, "NQ_CME", datetime(2025, 3, 19).date()).exists()
+            ohlcv_path_exists = bar_path(data_root, "NQ_CME", "1m", datetime(2025, 3, 19).date()).exists()
             split_output_exists = split_output.exists()
 
         self.assertEqual(imported["status"], "completed")
@@ -377,6 +393,8 @@ class TaskStoreTests(unittest.TestCase):
         self.assertFalse(split["result"]["final_holdout_policy"]["llm_feedback_includes_final_holdout"])
         self.assertEqual(quotes["status"], "completed")
         self.assertTrue(quote_path_exists)
+        self.assertEqual(ohlcv["status"], "completed")
+        self.assertTrue(ohlcv_path_exists)
         self.assertEqual(replay["status"], "completed")
         self.assertAlmostEqual(replay["result"]["avg_bid_ask_cost_usd"], 10.0)
 
@@ -787,6 +805,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/data/bar-quality", paths)
         self.assertIn("/api/data/split-manifest", paths)
         self.assertIn("/api/data/import-databento-quotes", paths)
+        self.assertIn("/api/data/import-databento-ohlcv", paths)
         self.assertIn("/api/data/quote-replay", paths)
         self.assertIn("/api/backtests/tick", paths)
         self.assertIn("/api/experiments/proposals", paths)
@@ -937,6 +956,7 @@ class APIImportTests(unittest.TestCase):
             "/api/data/bar-quality",
             "/api/data/split-manifest",
             "/api/data/import-databento-quotes",
+            "/api/data/import-databento-ohlcv",
             "/api/data/quote-replay",
             "/api/tasks/{task_id}/events",
             "/api/experiments/research-runs",
