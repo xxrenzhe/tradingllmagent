@@ -40,6 +40,7 @@ from .modules import (
 )
 from .paper import build_paper_replay_attribution, export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_bar_quality_report, build_quality_report
+from .quotes import build_quote_execution_report, import_databento_quotes
 from .research import (
     StrategyTargetCriteria,
     discover_strategy_seed_specs,
@@ -54,6 +55,7 @@ from .storage import (
     bar_path,
     compute_data_version_hash,
     event_context_path,
+    normalized_quote_path,
     normalized_tick_path,
     quality_path,
     write_json,
@@ -95,6 +97,10 @@ def day_bounds(value: date) -> tuple[datetime, datetime]:
 
 def tick_parquet_files(data_root: Path, symbol: str, start: date, end: date) -> list[Path]:
     return [normalized_tick_path(data_root, symbol, day) for day in iter_dates(start, end)]
+
+
+def quote_parquet_files(data_root: Path, symbol: str, start: date, end: date) -> list[Path]:
+    return [normalized_quote_path(data_root, symbol, day) for day in iter_dates(start, end)]
 
 
 def cmd_data_discover(args: argparse.Namespace) -> int:
@@ -215,6 +221,21 @@ def cmd_data_import_firstrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_data_import_databento_quotes(args: argparse.Namespace) -> int:
+    symbol = get_symbol(args.symbol, Path(args.config_dir))
+    if symbol.provider.lower() != "databento":
+        raise SystemExit(f"Symbol {args.symbol} provider must be databento, got {symbol.provider}")
+    outputs = import_databento_quotes(
+        csv_paths=[Path(path) for path in args.input],
+        data_root=Path(args.data_root),
+        symbol=args.symbol,
+        source_timezone=args.source_timezone,
+        force=args.force,
+    )
+    print(json.dumps({"symbol": args.symbol, "outputs": outputs}, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_data_quality(args: argparse.Namespace) -> int:
     data_root = Path(args.data_root)
     date_from = parse_date(args.date_from)
@@ -307,6 +328,22 @@ def cmd_data_split_manifest(args: argparse.Namespace) -> int:
     write_json(output, payload)
     print(output)
     print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_data_quote_replay(args: argparse.Namespace) -> int:
+    data_root = Path(args.data_root)
+    date_from = parse_date(args.date_from)
+    date_to = parse_date(args.date_to)
+    symbol = get_symbol(args.symbol, Path(args.config_dir))
+    output = Path(args.output) if args.output else None
+    report = build_quote_execution_report(
+        backtest_result_path=Path(args.backtest_result),
+        quote_files=quote_parquet_files(data_root, args.symbol, date_from, date_to),
+        symbol_config=symbol,
+        output_path=output,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True, default=str))
     return 0
 
 
@@ -1044,6 +1081,13 @@ def build_parser() -> argparse.ArgumentParser:
     import_firstrate.add_argument("--force", action="store_true")
     import_firstrate.set_defaults(func=cmd_data_import_firstrate)
 
+    import_databento_quotes = data_subparsers.add_parser("import-databento-quotes")
+    import_databento_quotes.add_argument("--symbol", required=True)
+    import_databento_quotes.add_argument("--input", action="append", required=True)
+    import_databento_quotes.add_argument("--source-timezone", default="UTC")
+    import_databento_quotes.add_argument("--force", action="store_true")
+    import_databento_quotes.set_defaults(func=cmd_data_import_databento_quotes)
+
     quality = data_subparsers.add_parser("quality")
     quality.add_argument("--symbol", required=True)
     quality.add_argument("--from", dest="date_from", required=True)
@@ -1074,6 +1118,14 @@ def build_parser() -> argparse.ArgumentParser:
     split_manifest.add_argument("--indicator-warmup-days", type=int, default=0)
     split_manifest.add_argument("--output")
     split_manifest.set_defaults(func=cmd_data_split_manifest)
+
+    quote_replay = data_subparsers.add_parser("quote-replay")
+    quote_replay.add_argument("--symbol", required=True)
+    quote_replay.add_argument("--from", dest="date_from", required=True)
+    quote_replay.add_argument("--to", dest="date_to", required=True)
+    quote_replay.add_argument("--backtest-result", required=True)
+    quote_replay.add_argument("--output")
+    quote_replay.set_defaults(func=cmd_data_quote_replay)
 
     strategy = subparsers.add_parser("strategy")
     strategy_subparsers = strategy.add_subparsers(dest="strategy_command", required=True)

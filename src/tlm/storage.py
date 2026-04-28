@@ -29,6 +29,10 @@ def normalized_tick_path(data_root: Path, symbol: str, day: date) -> Path:
     return data_root / "normalized" / "ticks" / symbol / f"date={day.isoformat()}" / "part-000.parquet"
 
 
+def normalized_quote_path(data_root: Path, symbol: str, day: date) -> Path:
+    return data_root / "normalized" / "quotes" / symbol / f"date={day.isoformat()}" / "part-000.parquet"
+
+
 def bar_path(data_root: Path, symbol: str, timeframe: str, day: date) -> Path:
     return data_root / "bars" / timeframe / symbol / f"date={day.isoformat()}" / "part-000.parquet"
 
@@ -72,6 +76,19 @@ def write_ticks_parquet(path: Path, symbol_alias: str, ticks: Sequence[Tick]) ->
             "bid_size DOUBLE, ask_size DOUBLE, mid DOUBLE, spread DOUBLE"
         ),
         insert_sql="INSERT INTO ticks VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        rows=rows,
+    )
+
+
+def write_quotes_parquet(path: Path, rows: Sequence[tuple]) -> None:
+    _write_parquet(
+        path=path,
+        table_name="quotes",
+        schema_sql=(
+            "symbol VARCHAR, timestamp TIMESTAMP, bid DOUBLE, ask DOUBLE, "
+            "bid_size DOUBLE, ask_size DOUBLE, mid DOUBLE, spread DOUBLE"
+        ),
+        insert_sql="INSERT INTO quotes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         rows=rows,
     )
 

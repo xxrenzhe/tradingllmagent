@@ -30,7 +30,14 @@ from tlm.dukascopy import (
 )
 from tlm.firstrate import parse_firstrate_csv
 from tlm.quality import build_quality_report
-from tlm.storage import bar_path, normalized_tick_path, write_bars_parquet, write_ticks_parquet
+from tlm.quotes import parse_databento_quote_csv
+from tlm.storage import (
+    bar_path,
+    normalized_quote_path,
+    normalized_tick_path,
+    write_bars_parquet,
+    write_ticks_parquet,
+)
 
 
 def make_bi5(records: list[tuple[int, int, int, float, float]]) -> bytes:
@@ -344,6 +351,101 @@ class BarAndQualityTests(unittest.TestCase):
         self.assertGreaterEqual(len(manifest["plan"]["folds"]), 1)
         self.assertTrue(manifest["data_version_hash"])
         self.assertIn(str(output), stdout.getvalue())
+
+    def test_parse_databento_quote_csv_accepts_tbbo_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "tbbo.csv"
+            path.write_text(
+                "ts_event,bid_px_00,ask_px_00,bid_sz_00,ask_sz_00\n"
+                "2025-03-19T13:30:00.000000000Z,100.00,100.25,7,9\n",
+                encoding="utf-8",
+            )
+
+            quotes = parse_databento_quote_csv(path)
+
+        self.assertEqual(len(quotes), 1)
+        self.assertEqual(quotes[0].timestamp, datetime(2025, 3, 19, 13, 30))
+        self.assertAlmostEqual(quotes[0].spread, 0.25)
+        self.assertAlmostEqual(quotes[0].bid_size, 7)
+
+    def test_cli_databento_quote_import_and_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            quotes_csv = root / "tbbo.csv"
+            quotes_csv.write_text(
+                "ts_event,bid_px_00,ask_px_00,bid_sz_00,ask_sz_00\n"
+                "2025-03-19T13:30:00Z,100.00,100.25,7,9\n"
+                "2025-03-19T13:35:00Z,101.00,101.25,8,10\n",
+                encoding="utf-8",
+            )
+            with redirect_stdout(io.StringIO()):
+                import_code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "data",
+                        "import-databento-quotes",
+                        "--symbol",
+                        "NQ_CME",
+                        "--input",
+                        str(quotes_csv),
+                    ]
+                )
+
+            quote_path = normalized_quote_path(data_root, "NQ_CME", datetime(2025, 3, 19).date())
+            result_path = root / "backtest.json"
+            result_path.write_text(
+                json.dumps(
+                    {
+                        "trades": [
+                            {
+                                "symbol": "NQ_CME",
+                                "side": "long",
+                                "entry_time": "2025-03-19T13:30:00",
+                                "exit_time": "2025-03-19T13:35:00",
+                                "entry_price": 100.0,
+                                "exit_price": 101.0,
+                                "contracts": 1,
+                                "gross_pnl": 20.0,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report_path = root / "quote_replay.json"
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                replay_code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "data",
+                        "quote-replay",
+                        "--symbol",
+                        "NQ_CME",
+                        "--from",
+                        "2025-03-19",
+                        "--to",
+                        "2025-03-19",
+                        "--backtest-result",
+                        str(result_path),
+                        "--output",
+                        str(report_path),
+                    ]
+            )
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(import_code, 0)
+            self.assertTrue(quote_path.exists())
+            self.assertEqual(replay_code, 0)
+            self.assertEqual(report["artifact"], "quote_execution_validation")
+            self.assertEqual(report["trade_count"], 1)
+            self.assertEqual(report["validated_trade_count"], 1)
+            self.assertAlmostEqual(report["validations"][0]["quote_gross_pnl"], 15.0)
+            self.assertAlmostEqual(report["avg_bid_ask_cost_usd"], 10.0)
+            self.assertIn("quote_execution_validation", stdout.getvalue())
 
     def test_build_higher_timeframe_bars_from_1m_bars(self) -> None:
         hour = datetime(2025, 3, 19, 13, tzinfo=UTC)

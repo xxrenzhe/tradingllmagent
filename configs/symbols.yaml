@@ -23,6 +23,18 @@
       "default_session_timezone": "America/New_York",
       "default_trade_session": "09:35-15:45",
       "default_flatten_time": "15:55"
+    },
+    "NQ_CME": {
+      "provider": "databento",
+      "instrument": "NQ",
+      "description": "CME Globex NQ futures quotes for candidate execution validation.",
+      "timezone": "UTC",
+      "price_scale": 1,
+      "tick_size": 0.25,
+      "point_value": 20,
+      "default_session_timezone": "America/New_York",
+      "default_trade_session": "09:35-15:45",
+      "default_flatten_time": "15:55"
     }
   }
 }
