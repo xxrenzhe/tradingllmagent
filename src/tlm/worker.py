@@ -532,6 +532,7 @@ def execute_research_discover_target(payload: dict[str, Any]) -> dict[str, Any]:
         "random_seed": int(payload.get("random_seed", 0)),
         "llm_model": str(payload.get("llm_model", "local-deterministic-template")),
         "llm_parameters": llm_parameters,
+        "include_mutations": bool(payload.get("include_mutations", False)),
     }
     if len(seed_specs) == 1 and payload.get("spec"):
         discovery = run_llm_target_discovery(seed_spec=seed_spec, **discovery_kwargs)

@@ -28,6 +28,7 @@ from .modules import (
     module_summary_for_spec,
     write_module_performance_memory,
 )
+from .mutations import generate_controlled_mutations
 from .prescreen import build_pre_screen_report
 from .snapshot import research_snapshot
 from .storage import bar_path, normalized_tick_path
@@ -525,6 +526,7 @@ def run_llm_target_discovery(
     llm_parameters: dict | None = None,
     llm_adapter: Any | None = None,
     research_runner: ResearchRunner | None = None,
+    include_mutations: bool = False,
 ) -> StrategyDiscoveryResult:
     if max_rounds <= 0:
         raise ValueError("max_rounds must be positive")
@@ -590,6 +592,40 @@ def run_llm_target_discovery(
         )
         results.extend(round_results)
         attempts.extend(evaluate_strategy_target(result, target) for result in round_results)
+        if include_mutations:
+            for mutation in generate_controlled_mutations(proposal.strategy):
+                mutation_hash = strategy_spec_hash(mutation.strategy)
+                if mutation_hash in seen_strategy_hashes:
+                    continue
+                seen_strategy_hashes.add(mutation_hash)
+                mutation_results = runner(
+                    seed_spec=mutation.strategy,
+                    symbol_config=symbol_config,
+                    data_root=data_root,
+                    experiment_id=f"{discovery_id}_round_{round_index:04d}_{mutation.mutation_type}",
+                    date_from=date_from,
+                    date_to=date_to,
+                    max_trials=trials_per_round,
+                    starting_equity=starting_equity,
+                    train_days=train_days,
+                    validation_days=validation_days,
+                    test_days=test_days,
+                    step_days=step_days,
+                    embargo_days=embargo_days,
+                    final_holdout_days=final_holdout_days,
+                    min_folds=min_folds,
+                    indicator_warmup_days=indicator_warmup_days,
+                    max_parameter_combinations=max_parameter_combinations,
+                    allow_high_parameter_budget=allow_high_parameter_budget,
+                    execution_mode=execution_mode,
+                    cost_model=cost_model,
+                    config_dir=config_dir,
+                    random_seed=random_seed + round_index,
+                    llm_model=llm_model,
+                    llm_parameters=llm_parameters,
+                )
+                results.extend(mutation_results)
+                attempts.extend(evaluate_strategy_target(result, target) for result in mutation_results)
 
         from .llm import train_validation_feedback
 
@@ -645,6 +681,7 @@ def run_llm_seed_pool_target_discovery(
     llm_parameters: dict | None = None,
     llm_adapter: Any | None = None,
     research_runner: ResearchRunner | None = None,
+    include_mutations: bool = False,
 ) -> SeedPoolStrategyDiscoveryResult:
     if not seed_specs:
         raise ValueError("At least one seed strategy is required")
@@ -695,6 +732,7 @@ def run_llm_seed_pool_target_discovery(
             llm_parameters=llm_parameters,
             llm_adapter=llm_adapter,
             research_runner=research_runner,
+            include_mutations=include_mutations,
         )
         seed_discoveries.append(seed_discovery)
         if len([attempt for discovery in seed_discoveries for attempt in discovery.qualified_attempts]) >= target_count:

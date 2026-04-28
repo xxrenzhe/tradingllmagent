@@ -655,6 +655,7 @@ def cmd_research_discover_target(args: argparse.Namespace) -> int:
         "random_seed": args.random_seed,
         "llm_model": args.llm_model,
         "llm_parameters": args.llm_parameters,
+        "include_mutations": args.include_mutations,
     }
     if args.spec:
         discovery = run_llm_target_discovery(seed_spec=spec, **discovery_kwargs)
@@ -681,6 +682,7 @@ def cmd_research_discover_target(args: argparse.Namespace) -> int:
             "target_count": args.target_count,
             "llm_model": args.llm_model,
             "llm_parameters": args.llm_parameters,
+            "include_mutations": args.include_mutations,
             "seed_spec": str(Path(args.spec)) if args.spec else None,
             "seed_selection_report": seed_selection_report,
         },
@@ -1135,6 +1137,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--random-seed", type=int, default=0)
     discover.add_argument("--llm-model", default="local-deterministic-template")
     discover.add_argument("--llm-parameters", type=parse_json_object, default={})
+    discover.add_argument("--include-mutations", action="store_true")
     discover.add_argument(
         "--max-parameter-combinations",
         type=int,

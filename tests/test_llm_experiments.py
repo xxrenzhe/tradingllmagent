@@ -447,6 +447,42 @@ class LLMAndExperimentTests(unittest.TestCase):
         self.assertEqual(payload["conclusion"], "target_not_found")
         self.assertEqual(payload["qualified_count"], 0)
 
+    def test_llm_target_discovery_can_evaluate_inverse_mutations(self) -> None:
+        seed_payload = base_spec()
+        seed_payload["direction"] = "long"
+        seed_payload["entry"] = {"long": {"all": [{"left": "close", "op": ">", "right": "open"}]}}
+        seed = parse_strategy_spec(seed_payload)
+        seen_names = []
+
+        def research_runner(**kwargs):
+            strategy_name = kwargs["seed_spec"].name
+            seen_names.append(strategy_name)
+            return [
+                fake_research_result(
+                    f"{kwargs['experiment_id']}_trial_0000",
+                    annual_trades=700,
+                    sharpe=1.1,
+                    winning_trades=45,
+                    losing_trades=55,
+                )
+            ]
+
+        discovery = run_llm_target_discovery(
+            seed_spec=seed,
+            symbol_config=symbol_config(),
+            data_root=Path("data"),
+            discovery_id="target_with_mutations",
+            date_from=date(2025, 1, 1),
+            date_to=date(2025, 2, 1),
+            max_rounds=1,
+            llm_adapter=SequencedLLM(),
+            research_runner=research_runner,
+            include_mutations=True,
+        )
+
+        self.assertEqual(discovery.to_dict()["total_trials"], 2)
+        self.assertTrue(any(name.endswith("_inverse") for name in seen_names))
+
     def test_seed_pool_target_discovery_searches_multiple_seeds(self) -> None:
         seed_a_payload = base_spec()
         seed_b_payload = base_spec()
