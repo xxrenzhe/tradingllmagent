@@ -58,6 +58,33 @@ class VolResearchArtifactTests(unittest.TestCase):
                 payload = json.loads(Path(path).read_text(encoding="utf-8"))
                 self.assertIn("artifact", payload)
 
+    def test_vol_quote_replay_report_summarizes_execution_models(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "quote_replay.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "artifact": "quote_execution_validation",
+                        "trade_count": 2,
+                        "validated_trade_count": 2,
+                        "avg_bid_ask_cost_usd": 10.0,
+                        "execution_models": {
+                            "market_order_bid_ask_replay": {},
+                            "fixed_conservative": {},
+                            "limit_missed_fill": {"fill_rate": 0.5},
+                            "adverse_selection": {"5m": {"avg_ticks": 1.25}},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            report = build_vol_quote_replay_report(quote_files=[], existing_reports=[report_path])
+
+            self.assertEqual(report["status"], "ready_for_review")
+            self.assertEqual(report["missing_requirements"], [])
+            self.assertEqual(report["execution_report_summaries"][0]["limit_fill_rate"], 0.5)
+
     def test_run_vol_prescreen_writes_populated_leaderboard(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

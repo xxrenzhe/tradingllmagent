@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -344,13 +345,16 @@ def build_vol_quote_replay_report(
 ) -> dict[str, Any]:
     existing_quote_files = [str(path) for path in quote_files if path.exists()]
     replay_reports = [str(path) for path in (existing_reports or []) if path.exists()]
+    report_summaries = [_quote_report_summary(Path(path)) for path in replay_reports]
+    ready_reports = [summary for summary in report_summaries if summary.get("has_required_execution_models")]
     return {
         "schema_version": 1,
         "artifact": "vol_quote_replay_report",
-        "status": "ready_for_review" if replay_reports else "blocked",
+        "status": "ready_for_review" if ready_reports else "blocked",
         "quote_files": existing_quote_files,
         "quote_replay_reports": replay_reports,
-        "missing_requirements": [] if replay_reports else ["quote_replay_report"],
+        "execution_report_summaries": report_summaries,
+        "missing_requirements": [] if ready_reports else ["quote_replay_report_with_market_limit_and_adverse_selection"],
         "required_checks": [
             "market_order_bid_ask_replay",
             "spread_distribution",
@@ -358,6 +362,30 @@ def build_vol_quote_replay_report(
             "missed_fill_opportunity_cost",
             "adverse_selection_1m_3m_5m_15m",
         ],
+    }
+
+
+def _quote_report_summary(path: Path) -> dict[str, Any]:
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return {"path": str(path), "status": "unreadable", "error": str(error), "has_required_execution_models": False}
+    models = report.get("execution_models") or {}
+    required = {
+        "market_order_bid_ask_replay",
+        "fixed_conservative",
+        "limit_missed_fill",
+        "adverse_selection",
+    }
+    return {
+        "path": str(path),
+        "artifact": report.get("artifact"),
+        "trade_count": report.get("trade_count"),
+        "validated_trade_count": report.get("validated_trade_count"),
+        "avg_bid_ask_cost_usd": report.get("avg_bid_ask_cost_usd"),
+        "limit_fill_rate": (models.get("limit_missed_fill") or {}).get("fill_rate"),
+        "avg_adverse_selection_ticks_5m": ((models.get("adverse_selection") or {}).get("5m") or {}).get("avg_ticks"),
+        "has_required_execution_models": required.issubset(models),
     }
 
 

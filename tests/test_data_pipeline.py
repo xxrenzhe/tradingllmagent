@@ -512,7 +512,9 @@ class BarAndQualityTests(unittest.TestCase):
             quotes_csv.write_text(
                 "ts_event,bid_px_00,ask_px_00,bid_sz_00,ask_sz_00\n"
                 "2025-03-19T13:30:00Z,100.00,100.25,7,9\n"
-                "2025-03-19T13:35:00Z,101.00,101.25,8,10\n",
+                "2025-03-19T13:30:30Z,99.75,100.00,7,9\n"
+                "2025-03-19T13:35:00Z,101.00,101.25,8,10\n"
+                "2025-03-19T13:35:30Z,101.00,101.25,8,10\n",
                 encoding="utf-8",
             )
             with redirect_stdout(io.StringIO()):
@@ -581,6 +583,10 @@ class BarAndQualityTests(unittest.TestCase):
             self.assertEqual(report["validated_trade_count"], 1)
             self.assertAlmostEqual(report["validations"][0]["quote_gross_pnl"], 15.0)
             self.assertAlmostEqual(report["avg_bid_ask_cost_usd"], 10.0)
+            self.assertEqual(report["execution_models"]["limit_missed_fill"]["filled_count"], 1)
+            self.assertEqual(report["execution_models"]["limit_missed_fill"]["fill_rate"], 1.0)
+            self.assertEqual(report["validations"][0]["limit_order"]["status"], "filled_limit")
+            self.assertLess(report["validations"][0]["limit_order"]["adverse_selection_ticks"]["5m"], 0)
             self.assertIn("quote_execution_validation", stdout.getvalue())
 
     def test_build_higher_timeframe_bars_from_1m_bars(self) -> None:

@@ -464,6 +464,7 @@ def execute_data_quote_replay(payload: dict[str, Any]) -> dict[str, Any]:
         quote_files=quote_files,
         symbol_config=symbol,
         output_path=Path(str(payload["output"])) if payload.get("output") else None,
+        limit_timeout_seconds=int(payload.get("limit_timeout_seconds", 60)),
     )
 
 

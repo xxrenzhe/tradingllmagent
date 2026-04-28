@@ -359,6 +359,7 @@ def cmd_data_quote_replay(args: argparse.Namespace) -> int:
         quote_files=quote_parquet_files(data_root, args.symbol, date_from, date_to),
         symbol_config=symbol,
         output_path=output,
+        limit_timeout_seconds=args.limit_timeout_seconds,
     )
     print(json.dumps(report, indent=2, sort_keys=True, default=str))
     return 0
@@ -1211,6 +1212,7 @@ def build_parser() -> argparse.ArgumentParser:
     quote_replay.add_argument("--from", dest="date_from", required=True)
     quote_replay.add_argument("--to", dest="date_to", required=True)
     quote_replay.add_argument("--backtest-result", required=True)
+    quote_replay.add_argument("--limit-timeout-seconds", type=int, default=60)
     quote_replay.add_argument("--output")
     quote_replay.set_defaults(func=cmd_data_quote_replay)
 

@@ -1,7 +1,8 @@
 {
   "artifact": "vol_quote_replay_report",
+  "execution_report_summaries": [],
   "missing_requirements": [
-    "quote_replay_report"
+    "quote_replay_report_with_market_limit_and_adverse_selection"
   ],
   "quote_files": [],
   "quote_replay_reports": [],
