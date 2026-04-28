@@ -56,6 +56,7 @@ export default function App() {
   const [quality, setQuality] = useState(null);
   const [leaderboard, setLeaderboard] = useState({ leaderboard: [], rejected: [], rows: [], summary: {} });
   const [featureReadiness, setFeatureReadiness] = useState(null);
+  const [volOverview, setVolOverview] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [taskEvents, setTaskEvents] = useState([]);
   const [experimentId, setExperimentId] = useState("");
@@ -118,10 +119,11 @@ export default function App() {
     let ignore = false;
     async function loadStaticData() {
       try {
-        const [symbolPayload, reportPayload, featurePayload] = await Promise.all([
+        const [symbolPayload, reportPayload, featurePayload, volPayload] = await Promise.all([
           apiRequest(apiBase, API_PATHS.dataSymbols),
           apiRequest(apiBase, API_PATHS.reportsLeaderboard),
-          apiRequest(apiBase, API_PATHS.featuresReadiness)
+          apiRequest(apiBase, API_PATHS.featuresReadiness),
+          apiRequest(apiBase, API_PATHS.volOverview)
         ]);
         if (ignore) {
           return;
@@ -129,6 +131,7 @@ export default function App() {
         setSymbols(symbolPayload.symbols ?? {});
         setLeaderboard(reportPayload);
         setFeatureReadiness(featurePayload);
+        setVolOverview(volPayload);
       } catch (error) {
         if (!ignore) {
           setNotice({ tone: "warn", text: error.message });
@@ -404,6 +407,22 @@ export default function App() {
     return { task_id: "feature readiness refreshed" };
   }
 
+  async function refreshVolOverview() {
+    const payload = await apiRequest(apiBase, API_PATHS.volOverview);
+    setVolOverview(payload);
+    return { task_id: "vol overview refreshed" };
+  }
+
+  async function queueVolTask(path, extraPayload = {}) {
+    return createTask(path, {
+      symbol: "NQ_CME",
+      experiments_root: "experiments",
+      strategies_root: "strategies",
+      output_dir: "experiments/vol_execution_artifacts",
+      ...extraPayload
+    });
+  }
+
   async function loadExperiment() {
     const id = experimentId.trim();
     if (!id) {
@@ -513,6 +532,10 @@ export default function App() {
   const totalStrategies = leaderboard.rows?.length ?? 0;
   const implementedFeatureCount = featureReadiness?.by_status?.implemented ?? 0;
   const generatedStrategyCount = featureReadiness?.generated_strategy_summary?.strategy_count ?? 0;
+  const volSummary = volOverview?.strategy_leaderboard?.summary ?? {};
+  const volFeatureStatus = volOverview?.feature_readiness?.status ?? "unknown";
+  const volQuoteStatus = volOverview?.quote_replay?.status ?? "unknown";
+  const volPaperStatus = volOverview?.paper_shadow?.status ?? "unknown";
   const apiStateLabel = notice.tone === "danger" ? "API fault" : notice.tone === "warn" ? "API warning" : "API ready";
   const queueStateLabel = runningTasks ? `${runningTasks} active` : "idle";
   const gateStateLabel = totalStrategies ? `${passedCount}/${totalStrategies} qualified` : "no report";
@@ -547,6 +570,7 @@ export default function App() {
         <nav className="workspace-tabs" aria-label="Workspace sections">
           <a href="#run">Run</a>
           <a href="#factory">Factory</a>
+          <a href="#vol">VOL</a>
           <a href="#history">History</a>
           <a href="#compare">Compare</a>
           <a href="#replay">Replay</a>
@@ -571,6 +595,36 @@ export default function App() {
           onRefresh={() => runAction("Feature readiness", refreshFeatureReadiness)}
           disabled={isPending}
         />
+      </Panel>
+
+      <Panel id="vol" title="VOL Execution-Aware Pipeline" kicker="Readiness, seed search, cost, quote, paper">
+        <div className="history-summary-strip" aria-label="VOL pipeline summary">
+          <Metric label="Feature Layer" value={volFeatureStatus} detail="bar volume and relative volume readiness" />
+          <Metric label="Seeds" value={formatCompact(volSummary.generated_seed_count ?? 0)} detail={`${formatCompact(volSummary.total_vol_rows ?? 0)} VOL result rows`} />
+          <Metric label="Quote Replay" value={volQuoteStatus} detail="TBBO/MBP validation gate" />
+          <Metric label="Paper Shadow" value={volPaperStatus} detail="runtime replay review gate" />
+        </div>
+        <div className="toolbar history-toolbar">
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("VOL overview", refreshVolOverview)}>
+            Refresh VOL
+          </ActionButton>
+          <ActionButton disabled={isPending} onClick={() => runAction("VOL seeds queued", () => queueVolTask(API_PATHS.volSeedSearch, { output_dir: "strategies", manifest_output: "strategies/generated/vol_execution_manifest.json" }))}>
+            Generate Seeds
+          </ActionButton>
+          <ActionButton disabled={isPending} onClick={() => runAction("VOL artifacts queued", () => queueVolTask(API_PATHS.volArtifacts))}>
+            Build Artifacts
+          </ActionButton>
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("VOL cost stress queued", () => queueVolTask(API_PATHS.volCostStress, { output: "experiments/vol_execution_artifacts/vol_cost_stress_report.json" }))}>
+            Cost Stress
+          </ActionButton>
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("VOL quote replay queued", () => queueVolTask(API_PATHS.volQuoteFillReplay, { output: "experiments/vol_execution_artifacts/vol_quote_replay_report.json" }))}>
+            Quote Gate
+          </ActionButton>
+          <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("VOL paper review queued", () => queueVolTask(API_PATHS.volPaperShadowReview, { output: "experiments/vol_execution_artifacts/vol_paper_shadow_review.json" }))}>
+            Paper Review
+          </ActionButton>
+        </div>
+        <VolPipelineTable overview={volOverview} />
       </Panel>
 
       <section className="workbench-grid">
@@ -1141,6 +1195,71 @@ function ActionButton({ children, onClick, disabled, variant = "primary" }) {
     <button className={`action-button ${variant}`} type="button" onClick={onClick} disabled={disabled}>
       {children}
     </button>
+  );
+}
+
+function VolPipelineTable({ overview }) {
+  const rows = [
+    {
+      stage: "Feature readiness",
+      status: overview?.feature_readiness?.status ?? "unknown",
+      count: overview?.feature_readiness?.missing_features?.length ?? 0,
+      detail: "Missing executable VOL features"
+    },
+    {
+      stage: "Seed leaderboard",
+      status: (overview?.strategy_leaderboard?.summary?.candidate_vol_rows ?? 0) ? "candidate" : "waiting",
+      count: overview?.strategy_leaderboard?.summary?.generated_seed_count ?? 0,
+      detail: "Generated VOL seed specs"
+    },
+    {
+      stage: "Cost stress",
+      status: (overview?.cost_stress?.candidate_count ?? 0) ? "ready" : "waiting",
+      count: overview?.cost_stress?.candidate_count ?? 0,
+      detail: "VOL candidates with stress rows"
+    },
+    {
+      stage: "Quote replay",
+      status: overview?.quote_replay?.status ?? "unknown",
+      count: overview?.quote_replay?.quote_replay_reports?.length ?? 0,
+      detail: "Quote replay reports"
+    },
+    {
+      stage: "Paper shadow",
+      status: overview?.paper_shadow?.status ?? "unknown",
+      count: overview?.paper_shadow?.paper_reports?.length ?? 0,
+      detail: "Paper shadow reports"
+    },
+    {
+      stage: "Mutation memory",
+      status: (overview?.mutation_memory?.record_count ?? 0) ? "ready" : "waiting",
+      count: overview?.mutation_memory?.record_count ?? 0,
+      detail: "Mutation records"
+    }
+  ];
+  return (
+    <div className="table-wrap compact-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th>Status</th>
+            <th>Count</th>
+            <th>Gate Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.stage}>
+              <td>{row.stage}</td>
+              <td><span className={`status-pill ${row.status}`}>{row.status}</span></td>
+              <td>{formatCompact(row.count)}</td>
+              <td>{row.detail}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

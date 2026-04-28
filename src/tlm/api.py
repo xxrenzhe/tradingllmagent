@@ -9,8 +9,7 @@ from pathlib import Path
 from time import sleep
 
 from .calibration import build_cost_calibration_artifact
-from .config import load_symbols
-from .config import get_cost_model
+from .config import get_cost_model, get_symbol, load_symbols
 from .events import (
     build_event_context_rows,
     load_event_calendar,
@@ -61,6 +60,14 @@ from .trigger_gate import (
     build_trigger_gate_memory_view,
     load_trigger_gate_forward_report,
     run_trigger_gate_simulation,
+)
+from .vol import (
+    build_vol_cost_stress_report,
+    build_vol_feature_readiness,
+    build_vol_mutation_memory,
+    build_vol_paper_shadow_review,
+    build_vol_quote_replay_report,
+    build_vol_strategy_leaderboard,
 )
 from .worker import run_task, worker_loop
 
@@ -370,6 +377,24 @@ def build_cost_calibration_response(payload: dict) -> dict:
     )
 
 
+def build_vol_overview_response(
+    experiments_root: Path = Path("experiments"),
+    symbol: str = "NQ_CME",
+    config_dir: Path = Path("configs"),
+) -> dict:
+    symbol_config = get_symbol(symbol, config_dir)
+    feature_readiness = build_vol_feature_readiness()
+    leaderboard = build_vol_strategy_leaderboard(experiments_root)
+    return {
+        "feature_readiness": feature_readiness,
+        "strategy_leaderboard": leaderboard,
+        "cost_stress": build_vol_cost_stress_report(leaderboard, symbol_config),
+        "quote_replay": build_vol_quote_replay_report(quote_files=[]),
+        "paper_shadow": build_vol_paper_shadow_review([]),
+        "mutation_memory": build_vol_mutation_memory(leaderboard),
+    }
+
+
 def datetime_from_date(value: str, end_of_day: bool = False):
     from datetime import datetime, time
 
@@ -517,6 +542,10 @@ def create_app():
     def data_import_databento_quotes(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "data.import_databento_quotes", payload)
 
+    @app.post("/api/data/import-databento-tbbo")
+    def data_import_databento_tbbo(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "data.import_databento_tbbo", payload)
+
     @app.post("/api/data/import-databento-ohlcv")
     def data_import_databento_ohlcv(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "data.import_databento_ohlcv", payload)
@@ -605,6 +634,45 @@ def create_app():
     @app.post("/api/experiments/target-discovery")
     def experiments_target_discovery(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "research.discover_target", payload)
+
+    @app.get("/api/vol/overview")
+    def vol_overview(
+        experiments_root: str = "experiments",
+        symbol: str = "NQ_CME",
+        config_dir: str = "configs",
+    ) -> dict:
+        try:
+            return build_vol_overview_response(Path(experiments_root), symbol=symbol, config_dir=Path(config_dir))
+        except (ValueError, KeyError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/vol/readiness")
+    def vol_readiness(payload: dict = Body(default={}), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "features.vol_readiness", payload)
+
+    @app.post("/api/vol/seed-search")
+    def vol_seed_search(payload: dict = Body(default={}), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "research.vol_seed_search", payload)
+
+    @app.post("/api/vol/cost-stress")
+    def vol_cost_stress(payload: dict = Body(default={}), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "research.vol_cost_stress", payload)
+
+    @app.post("/api/vol/artifacts")
+    def vol_artifacts(payload: dict = Body(default={}), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "research.vol_artifacts", payload)
+
+    @app.post("/api/vol/quote-fill-replay")
+    def vol_quote_fill_replay(payload: dict = Body(default={}), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "execution.quote_fill_replay", payload)
+
+    @app.post("/api/vol/paper-shadow-review")
+    def vol_paper_shadow_review(payload: dict = Body(default={}), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "paper.vol_shadow_review", payload)
+
+    @app.post("/api/vol/mutation-backfill")
+    def vol_mutation_backfill(payload: dict = Body(default={}), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "memory.vol_mutation_backfill", payload)
 
     @app.post("/api/monitor/once")
     def monitor_once(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:

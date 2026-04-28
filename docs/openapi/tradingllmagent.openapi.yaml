@@ -92,6 +92,12 @@ paths:
       responses:
         "200":
           description: Queued task.
+  /api/data/import-databento-tbbo:
+    post:
+      summary: Queue Databento TBBO CSV import using the quote partition importer.
+      responses:
+        "200":
+          description: Queued task.
   /api/data/import-databento-ohlcv:
     post:
       summary: Queue Databento NQ.FUT OHLCV-1m import into continuous daily-volume bar partitions.
@@ -393,6 +399,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeatureReadinessReport"
+  /api/vol/overview:
+    get:
+      summary: Load VOL execution-aware optimization readiness, leaderboard, cost, quote, paper, and mutation reports.
+      responses:
+        "200":
+          description: VOL optimization overview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VolOverviewReport"
+  /api/vol/readiness:
+    post:
+      summary: Queue VOL feature readiness artifact generation.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/seed-search:
+    post:
+      summary: Queue deterministic VOL execution-aware seed strategy generation.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/cost-stress:
+    post:
+      summary: Queue VOL candidate execution cost stress report generation.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/artifacts:
+    post:
+      summary: Queue all VOL research artifacts in the optimization plan.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/quote-fill-replay:
+    post:
+      summary: Queue quote fill replay or blocked quote replay readiness artifact.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/paper-shadow-review:
+    post:
+      summary: Queue VOL paper shadow review artifact generation.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/mutation-backfill:
+    post:
+      summary: Queue VOL mutation memory backfill from research outcomes.
+      responses:
+        "200":
+          description: Queued task.
   /api/paper/replay:
     post:
       summary: Replay backtest trades into a paper equity curve.
@@ -664,6 +722,21 @@ components:
         generated_strategy_summary:
           type: object
         generated_strategy_manifest:
+          type: object
+    VolOverviewReport:
+      type: object
+      properties:
+        feature_readiness:
+          type: object
+        strategy_leaderboard:
+          type: object
+        cost_stress:
+          type: object
+        quote_replay:
+          type: object
+        paper_shadow:
+          type: object
+        mutation_memory:
           type: object
     EventCalendar:
       type: object

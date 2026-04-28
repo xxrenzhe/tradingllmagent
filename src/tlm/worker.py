@@ -41,9 +41,19 @@ from .storage import (
     write_ticks_parquet,
 )
 from .strategy import load_strategy_spec, with_strategy_symbol
+from .strategy_generation import write_vol_strategy_specs
 from .tasks import append_task_log, claim_queued_task, get_task, next_queued_task, update_task
 from .trigger_gate import load_trigger_gate_forward_report, run_trigger_gate_simulation
 from .variants import strategy_logic_hash
+from .vol import (
+    build_vol_cost_stress_report,
+    build_vol_feature_readiness,
+    build_vol_mutation_memory,
+    build_vol_paper_shadow_review,
+    build_vol_quote_replay_report,
+    build_vol_strategy_leaderboard,
+    write_vol_research_artifacts,
+)
 
 
 def run_task(task_db: Path, task_id: str) -> dict[str, Any]:
@@ -97,6 +107,8 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_data_split_manifest(payload)
     if task_type == "data.import_databento_quotes":
         return execute_data_import_databento_quotes(payload)
+    if task_type == "data.import_databento_tbbo":
+        return execute_data_import_databento_quotes(payload)
     if task_type == "data.import_databento_ohlcv":
         return execute_data_import_databento_ohlcv(payload)
     if task_type == "data.quote_replay":
@@ -119,6 +131,20 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_research_iterate(payload)
     if task_type == "research.discover_target":
         return execute_research_discover_target(payload)
+    if task_type == "features.vol_readiness":
+        return execute_features_vol_readiness(payload)
+    if task_type == "research.vol_seed_search":
+        return execute_research_vol_seed_search(payload)
+    if task_type == "research.vol_cost_stress":
+        return execute_research_vol_cost_stress(payload)
+    if task_type == "research.vol_artifacts":
+        return execute_research_vol_artifacts(payload)
+    if task_type == "execution.quote_fill_replay":
+        return execute_execution_quote_fill_replay(payload)
+    if task_type == "paper.vol_shadow_review":
+        return execute_paper_vol_shadow_review(payload)
+    if task_type == "memory.vol_mutation_backfill":
+        return execute_memory_vol_mutation_backfill(payload)
     if task_type == "monitor.once":
         return execute_monitor_once(payload)
     if task_type == "trigger_gate.simulate":
@@ -447,6 +473,90 @@ def execute_strategy_validate(payload: dict[str, Any]) -> dict[str, Any]:
         "strategy_family": spec.strategy_family,
         "timeframe": spec.timeframe,
     }
+
+
+def execute_features_vol_readiness(payload: dict[str, Any]) -> dict[str, Any]:
+    report = build_vol_feature_readiness()
+    if payload.get("output"):
+        write_json(Path(str(payload["output"])), report)
+    return report
+
+
+def execute_research_vol_seed_search(payload: dict[str, Any]) -> dict[str, Any]:
+    output_dir = Path(str(payload.get("output_dir", "strategies")))
+    manifest_path = (
+        Path(str(payload["manifest_output"]))
+        if payload.get("manifest_output")
+        else Path("strategies/generated/vol_execution_manifest.json")
+    )
+    paths = write_vol_strategy_specs(
+        output_dir,
+        symbol=str(payload.get("symbol", "NQ_CME")),
+        timeframe=str(payload.get("timeframe", "1m")),
+        prefix=str(payload.get("prefix", "vol_execution")),
+        manifest_path=manifest_path,
+    )
+    return {
+        "count": len(paths),
+        "output_dir": str(output_dir),
+        "manifest_path": str(manifest_path),
+        "strategy_specs": [str(path) for path in paths],
+    }
+
+
+def execute_research_vol_cost_stress(payload: dict[str, Any]) -> dict[str, Any]:
+    config_dir = Path(payload.get("config_dir", "configs"))
+    symbol = get_symbol(str(payload.get("symbol", "NQ_CME")), config_dir)
+    leaderboard = build_vol_strategy_leaderboard(Path(payload.get("experiments_root", "experiments")))
+    report = build_vol_cost_stress_report(leaderboard, symbol)
+    if payload.get("output"):
+        write_json(Path(str(payload["output"])), report)
+    return report
+
+
+def execute_research_vol_artifacts(payload: dict[str, Any]) -> dict[str, Any]:
+    config_dir = Path(payload.get("config_dir", "configs"))
+    symbol = get_symbol(str(payload.get("symbol", "NQ_CME")), config_dir)
+    spec_paths = [Path(path) for path in (payload.get("specs") or [])]
+    if not spec_paths:
+        spec_paths = sorted(Path(str(payload.get("strategies_root", "strategies"))).glob("nq_vol_execution_*.yaml"))
+    paths = write_vol_research_artifacts(
+        Path(str(payload.get("output_dir", "experiments/vol_execution_artifacts"))),
+        experiments_root=Path(str(payload.get("experiments_root", "experiments"))),
+        symbol_config=symbol,
+        specs=[load_strategy_spec(path).raw for path in spec_paths],
+        quote_files=[Path(path) for path in (payload.get("quote_files") or [])],
+        quote_reports=[Path(path) for path in (payload.get("quote_reports") or [])],
+        paper_reports=[Path(path) for path in (payload.get("paper_reports") or [])],
+    )
+    return {"artifacts": paths}
+
+
+def execute_execution_quote_fill_replay(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("backtest_result"):
+        return execute_data_quote_replay(payload)
+    report = build_vol_quote_replay_report(
+        quote_files=[Path(path) for path in (payload.get("quote_files") or [])],
+        existing_reports=[Path(path) for path in (payload.get("quote_reports") or [])],
+    )
+    if payload.get("output"):
+        write_json(Path(str(payload["output"])), report)
+    return report
+
+
+def execute_paper_vol_shadow_review(payload: dict[str, Any]) -> dict[str, Any]:
+    report = build_vol_paper_shadow_review([Path(path) for path in (payload.get("paper_reports") or [])])
+    if payload.get("output"):
+        write_json(Path(str(payload["output"])), report)
+    return report
+
+
+def execute_memory_vol_mutation_backfill(payload: dict[str, Any]) -> dict[str, Any]:
+    leaderboard = build_vol_strategy_leaderboard(Path(payload.get("experiments_root", "experiments")))
+    report = build_vol_mutation_memory(leaderboard)
+    if payload.get("output"):
+        write_json(Path(str(payload["output"])), report)
+    return report
 
 
 def execute_backtest(payload: dict[str, Any], execution_mode: str) -> dict[str, Any]:

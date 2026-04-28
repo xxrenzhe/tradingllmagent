@@ -38,7 +38,15 @@ export const API_PATHS = {
   triggerGateOutcomes: "/api/trigger-gate/outcomes",
   triggerGateReports: "/api/trigger-gate/reports",
   triggerGateSchedules: "/api/trigger-gate/schedules",
-  triggerGateSimulations: "/api/trigger-gate/simulations"
+  triggerGateSimulations: "/api/trigger-gate/simulations",
+  volArtifacts: "/api/vol/artifacts",
+  volCostStress: "/api/vol/cost-stress",
+  volMutationBackfill: "/api/vol/mutation-backfill",
+  volOverview: "/api/vol/overview",
+  volPaperShadowReview: "/api/vol/paper-shadow-review",
+  volQuoteFillReplay: "/api/vol/quote-fill-replay",
+  volReadiness: "/api/vol/readiness",
+  volSeedSearch: "/api/vol/seed-search"
 };
 
 export async function apiRequest(apiBase, path, options = {}) {

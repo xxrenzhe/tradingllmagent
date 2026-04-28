@@ -19,6 +19,7 @@ from tlm.api import (
     build_trigger_gate_report_response,
     build_trigger_gate_schedule_response,
     build_trigger_gate_simulation_response,
+    build_vol_overview_response,
     create_app,
 )
 from tlm.dukascopy import Tick
@@ -753,6 +754,59 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(completed["result"]["total_trials"], 1)
         self.assertEqual(summary["experiment"]["status"], "completed")
 
+    def test_run_task_executes_vol_optimization_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            db_path = root / "tasks.sqlite3"
+            output_dir = root / "vol_artifacts"
+            seed_dir = root / "strategies"
+            manifest = root / "manifest.json"
+            tasks = [
+                ("features.vol_readiness", {"output": str(root / "readiness.json")}, "vol_ready"),
+                (
+                    "research.vol_seed_search",
+                    {"output_dir": str(seed_dir), "manifest_output": str(manifest)},
+                    "vol_seed",
+                ),
+                (
+                    "research.vol_cost_stress",
+                    {"experiments_root": str(root / "experiments"), "output": str(root / "cost.json")},
+                    "vol_cost",
+                ),
+                ("execution.quote_fill_replay", {"output": str(root / "quote.json")}, "vol_quote"),
+                ("paper.vol_shadow_review", {"output": str(root / "paper.json")}, "vol_paper"),
+                (
+                    "memory.vol_mutation_backfill",
+                    {"experiments_root": str(root / "experiments"), "output": str(root / "memory.json")},
+                    "vol_memory",
+                ),
+            ]
+            results = {}
+            for task_type, payload, task_id in tasks:
+                create_task(db_path, task_type, payload, task_id=task_id)
+                results[task_type] = run_task(db_path, task_id)
+            create_task(
+                db_path,
+                "research.vol_artifacts",
+                {
+                    "output_dir": str(output_dir),
+                    "experiments_root": str(root / "experiments"),
+                    "strategies_root": str(seed_dir),
+                },
+                task_id="vol_artifacts",
+            )
+            artifacts = run_task(db_path, "vol_artifacts")
+            manifest_exists = manifest.exists()
+
+        self.assertEqual(results["features.vol_readiness"]["result"]["status"], "ready")
+        self.assertEqual(results["research.vol_seed_search"]["result"]["count"], 5)
+        self.assertEqual(results["research.vol_cost_stress"]["result"]["artifact"], "vol_cost_stress_report")
+        self.assertEqual(results["execution.quote_fill_replay"]["result"]["status"], "blocked")
+        self.assertEqual(results["paper.vol_shadow_review"]["result"]["status"], "blocked")
+        self.assertEqual(results["memory.vol_mutation_backfill"]["result"]["record_count"], 0)
+        self.assertEqual(len(artifacts["result"]["artifacts"]), 6)
+        self.assertTrue(manifest_exists)
+
 
 class APIImportTests(unittest.TestCase):
     def test_api_module_imports_without_fastapi_installed(self) -> None:
@@ -794,6 +848,14 @@ class APIImportTests(unittest.TestCase):
             len(readiness["generated_strategy_manifest"]["strategies"]),
         )
 
+    def test_vol_overview_api_helper_exposes_blocked_execution_stages(self) -> None:
+        overview = build_vol_overview_response(Path("missing-experiments"))
+
+        self.assertEqual(overview["feature_readiness"]["status"], "ready")
+        self.assertEqual(overview["quote_replay"]["status"], "blocked")
+        self.assertEqual(overview["paper_shadow"]["status"], "blocked")
+        self.assertIn("strategy_leaderboard", overview)
+
     def test_fastapi_app_registers_research_console_routes_when_installed(self) -> None:
         try:
             app = create_app()
@@ -805,6 +867,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/data/bar-quality", paths)
         self.assertIn("/api/data/split-manifest", paths)
         self.assertIn("/api/data/import-databento-quotes", paths)
+        self.assertIn("/api/data/import-databento-tbbo", paths)
         self.assertIn("/api/data/import-databento-ohlcv", paths)
         self.assertIn("/api/data/quote-replay", paths)
         self.assertIn("/api/backtests/tick", paths)
@@ -821,6 +884,9 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/readiness/external-validation", paths)
         self.assertIn("/api/calibration/costs", paths)
         self.assertIn("/api/features/readiness", paths)
+        self.assertIn("/api/vol/overview", paths)
+        self.assertIn("/api/vol/seed-search", paths)
+        self.assertIn("/api/vol/quote-fill-replay", paths)
         self.assertIn("/api/modules/memory", paths)
         self.assertIn("/api/trigger-gate/simulations", paths)
         self.assertIn("/api/trigger-gate/reports", paths)
@@ -956,6 +1022,7 @@ class APIImportTests(unittest.TestCase):
             "/api/data/bar-quality",
             "/api/data/split-manifest",
             "/api/data/import-databento-quotes",
+            "/api/data/import-databento-tbbo",
             "/api/data/import-databento-ohlcv",
             "/api/data/quote-replay",
             "/api/tasks/{task_id}/events",
@@ -973,6 +1040,9 @@ class APIImportTests(unittest.TestCase):
             "/api/readiness/external-validation",
             "/api/calibration/costs",
             "/api/features/readiness",
+            "/api/vol/overview",
+            "/api/vol/seed-search",
+            "/api/vol/quote-fill-replay",
             "/api/gateways/nt8/commands",
             "/api/gateways/nt8/order-updates",
             "/api/gateways/nt8/incidents",
