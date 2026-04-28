@@ -85,6 +85,46 @@ class VolResearchArtifactTests(unittest.TestCase):
             self.assertEqual(report["missing_requirements"], [])
             self.assertEqual(report["execution_report_summaries"][0]["limit_fill_rate"], 0.5)
 
+    def test_vol_paper_shadow_review_reads_three_day_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "paper_shadow.jsonl"
+            events = []
+            for index, day in enumerate(("2026-04-27", "2026-04-28", "2026-04-29")):
+                events.append(
+                    {
+                        "event_type": "paper_shadow_intent",
+                        "intent": {
+                            "intent_id": f"signal_{index}",
+                            "source_strategy": {"strategy_spec_hash": "hash", "regime": "trend"},
+                            "expected_edge": 12.5,
+                        },
+                        "risk": {"decision": "risk_approved", "risk_budget_snapshot": {"daily_loss_remaining": 500}},
+                        "market_snapshot": {
+                            "snapshot_time": f"{day}T13:30:00",
+                            "spread_ticks": 2,
+                            "adverse_selection_ticks_5m": -1,
+                        },
+                        "paper_shadow_run": {
+                            "paper_shadow_run_id": f"ps_{index}",
+                            "intent_id": f"signal_{index}",
+                            "blocked": False,
+                            "created_at": f"{day}T13:30:00Z",
+                            "hypothetical_fill": {"fill_price": 19000 + index},
+                            "drift_report": {"observed_spread_ticks": 2},
+                        },
+                        "llm_diagnosis": {"summary": "ok"},
+                        "mutation_proposal": {"allowed_mutations": ["tighten_time_window"], "blocked_mutations": []},
+                    }
+                )
+            report_path.write_text("\n".join(json.dumps(event) for event in events), encoding="utf-8")
+
+            report = build_vol_paper_shadow_review([report_path])
+
+            self.assertEqual(report["status"], "ready_for_review")
+            self.assertEqual(report["summary"]["trading_day_count"], 3)
+            self.assertEqual(report["summary"]["simulated_fill_count"], 3)
+            self.assertEqual(report["records"][0]["actual_fill_mode"], "simulated_market")
+
     def test_run_vol_prescreen_writes_populated_leaderboard(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -391,12 +391,42 @@ def _quote_report_summary(path: Path) -> dict[str, Any]:
 
 def build_vol_paper_shadow_review(paper_reports: Sequence[Path] | None = None) -> dict[str, Any]:
     reports = [str(path) for path in (paper_reports or []) if path.exists()]
+    records = []
+    for path in (paper_reports or []):
+        if path.exists():
+            records.extend(_load_paper_shadow_records(path))
+    trading_days = sorted({record["trading_day"] for record in records if record.get("trading_day")})
+    missing_requirements = []
+    if not reports:
+        missing_requirements.append("paper_shadow_trade_log")
+    if len(trading_days) < 3:
+        missing_requirements.append("three_trading_days")
+    if records and not any(record.get("llm_diagnosis") for record in records):
+        missing_requirements.append("llm_diagnosis")
     return {
         "schema_version": 1,
         "artifact": "vol_paper_shadow_review",
-        "status": "ready_for_review" if reports else "blocked",
+        "status": "ready_for_review" if not missing_requirements else "blocked",
         "paper_reports": reports,
-        "missing_requirements": [] if reports else ["paper_shadow_trade_log"],
+        "missing_requirements": missing_requirements,
+        "summary": {
+            "record_count": len(records),
+            "trading_day_count": len(trading_days),
+            "blocked_count": sum(1 for record in records if record.get("actual_fill_mode") == "blocked"),
+            "simulated_fill_count": sum(1 for record in records if record.get("actual_fill_mode") == "simulated_market"),
+            "missed_limit_count": sum(1 for record in records if record.get("actual_fill_mode") == "missed_limit"),
+            "avg_spread_ticks": _average(
+                [float(record["spread_ticks"]) for record in records if record.get("spread_ticks") is not None]
+            ),
+            "avg_adverse_selection_ticks_5m": _average(
+                [
+                    float(record["adverse_selection_ticks_5m"])
+                    for record in records
+                    if record.get("adverse_selection_ticks_5m") is not None
+                ]
+            ),
+        },
+        "records": records,
         "required_fields": [
             "signal_id",
             "expected_edge",
@@ -408,6 +438,53 @@ def build_vol_paper_shadow_review(paper_reports: Sequence[Path] | None = None) -
             "allowed_mutations",
             "blocked_mutations",
         ],
+    }
+
+
+def _load_paper_shadow_records(path: Path) -> list[dict[str, Any]]:
+    payloads = []
+    if path.suffix == ".jsonl":
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                payloads.append(json.loads(line))
+    else:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payloads = payload if isinstance(payload, list) else payload.get("records", payload.get("events", [payload]))
+    return [_paper_shadow_record(event) for event in payloads if _paper_shadow_record(event) is not None]
+
+
+def _paper_shadow_record(event: dict[str, Any]) -> dict[str, Any] | None:
+    if event.get("event_type") not in {None, "paper_shadow_intent"} and "paper_shadow_run" not in event:
+        return None
+    run = event.get("paper_shadow_run", event)
+    intent = event.get("intent", {})
+    market_snapshot = event.get("market_snapshot", {})
+    drift = run.get("drift_report", {})
+    created_at = run.get("created_at") or event.get("recorded_at") or market_snapshot.get("snapshot_time")
+    signal_id = intent.get("intent_id") or run.get("intent_id") or run.get("paper_shadow_run_id")
+    if not signal_id:
+        return None
+    hypothetical_fill = run.get("hypothetical_fill")
+    actual_fill_mode = "blocked" if run.get("blocked") else "simulated_market" if hypothetical_fill else "missed_limit"
+    llm_diagnosis = event.get("llm_diagnosis") or {}
+    mutation = event.get("mutation_proposal") or {}
+    return {
+        "signal_id": signal_id,
+        "paper_shadow_run_id": run.get("paper_shadow_run_id"),
+        "trading_day": str(created_at)[:10] if created_at else None,
+        "expected_edge": intent.get("expected_edge") or intent.get("source_strategy", {}).get("expected_edge"),
+        "actual_fill_mode": actual_fill_mode,
+        "spread_ticks": market_snapshot.get("spread_ticks", drift.get("observed_spread_ticks")),
+        "adverse_selection_ticks_5m": market_snapshot.get("adverse_selection_ticks_5m"),
+        "regime": market_snapshot.get("regime") or intent.get("source_strategy", {}).get("regime"),
+        "llm_diagnosis": llm_diagnosis,
+        "allowed_mutations": mutation.get("allowed_mutations", []),
+        "blocked_mutations": mutation.get("blocked_mutations", ["promote_without_quote_replay"]),
+        "simulated_fill": hypothetical_fill,
+        "missed_fill_result": event.get("missed_fill_result"),
+        "post_signal_excursion": event.get("post_signal_excursion"),
+        "risk_budget_snapshot": event.get("risk", {}).get("risk_budget_snapshot", {}),
+        "drift_report": drift,
     }
 
 
@@ -534,6 +611,10 @@ def _median(values: Sequence[float]) -> float | None:
     if len(sorted_values) % 2:
         return sorted_values[middle]
     return (sorted_values[middle - 1] + sorted_values[middle]) / 2
+
+
+def _average(values: Sequence[float]) -> float | None:
+    return sum(values) / len(values) if values else None
 
 
 def _run_vol_strategy_batch(

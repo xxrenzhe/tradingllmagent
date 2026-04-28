@@ -433,6 +433,11 @@ def submit_paper_shadow(payload: dict[str, Any], audit_path: Path) -> dict[str, 
         "intent": response["intent"],
         "risk": response["risk"],
         "paper_shadow_run": response["paper_shadow_run"],
+        "market_snapshot": dict(payload.get("market_snapshot") or {}),
+        "slippage_model": dict(payload.get("slippage_model") or {}),
+        "backtest_costs": dict(payload.get("backtest_costs") or {}),
+        "llm_diagnosis": payload.get("llm_diagnosis"),
+        "mutation_proposal": payload.get("mutation_proposal"),
         "recorded_at": datetime.now(UTC).isoformat(),
     }
     append_execution_audit(audit_path, event)
