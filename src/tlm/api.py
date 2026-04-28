@@ -501,6 +501,26 @@ def create_app():
     def data_build_bars(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "data.build_bars", payload)
 
+    @app.post("/api/data/import-firstrate")
+    def data_import_firstrate(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "data.import_firstrate", payload)
+
+    @app.post("/api/data/bar-quality")
+    def data_bar_quality(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "data.bar_quality", payload)
+
+    @app.post("/api/data/split-manifest")
+    def data_split_manifest(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "data.split_manifest", payload)
+
+    @app.post("/api/data/import-databento-quotes")
+    def data_import_databento_quotes(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "data.import_databento_quotes", payload)
+
+    @app.post("/api/data/quote-replay")
+    def data_quote_replay(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "data.quote_replay", payload)
+
     @app.get("/api/data/quality")
     def data_quality(symbol: str, date_from: str, date_to: str, data_root: str = "data") -> dict:
         from .cli import parse_date, tick_parquet_files

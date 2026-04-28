@@ -15,10 +15,13 @@ from .cli_dates import iter_dates
 from .config import get_cost_model, get_symbol
 from .dukascopy import download_hour, iter_hours, parse_bi5_file
 from .experiments import record_audit_event, record_experiment, record_trial
+from .firstrate import import_firstrate_bars
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .monitor import build_monitor_report, write_monitor_outputs
 from .modules import build_target_frequency_pool, discover_module_memory_files, load_module_performance_memory
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
+from .quality import build_bar_quality_report
+from .quotes import build_quote_execution_report, import_databento_quotes
 from .research import (
     StrategyTargetCriteria,
     discover_strategy_seed_specs,
@@ -31,6 +34,7 @@ from .research import (
 from .storage import (
     bar_path,
     compute_data_version_hash,
+    normalized_quote_path,
     normalized_tick_path,
     write_json,
     write_ticks_parquet,
@@ -84,6 +88,16 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_data_download(payload)
     if task_type == "data.build_bars":
         return execute_data_build_bars(payload)
+    if task_type == "data.import_firstrate":
+        return execute_data_import_firstrate(payload)
+    if task_type == "data.bar_quality":
+        return execute_data_bar_quality(payload)
+    if task_type == "data.split_manifest":
+        return execute_data_split_manifest(payload)
+    if task_type == "data.import_databento_quotes":
+        return execute_data_import_databento_quotes(payload)
+    if task_type == "data.quote_replay":
+        return execute_data_quote_replay(payload)
     if task_type == "strategy.validate":
         return execute_strategy_validate(payload)
     if task_type == "backtest.bar":
@@ -282,6 +296,126 @@ def execute_data_build_bars(payload: dict[str, Any]) -> dict[str, Any]:
         "rows": total_rows,
         "outputs": outputs,
     }
+
+
+def execute_data_import_firstrate(payload: dict[str, Any]) -> dict[str, Any]:
+    config_dir = Path(payload.get("config_dir", "configs"))
+    data_root = Path(payload.get("data_root", "data"))
+    symbol_alias = _required(payload, "symbol")
+    symbol = get_symbol(symbol_alias, config_dir)
+    if symbol.provider.lower() != "firstratedata":
+        raise ValueError(f"Symbol {symbol_alias} provider must be firstratedata, got {symbol.provider}")
+    outputs = import_firstrate_bars(
+        csv_paths=[Path(path) for path in _required_list(payload, "input", "inputs")],
+        data_root=data_root,
+        symbol=symbol_alias,
+        source_timezone=str(payload.get("source_timezone", "UTC")),
+        force=bool(payload.get("force", False)),
+    )
+    return {"symbol": symbol_alias, "provider": symbol.provider, "outputs": outputs}
+
+
+def execute_data_bar_quality(payload: dict[str, Any]) -> dict[str, Any]:
+    data_root = Path(payload.get("data_root", "data"))
+    symbol = _required(payload, "symbol")
+    timeframe = str(payload.get("timeframe", "1m"))
+    date_from = parse_date(_required(payload, "date_from", "from"))
+    date_to = parse_date(_required(payload, "date_to", "to"))
+    report = build_bar_quality_report(
+        symbol,
+        timeframe,
+        bar_parquet_files(data_root, symbol, timeframe, date_from, date_to),
+        expected_minutes=timeframe_minutes(timeframe),
+        max_normal_price_jump=float(payload.get("max_normal_price_jump", 100.0)),
+    )
+    if payload.get("output"):
+        write_json(Path(str(payload["output"])), report.to_dict())
+    return report.to_dict()
+
+
+def execute_data_split_manifest(payload: dict[str, Any]) -> dict[str, Any]:
+    from .validation import generate_rolling_folds
+
+    data_root = Path(payload.get("data_root", "data"))
+    symbol = _required(payload, "symbol")
+    timeframe = str(payload.get("timeframe", "1m"))
+    date_from = parse_date(_required(payload, "date_from", "from"))
+    date_to = parse_date(_required(payload, "date_to", "to"))
+    files = bar_parquet_files(data_root, symbol, timeframe, date_from, date_to)
+    plan = generate_rolling_folds(
+        date_from,
+        date_to,
+        train_days=int(payload.get("train_days", 730)),
+        validation_days=int(payload.get("validation_days", 182)),
+        test_days=int(payload.get("test_days", 182)),
+        step_days=int(payload.get("step_days", 91)),
+        embargo_days=int(payload.get("embargo_days", 5)),
+        final_holdout_days=int(payload.get("final_holdout_days", 365)),
+        min_folds=int(payload.get("min_folds", 1)),
+        indicator_warmup_days=int(payload.get("indicator_warmup_days", 0)),
+    )
+    manifest = {
+        "schema_version": 1,
+        "artifact": "dataset_split_manifest",
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "data_version_hash": compute_data_version_hash(
+            files,
+            {
+                "artifact": "dataset_split_manifest",
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "date_from": date_from.isoformat(),
+                "date_to": date_to.isoformat(),
+            },
+        ),
+        "plan": plan.to_dict(),
+        "final_holdout_policy": {
+            "llm_feedback_includes_final_holdout": False,
+            "llm_visible_splits": ["train", "validation"],
+            "llm_hidden_splits": ["test", "final_holdout"],
+        },
+        "source_files": [str(path) for path in files if path.exists()],
+        "missing_files": [str(path) for path in files if not path.exists()],
+    }
+    if payload.get("output"):
+        write_json(Path(str(payload["output"])), manifest)
+    return manifest
+
+
+def execute_data_import_databento_quotes(payload: dict[str, Any]) -> dict[str, Any]:
+    config_dir = Path(payload.get("config_dir", "configs"))
+    data_root = Path(payload.get("data_root", "data"))
+    symbol_alias = _required(payload, "symbol")
+    symbol = get_symbol(symbol_alias, config_dir)
+    if symbol.provider.lower() != "databento":
+        raise ValueError(f"Symbol {symbol_alias} provider must be databento, got {symbol.provider}")
+    outputs = import_databento_quotes(
+        csv_paths=[Path(path) for path in _required_list(payload, "input", "inputs")],
+        data_root=data_root,
+        symbol=symbol_alias,
+        source_timezone=str(payload.get("source_timezone", "UTC")),
+        force=bool(payload.get("force", False)),
+    )
+    return {"symbol": symbol_alias, "provider": symbol.provider, "outputs": outputs}
+
+
+def execute_data_quote_replay(payload: dict[str, Any]) -> dict[str, Any]:
+    config_dir = Path(payload.get("config_dir", "configs"))
+    data_root = Path(payload.get("data_root", "data"))
+    symbol_alias = _required(payload, "symbol")
+    symbol = get_symbol(symbol_alias, config_dir)
+    date_from = parse_date(_required(payload, "date_from", "from"))
+    date_to = parse_date(_required(payload, "date_to", "to"))
+    quote_files = [normalized_quote_path(data_root, symbol_alias, day) for day in iter_dates(date_from, date_to)]
+    return build_quote_execution_report(
+        backtest_result_path=Path(_required(payload, "backtest_result")),
+        quote_files=quote_files,
+        symbol_config=symbol,
+        output_path=Path(str(payload["output"])) if payload.get("output") else None,
+    )
 
 
 def execute_strategy_validate(payload: dict[str, Any]) -> dict[str, Any]:
@@ -891,4 +1025,17 @@ def _required(payload: dict[str, Any], key: str, *aliases: str) -> str:
         value = payload.get(candidate)
         if value:
             return str(value)
+    raise ValueError(f"{key} is required")
+
+
+def _required_list(payload: dict[str, Any], key: str, *aliases: str) -> list[str]:
+    for candidate in (key, *aliases):
+        value = payload.get(candidate)
+        if value is None:
+            continue
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            return value
+        raise ValueError(f"{candidate} must be a string or list of strings")
     raise ValueError(f"{key} is required")

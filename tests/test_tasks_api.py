@@ -23,7 +23,7 @@ from tlm.api import (
 )
 from tlm.dukascopy import Tick
 from tlm.experiments import load_experiment_audit_logs, load_experiment_summary
-from tlm.storage import normalized_tick_path, write_ticks_parquet
+from tlm.storage import bar_path, normalized_quote_path, normalized_tick_path, write_ticks_parquet
 from tlm.tasks import (
     append_task_log,
     claim_queued_task,
@@ -260,6 +260,125 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(rows_5m[0], 1)
         self.assertAlmostEqual(rows_5m[1], 100.1)
         self.assertAlmostEqual(rows_5m[2], 100.65)
+
+    def test_run_task_executes_nq_data_plan_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            db_path = root / "tasks.sqlite3"
+            firstrate_csv = root / "nq.csv"
+            firstrate_csv.write_text(
+                "timestamp,open,high,low,close,volume\n"
+                "2025-03-19 13:30:00,100.0,100.5,99.5,100.0,10\n"
+                "2025-03-20 13:30:00,101.0,101.5,100.5,101.0,11\n",
+                encoding="utf-8",
+            )
+            create_task(
+                db_path,
+                "data.import_firstrate",
+                {"symbol": "NQ_1M", "input": str(firstrate_csv), "data_root": str(data_root)},
+                task_id="task_import_firstrate",
+            )
+            imported = run_task(db_path, "task_import_firstrate")
+
+            create_task(
+                db_path,
+                "data.bar_quality",
+                {
+                    "symbol": "NQ_1M",
+                    "date_from": "2025-03-19",
+                    "date_to": "2025-03-20",
+                    "data_root": str(data_root),
+                },
+                task_id="task_bar_quality",
+            )
+            quality = run_task(db_path, "task_bar_quality")
+
+            split_output = root / "split.json"
+            create_task(
+                db_path,
+                "data.split_manifest",
+                {
+                    "symbol": "NQ_1M",
+                    "date_from": "2025-03-01",
+                    "date_to": "2025-03-20",
+                    "train_days": 3,
+                    "validation_days": 3,
+                    "test_days": 3,
+                    "step_days": 3,
+                    "embargo_days": 0,
+                    "final_holdout_days": 3,
+                    "data_root": str(data_root),
+                    "output": str(split_output),
+                },
+                task_id="task_split",
+            )
+            split = run_task(db_path, "task_split")
+
+            quotes_csv = root / "tbbo.csv"
+            quotes_csv.write_text(
+                "ts_event,bid_px_00,ask_px_00,bid_sz_00,ask_sz_00\n"
+                "2025-03-19T13:30:00Z,100.00,100.25,7,9\n"
+                "2025-03-19T13:35:00Z,101.00,101.25,8,10\n",
+                encoding="utf-8",
+            )
+            create_task(
+                db_path,
+                "data.import_databento_quotes",
+                {"symbol": "NQ_CME", "input": str(quotes_csv), "data_root": str(data_root)},
+                task_id="task_import_quotes",
+            )
+            quotes = run_task(db_path, "task_import_quotes")
+
+            backtest_result = root / "backtest.json"
+            backtest_result.write_text(
+                json.dumps(
+                    {
+                        "trades": [
+                            {
+                                "symbol": "NQ_CME",
+                                "side": "long",
+                                "entry_time": "2025-03-19T13:30:00",
+                                "exit_time": "2025-03-19T13:35:00",
+                                "entry_price": 100.0,
+                                "exit_price": 101.0,
+                                "contracts": 1,
+                                "gross_pnl": 20.0,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            create_task(
+                db_path,
+                "data.quote_replay",
+                {
+                    "symbol": "NQ_CME",
+                    "date_from": "2025-03-19",
+                    "date_to": "2025-03-19",
+                    "data_root": str(data_root),
+                    "backtest_result": str(backtest_result),
+                },
+                task_id="task_quote_replay",
+            )
+            replay = run_task(db_path, "task_quote_replay")
+
+            firstrate_path_exists = bar_path(data_root, "NQ_1M", "1m", datetime(2025, 3, 19).date()).exists()
+            quote_path_exists = normalized_quote_path(data_root, "NQ_CME", datetime(2025, 3, 19).date()).exists()
+            split_output_exists = split_output.exists()
+
+        self.assertEqual(imported["status"], "completed")
+        self.assertTrue(firstrate_path_exists)
+        self.assertEqual(quality["status"], "completed")
+        self.assertEqual(quality["result"]["rows"], 2)
+        self.assertEqual(split["status"], "completed")
+        self.assertTrue(split_output_exists)
+        self.assertFalse(split["result"]["final_holdout_policy"]["llm_feedback_includes_final_holdout"])
+        self.assertEqual(quotes["status"], "completed")
+        self.assertTrue(quote_path_exists)
+        self.assertEqual(replay["status"], "completed")
+        self.assertAlmostEqual(replay["result"]["avg_bid_ask_cost_usd"], 10.0)
 
     def test_run_task_rejects_non_tick_data_download(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -664,6 +783,11 @@ class APIImportTests(unittest.TestCase):
             self.skipTest("FastAPI is not installed")
         paths = {route.path for route in app.routes}
 
+        self.assertIn("/api/data/import-firstrate", paths)
+        self.assertIn("/api/data/bar-quality", paths)
+        self.assertIn("/api/data/split-manifest", paths)
+        self.assertIn("/api/data/import-databento-quotes", paths)
+        self.assertIn("/api/data/quote-replay", paths)
         self.assertIn("/api/backtests/tick", paths)
         self.assertIn("/api/experiments/proposals", paths)
         self.assertIn("/api/experiments/iterations", paths)
