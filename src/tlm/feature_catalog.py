@@ -158,6 +158,8 @@ def features_for_data_levels(data_levels: set[str]) -> tuple[FeatureDefinition, 
 
 
 def feature_readiness_report() -> dict[str, Any]:
+    from .features import executable_feature_names
+
     by_status: dict[str, int] = {}
     by_data_level: dict[str, int] = {}
     by_leakage_risk: dict[str, int] = {}
@@ -177,6 +179,7 @@ def feature_readiness_report() -> dict[str, Any]:
         for feature in FEATURE_CATALOG
         if feature.implementation_status == "external_required"
     ]
+    executable = list(executable_feature_names())
     return {
         "feature_count": len(FEATURE_CATALOG),
         "by_status": dict(sorted(by_status.items())),
@@ -184,8 +187,10 @@ def feature_readiness_report() -> dict[str, Any]:
         "by_leakage_risk": dict(sorted(by_leakage_risk.items())),
         "by_category": dict(sorted(by_category.items())),
         "usable_for_bar_research_count": len(usable_for_bar_research),
+        "executable_feature_count": len(executable),
         "external_required_count": len(external_required),
         "usable_for_bar_research": usable_for_bar_research,
+        "executable_features": executable,
         "external_required": external_required,
     }
 
