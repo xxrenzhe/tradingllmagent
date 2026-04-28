@@ -654,6 +654,10 @@ def create_app():
     def vol_seed_search(payload: dict = Body(default={}), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "research.vol_seed_search", payload)
 
+    @app.post("/api/vol/pre-screen")
+    def vol_pre_screen(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "research.vol_prescreen", payload)
+
     @app.post("/api/vol/cost-stress")
     def vol_cost_stress(payload: dict = Body(default={}), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "research.vol_cost_stress", payload)

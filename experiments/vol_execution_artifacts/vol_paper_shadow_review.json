@@ -1,0 +1,20 @@
+{
+  "artifact": "vol_paper_shadow_review",
+  "missing_requirements": [
+    "paper_shadow_trade_log"
+  ],
+  "paper_reports": [],
+  "required_fields": [
+    "signal_id",
+    "expected_edge",
+    "actual_fill_mode",
+    "spread_ticks",
+    "adverse_selection_ticks_5m",
+    "regime",
+    "llm_diagnosis",
+    "allowed_mutations",
+    "blocked_mutations"
+  ],
+  "schema_version": 1,
+  "status": "blocked"
+}

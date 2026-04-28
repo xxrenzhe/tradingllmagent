@@ -886,6 +886,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/features/readiness", paths)
         self.assertIn("/api/vol/overview", paths)
         self.assertIn("/api/vol/seed-search", paths)
+        self.assertIn("/api/vol/pre-screen", paths)
         self.assertIn("/api/vol/quote-fill-replay", paths)
         self.assertIn("/api/modules/memory", paths)
         self.assertIn("/api/trigger-gate/simulations", paths)
@@ -1042,6 +1043,7 @@ class APIImportTests(unittest.TestCase):
             "/api/features/readiness",
             "/api/vol/overview",
             "/api/vol/seed-search",
+            "/api/vol/pre-screen",
             "/api/vol/quote-fill-replay",
             "/api/gateways/nt8/commands",
             "/api/gateways/nt8/order-updates",

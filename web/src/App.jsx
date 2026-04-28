@@ -614,6 +614,9 @@ export default function App() {
           <ActionButton disabled={isPending} onClick={() => runAction("VOL artifacts queued", () => queueVolTask(API_PATHS.volArtifacts))}>
             Build Artifacts
           </ActionButton>
+          <ActionButton disabled={isPending} onClick={() => runAction("VOL pre-screen queued", () => queueVolTask(API_PATHS.volPreScreen, { from: "2010-06-06", to: forms.dateTo || today(), output_dir: "experiments/vol_execution_artifacts" }))}>
+            Run Pre-Screen
+          </ActionButton>
           <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("VOL cost stress queued", () => queueVolTask(API_PATHS.volCostStress, { output: "experiments/vol_execution_artifacts/vol_cost_stress_report.json" }))}>
             Cost Stress
           </ActionButton>

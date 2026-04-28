@@ -52,6 +52,7 @@ from .vol import (
     build_vol_paper_shadow_review,
     build_vol_quote_replay_report,
     build_vol_strategy_leaderboard,
+    run_vol_prescreen,
     write_vol_research_artifacts,
 )
 
@@ -135,6 +136,8 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_features_vol_readiness(payload)
     if task_type == "research.vol_seed_search":
         return execute_research_vol_seed_search(payload)
+    if task_type == "research.vol_prescreen":
+        return execute_research_vol_prescreen(payload)
     if task_type == "research.vol_cost_stress":
         return execute_research_vol_cost_stress(payload)
     if task_type == "research.vol_artifacts":
@@ -503,6 +506,27 @@ def execute_research_vol_seed_search(payload: dict[str, Any]) -> dict[str, Any]:
         "manifest_path": str(manifest_path),
         "strategy_specs": [str(path) for path in paths],
     }
+
+
+def execute_research_vol_prescreen(payload: dict[str, Any]) -> dict[str, Any]:
+    config_dir = Path(payload.get("config_dir", "configs"))
+    symbol = get_symbol(str(payload.get("symbol", "NQ_CME")), config_dir)
+    cost_model = get_cost_model(str(payload.get("cost_model", "nq_conservative_v1")), config_dir)
+    strategies_root = Path(str(payload.get("strategies_root", "strategies")))
+    spec_paths = [Path(path) for path in (payload.get("specs") or [])]
+    if not spec_paths:
+        spec_paths = sorted(strategies_root.glob("nq_vol_execution_*.yaml"))
+    return run_vol_prescreen(
+        strategy_paths=spec_paths,
+        data_root=Path(payload.get("data_root", "data")),
+        symbol_config=symbol,
+        cost_model=cost_model,
+        date_from=parse_date(_required(payload, "date_from", "from")),
+        date_to=parse_date(_required(payload, "date_to", "to")),
+        timeframe=str(payload.get("timeframe", "1m")),
+        output_dir=Path(str(payload.get("output_dir", "experiments/vol_execution_artifacts"))),
+        starting_equity=float(payload.get("starting_equity", 100_000)),
+    )
 
 
 def execute_research_vol_cost_stress(payload: dict[str, Any]) -> dict[str, Any]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from bisect import bisect_right, insort
 from datetime import time
 from typing import Sequence
 
@@ -100,6 +101,7 @@ def compute_executable_features(
     trend_direction = 0
     trend_age = 0
     previous_vwap_dist = None
+    day_volumes_sorted: list[float] = []
 
     for index, bar in enumerate(bars):
         timestamp = bar["timestamp"]
@@ -125,6 +127,7 @@ def compute_executable_features(
             trend_direction = 0
             trend_age = 0
             previous_vwap_dist = None
+            day_volumes_sorted = []
         else:
             day_high = max(day_high if day_high is not None else high, high)
             day_low = min(day_low if day_low is not None else low, low)
@@ -187,7 +190,12 @@ def compute_executable_features(
         previous_vwap_dist = vwap_dist
         relative_volume_5 = _ratio(bar_volume, volume_ma_5[index])
         relative_volume_20 = _ratio(bar_volume, volume_ma_20[index])
-        volume_percentile_session = _volume_percentile_same_day(volumes, bars, index)
+        insort(day_volumes_sorted, bar_volume)
+        volume_percentile_session = (
+            bisect_right(day_volumes_sorted, bar_volume) / len(day_volumes_sorted)
+            if len(day_volumes_sorted) >= 5
+            else None
+        )
         five_minute_confirm = _ratio(volume_sum_5[index], _rolling_mean_before(volume_sum_5, index, 20))
         fifteen_minute_confirm = _ratio(volume_sum_15[index], _rolling_mean_before(volume_sum_15, index, 20))
         multi_timeframe_volume_confirm = (

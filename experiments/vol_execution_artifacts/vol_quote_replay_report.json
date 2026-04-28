@@ -1,0 +1,17 @@
+{
+  "artifact": "vol_quote_replay_report",
+  "missing_requirements": [
+    "quote_replay_report"
+  ],
+  "quote_files": [],
+  "quote_replay_reports": [],
+  "required_checks": [
+    "market_order_bid_ask_replay",
+    "spread_distribution",
+    "limit_fill_rate",
+    "missed_fill_opportunity_cost",
+    "adverse_selection_1m_3m_5m_15m"
+  ],
+  "schema_version": 1,
+  "status": "blocked"
+}

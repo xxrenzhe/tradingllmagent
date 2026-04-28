@@ -44,6 +44,7 @@ export const API_PATHS = {
   volMutationBackfill: "/api/vol/mutation-backfill",
   volOverview: "/api/vol/overview",
   volPaperShadowReview: "/api/vol/paper-shadow-review",
+  volPreScreen: "/api/vol/pre-screen",
   volQuoteFillReplay: "/api/vol/quote-fill-replay",
   volReadiness: "/api/vol/readiness",
   volSeedSearch: "/api/vol/seed-search"

@@ -72,7 +72,7 @@ from .trigger_gate import (
     run_trigger_gate_simulation,
 )
 from .variants import DEFAULT_PARAMETER_BUDGET, ParameterBudgetError
-from .vol import write_vol_research_artifacts
+from .vol import run_vol_prescreen, write_vol_research_artifacts
 from .validation import generate_rolling_folds
 
 
@@ -772,6 +772,27 @@ def cmd_research_vol_artifacts(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_research_vol_prescreen(args: argparse.Namespace) -> int:
+    symbol = get_symbol(args.symbol, Path(args.config_dir))
+    cost_model = get_cost_model(args.cost_model, Path(args.config_dir))
+    date_from = parse_date(args.date_from)
+    date_to = parse_date(args.date_to)
+    spec_paths = [Path(path) for path in args.specs] if args.specs else sorted(Path(args.strategies_root).glob("nq_vol_execution_*.yaml"))
+    report = run_vol_prescreen(
+        strategy_paths=spec_paths,
+        data_root=Path(args.data_root),
+        symbol_config=symbol,
+        cost_model=cost_model,
+        date_from=date_from,
+        date_to=date_to,
+        timeframe=args.timeframe,
+        output_dir=Path(args.output_dir) if args.output_dir else None,
+        starting_equity=args.starting_equity,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True, default=str))
+    return 0
+
+
 def cmd_research_discover_target(args: argparse.Namespace) -> int:
     if args.spec:
         spec = load_strategy_spec(Path(args.spec))
@@ -1372,6 +1393,18 @@ def build_parser() -> argparse.ArgumentParser:
     vol_artifacts.add_argument("--quote-reports", action="append")
     vol_artifacts.add_argument("--paper-reports", action="append")
     vol_artifacts.set_defaults(func=cmd_research_vol_artifacts)
+
+    vol_prescreen = research_subparsers.add_parser("vol-prescreen")
+    vol_prescreen.add_argument("--symbol", default="NQ_CME")
+    vol_prescreen.add_argument("--timeframe", default="1m")
+    vol_prescreen.add_argument("--from", dest="date_from", required=True)
+    vol_prescreen.add_argument("--to", dest="date_to", required=True)
+    vol_prescreen.add_argument("--strategies-root", default="strategies")
+    vol_prescreen.add_argument("--specs", nargs="*")
+    vol_prescreen.add_argument("--cost-model", default="nq_conservative_v1")
+    vol_prescreen.add_argument("--starting-equity", type=float, default=100_000)
+    vol_prescreen.add_argument("--output-dir", default="experiments/vol_execution_artifacts")
+    vol_prescreen.set_defaults(func=cmd_research_vol_prescreen)
 
     discover = research_subparsers.add_parser("discover-target")
     discover.add_argument("--spec")

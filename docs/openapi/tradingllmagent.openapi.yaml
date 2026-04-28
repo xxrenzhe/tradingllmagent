@@ -421,6 +421,12 @@ paths:
       responses:
         "200":
           description: Queued task.
+  /api/vol/pre-screen:
+    post:
+      summary: Queue NQ_CME OHLCV VOL seed pre-screen and leaderboard generation.
+      responses:
+        "200":
+          description: Queued task.
   /api/vol/cost-stress:
     post:
       summary: Queue VOL candidate execution cost stress report generation.
