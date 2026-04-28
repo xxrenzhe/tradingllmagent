@@ -20,6 +20,7 @@ Older documents remain useful as design history, but they should not override ne
 - `docs/plan/8.llm-trigger-gate-optimization-plan.md`: authoritative for triggered LLM gating, target-frequency strategy pool selection, token-cost control, memory backfill, and forward-test iteration.
 - `docs/plan/9.llm-trading-optimization-factory.md`: authoritative for the full feature-mining, strategy-generation, backtest-validation, paper/sim/live replay, anti-overfit, and LLM-assisted optimization loop.
 - `docs/plan/10.strategy-search-best-practices-optimization-plan.md`: authoritative for first-search failure analysis, online best-practice research synthesis, executable feature/grammar upgrades, inverse mutation, pre-screening, and the next strategy-search optimization plan.
+- `docs/plan/11.nq-historical-data-acquisition-plan.md`: authoritative for NQ historical data source selection, FirstRate/Databento data layering, free-data boundaries, acquisition sequencing, and quote-level execution validation.
 
 ## 3. Version Boundaries
 
@@ -49,5 +50,6 @@ The current implementation should follow this order:
 6. Add NT8 sim boundary: independent gateway process, heartbeat, ACK/NACK, reconciliation, incident events, and sim-only validation.
 7. Add controlled live only after gates: paper shadow, micro-live with manual approval, broker-side protection, runbooks, and live profile whitelist.
 8. Operate the LLM trading optimization factory: governed feature registry, audited strategy factory, anti-overfit promotion gates, paper/sim/live replay attribution, and memory-driven next-round generation.
+9. Upgrade the NQ data foundation: acquire low-cost multi-year 1m bars for search, reserve Databento CME quotes for candidate execution validation, and keep free proxy data out of final profitability claims.
 
 Do not start from live order buttons, unrestricted NT8 control, or free-form LLM trading actions. Those are downstream capabilities gated by `docs/plan/4.nt8-live-integration-roadmap.md`.
