@@ -352,6 +352,40 @@ class BarBacktestTests(unittest.TestCase):
         self.assertTrue(all(item["passed"] for item in result.trades[0].predicate_evaluation_at_entry))
         self.assertIsNotNone(result.feature_snapshot_hash)
         self.assertIn("return_5m", result.executable_features)
+        self.assertIsNotNone(result.signal_health_report)
+        self.assertEqual(result.signal_health_report["status"], "ok")
+        self.assertEqual(result.signal_health_report["session_bars"], 20)
+        self.assertEqual(result.signal_health_report["filter_pass_count"], 20)
+        self.assertGreater(result.signal_health_report["post_filter_entry_count"], 0)
+
+    def test_signal_grammar_health_report_identifies_filter_block(self) -> None:
+        payload = base_spec()
+        payload["name"] = "test_signal_health_filter_block"
+        payload["strategy_family"] = "intraday_momentum"
+        payload["direction"] = "long"
+        payload["indicators"] = {"momentum": {"type": "momentum", "lookback_minutes": 5, "threshold_points": 2}}
+        payload["parameters"] = {"momentum_lookback_minutes": {"values": [5]}}
+        payload["signal_grammar"] = {
+            "entry": {"long": {"all": [{"feature": "return_5m", "op": ">=", "value": 2.0}]}},
+            "filters": {"all": [{"feature": "spread_ticks", "op": "<=", "value": 0.1}]},
+            "exit": {
+                "stop": {"type": "points", "value": 2},
+                "take_profit": {"type": "points", "value": 1},
+                "time_stop": {"minutes": 5},
+            },
+        }
+        rows = build_bar_rows(
+            datetime(2025, 1, 2, 13, 30),
+            [(100 + index, 102 + index, 99 + index, 100 + index) for index in range(20)],
+        )
+
+        result = run_bar_result_for_rows(payload, rows)
+
+        self.assertEqual(result.signal_health_report["status"], "blocked")
+        self.assertIn("filters_block_all_session_bars", result.signal_health_report["reasons"])
+        self.assertIn("filters_block_all_raw_entries", result.signal_health_report["reasons"])
+        self.assertEqual(result.signal_health_report["filter_pass_count"], 0)
+        self.assertGreater(result.signal_health_report["raw_entry_count"], 0)
 
     def test_opening_range_breakout_produces_deterministic_trade(self) -> None:
         start = datetime(2025, 3, 19, 13, 30)

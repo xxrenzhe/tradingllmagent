@@ -60,6 +60,7 @@ class ResearchSplitArtifact:
     metrics: BacktestMetrics
     trades: list[Trade]
     starting_equity: float
+    signal_health_report: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,7 @@ class ResearchRunResult:
     next_round_suggestions: list[str]
     final_holdout_policy: dict
     pre_screen_report: dict | None = None
+    signal_health_report: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -145,6 +147,7 @@ class ResearchRunResult:
             "cost_sensitivity_report": self.cost_sensitivity_report,
             "parameter_stability_report": self.parameter_stability_report,
             "tick_replay_report": self.tick_replay_report,
+            "signal_health_report": self.signal_health_report,
             "final_holdout_data_version_hash": self.final_holdout_data_version_hash,
             "final_holdout_metrics": self.final_holdout_metrics.to_dict(),
             "gates": self.gates,
@@ -894,6 +897,7 @@ def run_research_bar_validation(
                     metrics=train.metrics,
                     trades=train.trades,
                     starting_equity=starting_equity,
+                    signal_health_report=train.signal_health_report,
                 ),
                 ResearchSplitArtifact(
                     split="validation",
@@ -904,6 +908,7 @@ def run_research_bar_validation(
                     metrics=validation.metrics,
                     trades=validation.trades,
                     starting_equity=starting_equity,
+                    signal_health_report=validation.signal_health_report,
                 ),
                 ResearchSplitArtifact(
                     split="test",
@@ -914,6 +919,7 @@ def run_research_bar_validation(
                     metrics=test.metrics,
                     trades=test.trades,
                     starting_equity=starting_equity,
+                    signal_health_report=test.signal_health_report,
                 ),
             ]
         )
@@ -992,6 +998,7 @@ def run_research_bar_validation(
             metrics=holdout.metrics,
             trades=holdout.trades,
             starting_equity=starting_equity,
+            signal_health_report=holdout.signal_health_report,
         )
     )
     round_trip_cost = calculate_round_trip_cost(active_cost_model)
@@ -1111,6 +1118,7 @@ def run_research_bar_validation(
         cost_sensitivity_report=cost_sensitivity_report,
         parameter_stability_report=single_trial_parameter_stability_report(grid_metadata),
         tick_replay_report=build_tick_replay_report(spec, execution_mode),
+        signal_health_report=build_research_signal_health_report(split_artifacts),
         final_holdout_data_version_hash=holdout.data_version_hash,
         final_holdout_metrics=holdout.metrics,
         gates=gates_payload,
@@ -1683,6 +1691,8 @@ def _run_range(
                 files,
                 starting_equity=starting_equity,
                 cost_model=cost_model,
+                signal_health_start=start,
+                signal_health_end=end,
             ),
             start=start,
             end=end,
@@ -1727,6 +1737,10 @@ def trim_backtest_result(
             starting_equity,
             (end - start).days + 1,
         ),
+        result.event_attribution,
+        result.feature_snapshot_hash,
+        result.executable_features,
+        result.signal_health_report,
     )
 
 
@@ -1904,6 +1918,68 @@ def test_trade_win_rate(result: ResearchRunResult) -> float | None:
     if not test_trades:
         return None
     return sum(1 for trade in test_trades if trade.net_pnl > 0) / len(test_trades)
+
+
+def build_research_signal_health_report(split_artifacts: Sequence[ResearchSplitArtifact]) -> dict | None:
+    reports = []
+    for artifact in split_artifacts:
+        health = getattr(artifact, "signal_health_report", None)
+        if health is None:
+            continue
+        reports.append(
+            {
+                "split": artifact.split,
+                "fold_index": artifact.fold_index,
+                "start": artifact.start.isoformat(),
+                "end": artifact.end.isoformat(),
+                "report": health,
+            }
+        )
+    if not reports:
+        return None
+    blocked = [
+        report
+        for report in reports
+        if report["report"].get("status") == "blocked"
+    ]
+    by_split: dict[str, dict[str, Any]] = {}
+    for item in reports:
+        split = item["split"]
+        report = item["report"]
+        bucket = by_split.setdefault(
+            split,
+            {
+                "ranges": 0,
+                "session_bars": 0,
+                "filter_pass_count": 0,
+                "raw_entry_count": 0,
+                "post_filter_entry_count": 0,
+                "blocked_ranges": 0,
+                "reasons": {},
+            },
+        )
+        bucket["ranges"] += 1
+        bucket["session_bars"] += int(report.get("session_bars") or 0)
+        bucket["filter_pass_count"] += int(report.get("filter_pass_count") or 0)
+        bucket["raw_entry_count"] += int(report.get("raw_entry_count") or 0)
+        bucket["post_filter_entry_count"] += int(report.get("post_filter_entry_count") or 0)
+        if report.get("status") == "blocked":
+            bucket["blocked_ranges"] += 1
+        for reason in report.get("reasons") or []:
+            bucket["reasons"][reason] = bucket["reasons"].get(reason, 0) + 1
+    for bucket in by_split.values():
+        session_bars = bucket["session_bars"]
+        bucket["filter_pass_ratio"] = bucket["filter_pass_count"] / session_bars if session_bars else None
+        bucket["post_filter_entry_ratio"] = (
+            bucket["post_filter_entry_count"] / session_bars if session_bars else None
+        )
+    return {
+        "status": "blocked" if blocked else "ok",
+        "blocked_range_count": len(blocked),
+        "range_count": len(reports),
+        "by_split": by_split,
+        "ranges": reports,
+    }
 
 
 def build_trade_distributions(trades: Sequence[dict]) -> dict:

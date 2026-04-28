@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta, time
 from math import ceil, floor
@@ -69,6 +70,7 @@ class BacktestResult:
     event_attribution: dict = field(default_factory=dict)
     feature_snapshot_hash: str | None = None
     executable_features: list[str] = field(default_factory=list)
+    signal_health_report: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -81,6 +83,7 @@ class BacktestResult:
             "event_attribution": self.event_attribution,
             "feature_snapshot_hash": self.feature_snapshot_hash,
             "executable_features": self.executable_features,
+            "signal_health_report": self.signal_health_report,
         }
 
 
@@ -169,6 +172,8 @@ def run_bar_backtest(
     starting_equity: float = 100_000,
     cost_model: CostModelConfig | None = None,
     event_contexts: Sequence[dict] | None = None,
+    signal_health_start=None,
+    signal_health_end=None,
 ) -> BacktestResult:
     if spec.strategy_family not in EXECUTABLE_STRATEGY_FAMILIES:
         raise ValueError(f"Bar backtester does not support strategy_family: {spec.strategy_family}")
@@ -180,6 +185,13 @@ def run_bar_backtest(
         flatten=spec.session.flatten,
         tick_size=cost_model.tick_size,
     )
+    signal_health_bars = feature_bars
+    if signal_health_start is not None and signal_health_end is not None:
+        signal_health_bars = [
+            bar
+            for bar in feature_bars
+            if signal_health_start <= bar["timestamp"].date() <= signal_health_end
+        ]
     raw_trades = run_bar_strategy(spec, symbol_config, feature_bars, cost_model)
     trades, event_attribution = apply_event_policy_to_trades(spec, raw_trades, event_contexts)
     trade_pnls = [trade.net_pnl for trade in trades]
@@ -206,6 +218,7 @@ def run_bar_backtest(
         event_attribution,
         feature_snapshot_hash=feature_snapshot_hash(feature_bars),
         executable_features=sorted((feature_bars[0].get("features") or {}).keys()) if feature_bars else [],
+        signal_health_report=build_signal_grammar_health_report(spec, signal_health_bars),
     )
 
 
@@ -845,6 +858,86 @@ def run_signal_grammar_strategy(
     return trades
 
 
+def build_signal_grammar_health_report(spec: StrategySpec, bars: Sequence[dict]) -> dict:
+    grammar = spec.raw.get("signal_grammar")
+    if not isinstance(grammar, dict):
+        return {"status": "not_signal_grammar", "reasons": ["missing_signal_grammar"]}
+    entry = grammar.get("entry")
+    if not isinstance(entry, dict):
+        return {"status": "invalid", "reasons": ["missing_signal_grammar_entry"]}
+    filters = grammar.get("filters", {})
+    trade_start, trade_end = parse_session_range(spec.session.trade)
+    session_bars = [
+        bar
+        for bar in bars
+        if trade_start <= bar["timestamp"].time() <= trade_end
+    ]
+    filter_pass_count = 0
+    long_entry_count = 0
+    short_entry_count = 0
+    post_filter_long_count = 0
+    post_filter_short_count = 0
+    filter_predicates: Counter[str] = Counter()
+    filter_predicate_failures: Counter[str] = Counter()
+    entry_predicates: Counter[str] = Counter()
+    entry_predicate_failures: Counter[str] = Counter()
+
+    for bar in session_bars:
+        filter_passed, filter_audit = _evaluate_grammar_node(filters, bar)
+        if filter_passed:
+            filter_pass_count += 1
+        _count_predicates(filter_audit, filter_predicates, filter_predicate_failures)
+        for side in ("long", "short"):
+            if side == "long" and spec.direction not in {"long", "long_short"}:
+                continue
+            if side == "short" and spec.direction not in {"short", "long_short"}:
+                continue
+            passed, predicate_audit = _evaluate_grammar_node(entry.get(side), bar)
+            _count_predicates(predicate_audit, entry_predicates, entry_predicate_failures)
+            if side == "long" and passed:
+                long_entry_count += 1
+                if filter_passed:
+                    post_filter_long_count += 1
+            if side == "short" and passed:
+                short_entry_count += 1
+                if filter_passed:
+                    post_filter_short_count += 1
+
+    post_filter_entry_count = post_filter_long_count + post_filter_short_count
+    raw_entry_count = long_entry_count + short_entry_count
+    reasons = []
+    if not bars:
+        reasons.append("no_input_bars")
+    if not session_bars:
+        reasons.append("no_session_bars")
+    if session_bars and filter_pass_count == 0:
+        reasons.append("filters_block_all_session_bars")
+    if session_bars and raw_entry_count == 0:
+        reasons.append("entry_rules_have_no_raw_hits")
+    if session_bars and raw_entry_count > 0 and post_filter_entry_count == 0:
+        reasons.append("filters_block_all_raw_entries")
+    status = "ok" if not reasons else "blocked"
+    return {
+        "status": status,
+        "reasons": reasons,
+        "total_bars": len(bars),
+        "session_bars": len(session_bars),
+        "filter_pass_count": filter_pass_count,
+        "filter_pass_ratio": _ratio(filter_pass_count, len(session_bars)),
+        "raw_entry_count": raw_entry_count,
+        "long_entry_count": long_entry_count,
+        "short_entry_count": short_entry_count,
+        "post_filter_entry_count": post_filter_entry_count,
+        "post_filter_long_count": post_filter_long_count,
+        "post_filter_short_count": post_filter_short_count,
+        "post_filter_entry_ratio": _ratio(post_filter_entry_count, len(session_bars)),
+        "filter_predicate_counts": dict(sorted(filter_predicates.items())),
+        "filter_predicate_failure_counts": dict(sorted(filter_predicate_failures.items())),
+        "entry_predicate_counts": dict(sorted(entry_predicates.items())),
+        "entry_predicate_failure_counts": dict(sorted(entry_predicate_failures.items())),
+    }
+
+
 def run_signal_bar_strategy(
     spec: StrategySpec,
     bars: Sequence[dict],
@@ -1235,6 +1328,24 @@ def _coerce_scalar(value):
 def _selected_feature_values(bar: dict, audits: Sequence[dict]) -> dict:
     names = sorted({audit["feature"] for audit in audits if audit.get("feature")})
     return {name: feature_value(bar, name) for name in names}
+
+
+def _count_predicates(audits: Sequence[dict], counts: Counter[str], failures: Counter[str]) -> None:
+    for audit in audits:
+        key = _predicate_key(audit)
+        counts[key] += 1
+        if not audit.get("passed"):
+            failures[key] += 1
+
+
+def _predicate_key(audit: dict) -> str:
+    return f"{audit.get('feature')} {audit.get('op')} {audit.get('right')}"
+
+
+def _ratio(numerator: int, denominator: int) -> float | None:
+    if denominator <= 0:
+        return None
+    return numerator / denominator
 
 
 def _indicator_by_type(spec: StrategySpec, indicator_type: str) -> tuple[str, dict]:
