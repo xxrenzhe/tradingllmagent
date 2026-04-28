@@ -491,6 +491,7 @@ def execute_research_vol_seed_search(payload: dict[str, Any]) -> dict[str, Any]:
     )
     paths = write_vol_strategy_specs(
         output_dir,
+        count=int(payload.get("count", 50)),
         symbol=str(payload.get("symbol", "NQ_CME")),
         timeframe=str(payload.get("timeframe", "1m")),
         prefix=str(payload.get("prefix", "vol_execution")),

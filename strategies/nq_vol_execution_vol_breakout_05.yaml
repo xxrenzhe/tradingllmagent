@@ -1,8 +1,8 @@
 {
   "schema_version": 0,
-  "name": "nq_vol_execution_vol_macd_04",
-  "strategy_family": "macd_ma_volume_confirm",
-  "market_hypothesis": "NQ momentum entries should be filtered by aligned MA direction and volume-confirmed price movement.",
+  "name": "nq_vol_execution_vol_breakout_05",
+  "strategy_family": "vol_breakout_trend",
+  "market_hypothesis": "NQ breakout continuation should improve when opening-range breaks align with multi-timeframe volume expansion and trend slope.",
   "symbol": "NQ_CME",
   "timeframe": "1m",
   "direction": "long_short",
@@ -51,12 +51,12 @@
   ],
   "generation": {
     "method": "deterministic_vol_execution_seed",
-    "generation_id": "8939078300fc46f7",
+    "generation_id": "39e5cef26120f6b4",
     "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
-    "global_index": 19,
+    "global_index": 21,
     "feature_catalog_size": 123,
     "spread_gate_ticks": 8,
-    "vol_strategy_family": "macd_ma_volume_confirm",
+    "vol_strategy_family": "vol_breakout_trend",
     "event_window_policy": "avoid_high_impact_event_windows",
     "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow"
   },
@@ -93,17 +93,22 @@
       "long": {
         "all": [
           {
-            "feature": "ema_9_minus_ema_21",
+            "feature": "opening_range_high_dist",
             "op": ">",
             "value": 0
+          },
+          {
+            "feature": "relative_volume_20",
+            "op": ">=",
+            "value": 2.4
+          },
+          {
+            "feature": "multi_timeframe_volume_confirm",
+            "op": "==",
+            "value": 1
           },
           {
             "feature": "ema_slope_9",
-            "op": ">",
-            "value": 0
-          },
-          {
-            "feature": "volume_price_confirm",
             "op": ">",
             "value": 0
           }
@@ -112,17 +117,22 @@
       "short": {
         "all": [
           {
-            "feature": "ema_9_minus_ema_21",
+            "feature": "opening_range_low_dist",
             "op": "<",
             "value": 0
+          },
+          {
+            "feature": "relative_volume_20",
+            "op": ">=",
+            "value": 2.4
+          },
+          {
+            "feature": "multi_timeframe_volume_confirm",
+            "op": "==",
+            "value": 1
           },
           {
             "feature": "ema_slope_9",
-            "op": "<",
-            "value": 0
-          },
-          {
-            "feature": "volume_price_confirm",
             "op": "<",
             "value": 0
           }
@@ -134,12 +144,12 @@
         {
           "feature": "spread_ticks",
           "op": "<=",
-          "value": 12
+          "value": 14
         },
         {
           "feature": "minutes_since_open",
           "op": ">=",
-          "value": 20
+          "value": 30
         },
         {
           "feature": "minutes_to_close",

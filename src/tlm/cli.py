@@ -726,6 +726,7 @@ def cmd_research_generate_feature_seeds(args: argparse.Namespace) -> int:
 def cmd_research_generate_vol_seeds(args: argparse.Namespace) -> int:
     paths = write_vol_strategy_specs(
         output_dir=Path(args.output_dir),
+        count=args.count,
         symbol=args.symbol,
         timeframe=args.timeframe,
         prefix=args.prefix,
@@ -1349,6 +1350,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate_feature_seeds.set_defaults(func=cmd_research_generate_feature_seeds)
 
     generate_vol_seeds = research_subparsers.add_parser("generate-vol-seeds")
+    generate_vol_seeds.add_argument("--count", type=int, default=50)
     generate_vol_seeds.add_argument("--output-dir", default="strategies")
     generate_vol_seeds.add_argument("--symbol", default="NQ_CME")
     generate_vol_seeds.add_argument("--timeframe", default="1m")

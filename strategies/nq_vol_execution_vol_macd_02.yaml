@@ -1,6 +1,6 @@
 {
   "schema_version": 0,
-  "name": "nq_vol_execution_vol_macd_04",
+  "name": "nq_vol_execution_vol_macd_02",
   "strategy_family": "macd_ma_volume_confirm",
   "market_hypothesis": "NQ momentum entries should be filtered by aligned MA direction and volume-confirmed price movement.",
   "symbol": "NQ_CME",
@@ -51,9 +51,9 @@
   ],
   "generation": {
     "method": "deterministic_vol_execution_seed",
-    "generation_id": "8939078300fc46f7",
+    "generation_id": "41d81a483b8ac33a",
     "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
-    "global_index": 19,
+    "global_index": 9,
     "feature_catalog_size": 123,
     "spread_gate_ticks": 8,
     "vol_strategy_family": "macd_ma_volume_confirm",
@@ -134,12 +134,12 @@
         {
           "feature": "spread_ticks",
           "op": "<=",
-          "value": 12
+          "value": 8
         },
         {
           "feature": "minutes_since_open",
           "op": ">=",
-          "value": 20
+          "value": 10
         },
         {
           "feature": "minutes_to_close",

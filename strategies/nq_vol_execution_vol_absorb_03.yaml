@@ -51,9 +51,9 @@
   ],
   "generation": {
     "method": "deterministic_vol_execution_seed",
-    "generation_id": "41f8d5d694fbddeb",
+    "generation_id": "4554f84caef0dbfe",
     "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
-    "global_index": 3,
+    "global_index": 13,
     "feature_catalog_size": 123,
     "spread_gate_ticks": 8,
     "vol_strategy_family": "volume_absorption_reversion",
@@ -100,7 +100,7 @@
           {
             "feature": "close_zscore_20",
             "op": "<=",
-            "value": -0.8
+            "value": -1.1
           },
           {
             "feature": "vwap_dist",
@@ -119,7 +119,7 @@
           {
             "feature": "close_zscore_20",
             "op": ">=",
-            "value": 0.8
+            "value": 1.1
           },
           {
             "feature": "vwap_dist",
@@ -134,12 +134,12 @@
         {
           "feature": "spread_ticks",
           "op": "<=",
-          "value": 8
+          "value": 10
         },
         {
           "feature": "minutes_since_open",
           "op": ">=",
-          "value": 5
+          "value": 15
         },
         {
           "feature": "minutes_to_close",

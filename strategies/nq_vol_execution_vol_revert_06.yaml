@@ -1,8 +1,8 @@
 {
   "schema_version": 0,
-  "name": "nq_vol_execution_vol_macd_04",
-  "strategy_family": "macd_ma_volume_confirm",
-  "market_hypothesis": "NQ momentum entries should be filtered by aligned MA direction and volume-confirmed price movement.",
+  "name": "nq_vol_execution_vol_revert_06",
+  "strategy_family": "rsi_reversion_low_volume",
+  "market_hypothesis": "NQ mean reversion should be safer in lower-volume non-breakout regimes where price is extended from VWAP.",
   "symbol": "NQ_CME",
   "timeframe": "1m",
   "direction": "long_short",
@@ -51,12 +51,12 @@
   ],
   "generation": {
     "method": "deterministic_vol_execution_seed",
-    "generation_id": "8939078300fc46f7",
+    "generation_id": "b7b7eb0cba9b3e42",
     "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
-    "global_index": 19,
+    "global_index": 30,
     "feature_catalog_size": 123,
     "spread_gate_ticks": 8,
-    "vol_strategy_family": "macd_ma_volume_confirm",
+    "vol_strategy_family": "rsi_reversion_low_volume",
     "event_window_policy": "avoid_high_impact_event_windows",
     "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow"
   },
@@ -93,18 +93,18 @@
       "long": {
         "all": [
           {
-            "feature": "ema_9_minus_ema_21",
-            "op": ">",
-            "value": 0
+            "feature": "close_zscore_20",
+            "op": "<=",
+            "value": -0.8
           },
           {
-            "feature": "ema_slope_9",
-            "op": ">",
-            "value": 0
+            "feature": "relative_volume_20",
+            "op": "<=",
+            "value": 1.2
           },
           {
-            "feature": "volume_price_confirm",
-            "op": ">",
+            "feature": "vwap_dist",
+            "op": "<",
             "value": 0
           }
         ]
@@ -112,18 +112,18 @@
       "short": {
         "all": [
           {
-            "feature": "ema_9_minus_ema_21",
-            "op": "<",
-            "value": 0
+            "feature": "close_zscore_20",
+            "op": ">=",
+            "value": 0.8
           },
           {
-            "feature": "ema_slope_9",
-            "op": "<",
-            "value": 0
+            "feature": "relative_volume_20",
+            "op": "<=",
+            "value": 1.2
           },
           {
-            "feature": "volume_price_confirm",
-            "op": "<",
+            "feature": "vwap_dist",
+            "op": ">",
             "value": 0
           }
         ]
@@ -134,12 +134,12 @@
         {
           "feature": "spread_ticks",
           "op": "<=",
-          "value": 12
+          "value": 6
         },
         {
           "feature": "minutes_since_open",
           "op": ">=",
-          "value": 20
+          "value": 5
         },
         {
           "feature": "minutes_to_close",

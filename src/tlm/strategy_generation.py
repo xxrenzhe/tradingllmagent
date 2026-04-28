@@ -151,14 +151,22 @@ def write_feature_combo_strategy_specs(
 
 def generate_vol_strategy_specs(
     *,
+    count: int | None = None,
     symbol: str = "NQ_CME",
     timeframe: str = "1m",
     prefix: str = "vol_execution",
 ) -> list[dict[str, Any]]:
+    count = count or len(VOL_EXECUTION_AWARE_FAMILIES)
+    if count <= 0:
+        raise ValueError("count must be positive")
     features_by_name = feature_catalog_by_name()
     specs = []
-    for index, family in enumerate(VOL_EXECUTION_AWARE_FAMILIES, start=1):
-        grammar = _vol_signal_grammar(family)
+    family_offsets = {family: 0 for family in VOL_EXECUTION_AWARE_FAMILIES}
+    for index in range(1, count + 1):
+        family = VOL_EXECUTION_AWARE_FAMILIES[(index - 1) % len(VOL_EXECUTION_AWARE_FAMILIES)]
+        family_offsets[family] += 1
+        family_index = family_offsets[family]
+        grammar = _vol_signal_grammar(family, family_index)
         feature_names = sorted(_grammar_feature_names(grammar) | {"bar_volume"})
         features = tuple(
             features_by_name[_catalog_feature_name(name)]
@@ -167,7 +175,7 @@ def generate_vol_strategy_specs(
         )
         spec = _build_spec(
             family=family,
-            family_index=index,
+            family_index=family_index,
             global_index=index,
             features=features,
             symbol=symbol,
@@ -193,13 +201,14 @@ def generate_vol_strategy_specs(
 def write_vol_strategy_specs(
     output_dir: Path,
     *,
+    count: int | None = None,
     symbol: str = "NQ_CME",
     timeframe: str = "1m",
     prefix: str = "vol_execution",
     manifest_path: Path | None = None,
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    specs = generate_vol_strategy_specs(symbol=symbol, timeframe=timeframe, prefix=prefix)
+    specs = generate_vol_strategy_specs(count=count, symbol=symbol, timeframe=timeframe, prefix=prefix)
     paths = []
     for spec in specs:
         path = output_dir / f"{spec['name']}.yaml"
@@ -513,11 +522,16 @@ def _signal_grammar(family: str, spread_gate_ticks: int = DEFAULT_SPREAD_GATE_TI
     return {"entry": entry, "filters": base_filters, "exit": exits}
 
 
-def _vol_signal_grammar(family: str) -> dict[str, Any]:
+def _vol_signal_grammar(family: str, variant_index: int = 1) -> dict[str, Any]:
+    volume_threshold = [1.2, 1.5, 1.8, 2.0, 2.4][(variant_index - 1) % 5]
+    pullback_points = [4, 6, 8, 10, 12][(variant_index - 1) % 5]
+    z_entry = [0.8, 1.0, 1.1, 1.3, 1.5][(variant_index - 1) % 5]
+    open_delay = [5, 10, 15, 20, 30][(variant_index - 1) % 5]
+    spread_gate = [6, 8, 10, 12, 14][(variant_index - 1) % 5]
     base_filters = {
         "all": [
-            {"feature": "spread_ticks", "op": "<=", "value": 8},
-            {"feature": "minutes_since_open", "op": ">=", "value": 5},
+            {"feature": "spread_ticks", "op": "<=", "value": spread_gate},
+            {"feature": "minutes_since_open", "op": ">=", "value": open_delay},
             {"feature": "minutes_to_close", "op": ">=", "value": 20},
             {"feature": "low_volume_filter", "op": "==", "value": 0},
         ]
@@ -529,18 +543,18 @@ def _vol_signal_grammar(family: str) -> dict[str, Any]:
     }
     if family == "vol_breakout_trend":
         entry = {
-            "long": {"all": [{"feature": "opening_range_high_dist", "op": ">", "value": 0}, {"feature": "relative_volume_20", "op": ">=", "value": 1.8}, {"feature": "multi_timeframe_volume_confirm", "op": "==", "value": 1}, {"feature": "ema_slope_9", "op": ">", "value": 0}]},
-            "short": {"all": [{"feature": "opening_range_low_dist", "op": "<", "value": 0}, {"feature": "relative_volume_20", "op": ">=", "value": 1.8}, {"feature": "multi_timeframe_volume_confirm", "op": "==", "value": 1}, {"feature": "ema_slope_9", "op": "<", "value": 0}]},
+            "long": {"all": [{"feature": "opening_range_high_dist", "op": ">", "value": 0}, {"feature": "relative_volume_20", "op": ">=", "value": volume_threshold}, {"feature": "multi_timeframe_volume_confirm", "op": "==", "value": 1}, {"feature": "ema_slope_9", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "opening_range_low_dist", "op": "<", "value": 0}, {"feature": "relative_volume_20", "op": ">=", "value": volume_threshold}, {"feature": "multi_timeframe_volume_confirm", "op": "==", "value": 1}, {"feature": "ema_slope_9", "op": "<", "value": 0}]},
         }
     elif family == "ma_pullback_volume_confirm":
         entry = {
-            "long": {"all": [{"feature": "ema_9_minus_ema_21", "op": ">", "value": 0}, {"feature": "pullback_depth", "op": "<=", "value": 8}, {"feature": "relative_volume_5", "op": ">=", "value": 1.2}, {"feature": "return_1m", "op": ">", "value": 0}]},
-            "short": {"all": [{"feature": "ema_9_minus_ema_21", "op": "<", "value": 0}, {"feature": "pullback_depth", "op": "<=", "value": 8}, {"feature": "relative_volume_5", "op": ">=", "value": 1.2}, {"feature": "return_1m", "op": "<", "value": 0}]},
+            "long": {"all": [{"feature": "ema_9_minus_ema_21", "op": ">", "value": 0}, {"feature": "pullback_depth", "op": "<=", "value": pullback_points}, {"feature": "relative_volume_5", "op": ">=", "value": volume_threshold}, {"feature": "return_1m", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "ema_9_minus_ema_21", "op": "<", "value": 0}, {"feature": "pullback_depth", "op": "<=", "value": pullback_points}, {"feature": "relative_volume_5", "op": ">=", "value": volume_threshold}, {"feature": "return_1m", "op": "<", "value": 0}]},
         }
     elif family == "volume_absorption_reversion":
         entry = {
-            "long": {"all": [{"feature": "volume_absorption_flag", "op": ">", "value": 0}, {"feature": "close_zscore_20", "op": "<=", "value": -0.8}, {"feature": "vwap_dist", "op": "<", "value": 0}]},
-            "short": {"all": [{"feature": "volume_absorption_flag", "op": "<", "value": 0}, {"feature": "close_zscore_20", "op": ">=", "value": 0.8}, {"feature": "vwap_dist", "op": ">", "value": 0}]},
+            "long": {"all": [{"feature": "volume_absorption_flag", "op": ">", "value": 0}, {"feature": "close_zscore_20", "op": "<=", "value": -z_entry}, {"feature": "vwap_dist", "op": "<", "value": 0}]},
+            "short": {"all": [{"feature": "volume_absorption_flag", "op": "<", "value": 0}, {"feature": "close_zscore_20", "op": ">=", "value": z_entry}, {"feature": "vwap_dist", "op": ">", "value": 0}]},
         }
     elif family == "macd_ma_volume_confirm":
         entry = {
@@ -549,8 +563,8 @@ def _vol_signal_grammar(family: str) -> dict[str, Any]:
         }
     elif family == "rsi_reversion_low_volume":
         entry = {
-            "long": {"all": [{"feature": "close_zscore_20", "op": "<=", "value": -1.1}, {"feature": "relative_volume_20", "op": "<=", "value": 1.2}, {"feature": "vwap_dist", "op": "<", "value": 0}]},
-            "short": {"all": [{"feature": "close_zscore_20", "op": ">=", "value": 1.1}, {"feature": "relative_volume_20", "op": "<=", "value": 1.2}, {"feature": "vwap_dist", "op": ">", "value": 0}]},
+            "long": {"all": [{"feature": "close_zscore_20", "op": "<=", "value": -z_entry}, {"feature": "relative_volume_20", "op": "<=", "value": volume_threshold}, {"feature": "vwap_dist", "op": "<", "value": 0}]},
+            "short": {"all": [{"feature": "close_zscore_20", "op": ">=", "value": z_entry}, {"feature": "relative_volume_20", "op": "<=", "value": volume_threshold}, {"feature": "vwap_dist", "op": ">", "value": 0}]},
         }
     else:
         raise ValueError(f"Unsupported VOL strategy family: {family}")

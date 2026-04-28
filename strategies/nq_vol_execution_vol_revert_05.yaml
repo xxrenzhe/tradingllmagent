@@ -51,9 +51,9 @@
   ],
   "generation": {
     "method": "deterministic_vol_execution_seed",
-    "generation_id": "e6b4db549a4f6975",
+    "generation_id": "9e9c8e77418c86a7",
     "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
-    "global_index": 5,
+    "global_index": 25,
     "feature_catalog_size": 123,
     "spread_gate_ticks": 8,
     "vol_strategy_family": "rsi_reversion_low_volume",
@@ -95,12 +95,12 @@
           {
             "feature": "close_zscore_20",
             "op": "<=",
-            "value": -1.1
+            "value": -1.5
           },
           {
             "feature": "relative_volume_20",
             "op": "<=",
-            "value": 1.2
+            "value": 2.4
           },
           {
             "feature": "vwap_dist",
@@ -114,12 +114,12 @@
           {
             "feature": "close_zscore_20",
             "op": ">=",
-            "value": 1.1
+            "value": 1.5
           },
           {
             "feature": "relative_volume_20",
             "op": "<=",
-            "value": 1.2
+            "value": 2.4
           },
           {
             "feature": "vwap_dist",
@@ -134,12 +134,12 @@
         {
           "feature": "spread_ticks",
           "op": "<=",
-          "value": 8
+          "value": 14
         },
         {
           "feature": "minutes_since_open",
           "op": ">=",
-          "value": 5
+          "value": 30
         },
         {
           "feature": "minutes_to_close",

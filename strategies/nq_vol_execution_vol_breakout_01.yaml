@@ -100,7 +100,7 @@
           {
             "feature": "relative_volume_20",
             "op": ">=",
-            "value": 1.8
+            "value": 1.2
           },
           {
             "feature": "multi_timeframe_volume_confirm",
@@ -124,7 +124,7 @@
           {
             "feature": "relative_volume_20",
             "op": ">=",
-            "value": 1.8
+            "value": 1.2
           },
           {
             "feature": "multi_timeframe_volume_confirm",
@@ -144,7 +144,7 @@
         {
           "feature": "spread_ticks",
           "op": "<=",
-          "value": 8
+          "value": 6
         },
         {
           "feature": "minutes_since_open",

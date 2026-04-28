@@ -799,7 +799,7 @@ class TaskStoreTests(unittest.TestCase):
             manifest_exists = manifest.exists()
 
         self.assertEqual(results["features.vol_readiness"]["result"]["status"], "ready")
-        self.assertEqual(results["research.vol_seed_search"]["result"]["count"], 5)
+        self.assertEqual(results["research.vol_seed_search"]["result"]["count"], 50)
         self.assertEqual(results["research.vol_cost_stress"]["result"]["artifact"], "vol_cost_stress_report")
         self.assertEqual(results["execution.quote_fill_replay"]["result"]["status"], "blocked")
         self.assertEqual(results["paper.vol_shadow_review"]["result"]["status"], "blocked")
