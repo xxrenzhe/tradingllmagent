@@ -5,7 +5,7 @@ import random
 from pathlib import Path
 from typing import Any
 
-from .feature_catalog import FEATURE_CATALOG, FeatureDefinition, features_for_data_levels
+from .feature_catalog import FEATURE_CATALOG, FeatureDefinition, feature_catalog_by_name, features_for_data_levels
 from .strategy import parse_strategy_spec
 from .variants import parameter_grid_metadata, stable_hash
 
@@ -20,7 +20,7 @@ EXECUTABLE_RANDOM_FEATURE_FAMILIES = (
     "gap_fade_or_continuation",
 )
 
-GENERATED_STRATEGY_COMPLEXITY_LIMIT = 220
+GENERATED_STRATEGY_COMPLEXITY_LIMIT = 260
 
 _FAMILY_FEATURE_WEIGHTS = {
     "opening_range_breakout": {"opening_range", "breakout", "volume", "vwap", "time", "volatility"},
@@ -197,6 +197,8 @@ def _build_spec(
     prefix: str,
 ) -> dict[str, Any]:
     template = _family_template(family, family_index)
+    grammar = _signal_grammar(family)
+    features = _ensure_grammar_features(features, grammar)
     feature_names = [feature.name for feature in features]
     feature_combo_hash = stable_hash(feature_names)
     generation_id = stable_hash(
@@ -247,6 +249,7 @@ def _build_spec(
         "regime_filter": {},
         "indicators": template["indicators"],
         "entry": template["entry"],
+        "signal_grammar": grammar,
         "exit": template["exit"],
         "risk": {
             "position_sizing": {"type": "fixed_contracts", "contracts": 1},
@@ -262,6 +265,107 @@ def _build_spec(
         "parameters": template["parameters"],
         "cost_model": "nq_conservative_v1",
     }
+
+
+def _ensure_grammar_features(
+    features: tuple[FeatureDefinition, ...],
+    grammar: dict[str, Any],
+) -> tuple[FeatureDefinition, ...]:
+    by_name = feature_catalog_by_name()
+    existing = {feature.name for feature in features}
+    merged = list(features)
+    for name in _grammar_feature_names(grammar):
+        catalog_name = _catalog_feature_name(name)
+        if catalog_name not in existing and catalog_name in by_name:
+            merged.append(by_name[catalog_name])
+            existing.add(catalog_name)
+    return tuple(merged)
+
+
+def _catalog_feature_name(name: str) -> str:
+    return {
+        "return_1m": "log_return_1m",
+        "range_percentile_20": "high_low_range_pct",
+        "spread_ticks": "bid_ask_spread",
+        "tick_count_1m": "volume_1m",
+    }.get(name, name)
+
+
+def _grammar_feature_names(node) -> set[str]:
+    if isinstance(node, list):
+        return {name for item in node for name in _grammar_feature_names(item)}
+    if not isinstance(node, dict):
+        return set()
+    names = set()
+    if "feature" in node:
+        names.add(str(node["feature"]))
+    if "left" in node:
+        names.add(str(node["left"]))
+    for key in ("all", "any"):
+        if key in node:
+            names.update(_grammar_feature_names(node[key]))
+    if "not" in node:
+        names.update(_grammar_feature_names(node["not"]))
+    for key in ("entry", "filters", "exit"):
+        if key in node:
+            names.update(_grammar_feature_names(node[key]))
+    if "feature" in node.get("stop", {}):
+        names.add(str(node["stop"]["feature"]))
+    if "feature" in node.get("take_profit", {}):
+        names.add(str(node["take_profit"]["feature"]))
+    return names
+
+
+def _signal_grammar(family: str) -> dict[str, Any]:
+    base_filters = {
+        "all": [
+            {"feature": "spread_ticks", "op": "<=", "value": 8},
+            {"feature": "minutes_to_close", "op": ">=", "value": 20},
+        ]
+    }
+    exits = {
+        "stop": {"type": "atr_multiple", "feature": "atr_14", "multiple": 1.2},
+        "take_profit": {"type": "atr_multiple", "feature": "atr_14", "multiple": 1.8},
+        "time_stop": {"minutes": 18},
+    }
+    if family == "opening_range_breakout":
+        entry = {
+            "long": {"all": [{"feature": "opening_range_high_dist", "op": ">", "value": 0}, {"feature": "return_5m", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "opening_range_low_dist", "op": "<", "value": 0}, {"feature": "return_5m", "op": "<", "value": 0}]},
+        }
+    elif family == "trend_pullback":
+        entry = {
+            "long": {"all": [{"feature": "ema_9_minus_ema_21", "op": ">", "value": 0}, {"feature": "pullback_depth", "op": "<=", "value": 6}, {"feature": "return_1m", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "ema_9_minus_ema_21", "op": "<", "value": 0}, {"feature": "pullback_depth", "op": "<=", "value": 6}, {"feature": "return_1m", "op": "<", "value": 0}]},
+        }
+    elif family == "volatility_expansion":
+        entry = {
+            "long": {"all": [{"feature": "range_percentile_20", "op": ">=", "value": 0.7}, {"feature": "return_1m", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "range_percentile_20", "op": ">=", "value": 0.7}, {"feature": "return_1m", "op": "<", "value": 0}]},
+        }
+    elif family == "intraday_momentum":
+        entry = {
+            "long": {"all": [{"feature": "return_5m", "op": ">=", "value": 3}, {"feature": "ema_slope_9", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "return_5m", "op": "<=", "value": -3}, {"feature": "ema_slope_9", "op": "<", "value": 0}]},
+        }
+    elif family == "regime_filtered_mean_reversion":
+        entry = {
+            "long": {"all": [{"feature": "close_zscore_20", "op": "<=", "value": -1}, {"feature": "vwap_dist", "op": "<", "value": 0}]},
+            "short": {"all": [{"feature": "close_zscore_20", "op": ">=", "value": 1}, {"feature": "vwap_dist", "op": ">", "value": 0}]},
+        }
+    elif family == "time_of_day_edge":
+        entry = {
+            "long": {"all": [{"feature": "minutes_since_open", "op": ">=", "value": 30}, {"feature": "return_15m", "op": ">", "value": 0}]},
+            "short": {"all": [{"feature": "minutes_since_open", "op": ">=", "value": 30}, {"feature": "return_15m", "op": "<", "value": 0}]},
+        }
+    elif family == "gap_fade_or_continuation":
+        entry = {
+            "long": {"all": [{"feature": "prior_day_low_dist", "op": ">", "value": 0}, {"feature": "vwap_reclaim_flag", "op": ">=", "value": 0}]},
+            "short": {"all": [{"feature": "prior_day_high_dist", "op": "<", "value": 0}, {"feature": "vwap_reclaim_flag", "op": "<=", "value": 0}]},
+        }
+    else:
+        raise ValueError(f"Unsupported strategy family: {family}")
+    return {"entry": entry, "filters": base_filters, "exit": exits}
 
 
 def _family_template(family: str, family_index: int) -> dict[str, Any]:
