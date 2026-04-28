@@ -39,7 +39,7 @@ from .modules import (
     summarize_module_performance,
 )
 from .paper import build_paper_replay_attribution, export_ninjatrader_signals, load_backtest_result, replay_trades
-from .quality import build_quality_report
+from .quality import build_bar_quality_report, build_quality_report
 from .research import (
     StrategyTargetCriteria,
     discover_strategy_seed_specs,
@@ -69,6 +69,7 @@ from .trigger_gate import (
     run_trigger_gate_simulation,
 )
 from .variants import DEFAULT_PARAMETER_BUDGET, ParameterBudgetError
+from .validation import generate_rolling_folds
 
 
 def parse_date(value: str) -> date:
@@ -227,8 +228,86 @@ def cmd_data_quality(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_data_bar_quality(args: argparse.Namespace) -> int:
+    data_root = Path(args.data_root)
+    date_from = parse_date(args.date_from)
+    date_to = parse_date(args.date_to)
+    files = bar_parquet_files(data_root, args.symbol, args.timeframe, date_from, date_to)
+    minutes = timeframe_minutes(args.timeframe)
+    report = build_bar_quality_report(
+        args.symbol,
+        args.timeframe,
+        files,
+        expected_minutes=minutes,
+        max_normal_price_jump=args.max_normal_price_jump,
+    )
+    output = (
+        Path(args.output)
+        if args.output
+        else data_root / "quality" / args.symbol / f"{date_from.isoformat()}_{date_to.isoformat()}_{args.timeframe}_bars.json"
+    )
+    write_json(output, report.to_dict())
+    print(output)
+    print(report.to_dict())
+    return 0
+
+
 def bar_parquet_files(data_root: Path, symbol: str, timeframe: str, start: date, end: date) -> list[Path]:
     return [bar_path(data_root, symbol, timeframe, day) for day in iter_dates(start, end)]
+
+
+def cmd_data_split_manifest(args: argparse.Namespace) -> int:
+    date_from = parse_date(args.date_from)
+    date_to = parse_date(args.date_to)
+    data_root = Path(args.data_root)
+    plan = generate_rolling_folds(
+        date_from,
+        date_to,
+        train_days=args.train_days,
+        validation_days=args.validation_days,
+        test_days=args.test_days,
+        step_days=args.step_days,
+        embargo_days=args.embargo_days,
+        final_holdout_days=args.final_holdout_days,
+        min_folds=args.min_folds,
+        indicator_warmup_days=args.indicator_warmup_days,
+    )
+    files = bar_parquet_files(data_root, args.symbol, args.timeframe, date_from, date_to)
+    payload = {
+        "schema_version": 1,
+        "artifact": "dataset_split_manifest",
+        "symbol": args.symbol,
+        "timeframe": args.timeframe,
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "data_version_hash": compute_data_version_hash(
+            files,
+            {
+                "artifact": "dataset_split_manifest",
+                "symbol": args.symbol,
+                "timeframe": args.timeframe,
+                "date_from": date_from.isoformat(),
+                "date_to": date_to.isoformat(),
+            },
+        ),
+        "plan": plan.to_dict(),
+        "final_holdout_policy": {
+            "llm_feedback_includes_final_holdout": False,
+            "llm_visible_splits": ["train", "validation"],
+            "llm_hidden_splits": ["test", "final_holdout"],
+        },
+        "source_files": [str(path) for path in files if path.exists()],
+        "missing_files": [str(path) for path in files if not path.exists()],
+    }
+    output = (
+        Path(args.output)
+        if args.output
+        else data_root / "splits" / args.symbol / args.timeframe / f"{date_from.isoformat()}_{date_to.isoformat()}.json"
+    )
+    write_json(output, payload)
+    print(output)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
 
 
 def cmd_strategy_validate(args: argparse.Namespace) -> int:
@@ -970,6 +1049,31 @@ def build_parser() -> argparse.ArgumentParser:
     quality.add_argument("--from", dest="date_from", required=True)
     quality.add_argument("--to", dest="date_to", required=True)
     quality.set_defaults(func=cmd_data_quality)
+
+    bar_quality = data_subparsers.add_parser("bar-quality")
+    bar_quality.add_argument("--symbol", required=True)
+    bar_quality.add_argument("--from", dest="date_from", required=True)
+    bar_quality.add_argument("--to", dest="date_to", required=True)
+    bar_quality.add_argument("--timeframe", default="1m")
+    bar_quality.add_argument("--max-normal-price-jump", type=float, default=100.0)
+    bar_quality.add_argument("--output")
+    bar_quality.set_defaults(func=cmd_data_bar_quality)
+
+    split_manifest = data_subparsers.add_parser("split-manifest")
+    split_manifest.add_argument("--symbol", required=True)
+    split_manifest.add_argument("--from", dest="date_from", required=True)
+    split_manifest.add_argument("--to", dest="date_to", required=True)
+    split_manifest.add_argument("--timeframe", default="1m")
+    split_manifest.add_argument("--train-days", type=int, default=730)
+    split_manifest.add_argument("--validation-days", type=int, default=182)
+    split_manifest.add_argument("--test-days", type=int, default=182)
+    split_manifest.add_argument("--step-days", type=int, default=91)
+    split_manifest.add_argument("--embargo-days", type=int, default=5)
+    split_manifest.add_argument("--final-holdout-days", type=int, default=365)
+    split_manifest.add_argument("--min-folds", type=int, default=1)
+    split_manifest.add_argument("--indicator-warmup-days", type=int, default=0)
+    split_manifest.add_argument("--output")
+    split_manifest.set_defaults(func=cmd_data_split_manifest)
 
     strategy = subparsers.add_parser("strategy")
     strategy_subparsers = strategy.add_subparsers(dest="strategy_command", required=True)

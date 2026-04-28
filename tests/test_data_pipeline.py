@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import lzma
 import io
 import struct
@@ -29,7 +30,7 @@ from tlm.dukascopy import (
 )
 from tlm.firstrate import parse_firstrate_csv
 from tlm.quality import build_quality_report
-from tlm.storage import normalized_tick_path, write_ticks_parquet
+from tlm.storage import bar_path, normalized_tick_path, write_bars_parquet, write_ticks_parquet
 
 
 def make_bi5(records: list[tuple[int, int, int, float, float]]) -> bytes:
@@ -250,6 +251,99 @@ class BarAndQualityTests(unittest.TestCase):
             self.assertTrue(second_day_path.exists())
             self.assertEqual(rows, [("NQ_1M", 20000.0, 20001.5, 123, None)])
             self.assertIn("written", output.getvalue())
+
+    def test_cli_bar_quality_reports_bar_anomalies(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            day = datetime(2025, 3, 19).date()
+            output_path = bar_path(data_root, "NQ_1M", "1m", day)
+            write_bars_parquet(
+                output_path,
+                [
+                    ("NQ_1M", datetime(2025, 3, 19, 13, 30), 100.0, 101.0, 99.0, 100.5, 100.5, 100.5, 10, 10.0, 10.0, None),
+                    ("NQ_1M", datetime(2025, 3, 19, 13, 30), 100.0, 101.0, 99.0, 100.5, 100.5, 100.5, 10, 10.0, 10.0, None),
+                    ("NQ_1M", datetime(2025, 3, 19, 13, 35), 101.0, 100.0, 99.0, 150.0, 150.0, 150.0, 0, 0.0, 0.0, -0.25),
+                ],
+            )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "data",
+                        "bar-quality",
+                        "--symbol",
+                        "NQ_1M",
+                        "--from",
+                        "2025-03-19",
+                        "--to",
+                        "2025-03-20",
+                        "--max-normal-price-jump",
+                        "20",
+                    ]
+                )
+
+            report_path = data_root / "quality" / "NQ_1M" / "2025-03-19_2025-03-20_1m_bars.json"
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(report["status"], "gaps_or_anomalies")
+        self.assertIn("missing_partitions", report["quality_flags"])
+        self.assertIn("duplicate_timestamps", report["quality_flags"])
+        self.assertIn("intraday_gaps", report["quality_flags"])
+        self.assertIn("invalid_ohlc", report["quality_flags"])
+        self.assertIn("non_positive_tick_count", report["quality_flags"])
+        self.assertIn("negative_spread", report["quality_flags"])
+        self.assertIn("price_jumps", report["quality_flags"])
+        self.assertIn("data_version_hash", report)
+        self.assertIn(str(report_path), stdout.getvalue())
+
+    def test_cli_split_manifest_writes_holdout_isolation_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            output = data_root / "splits.json"
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "data",
+                        "split-manifest",
+                        "--symbol",
+                        "NQ_1M",
+                        "--from",
+                        "2020-01-01",
+                        "--to",
+                        "2020-02-20",
+                        "--train-days",
+                        "5",
+                        "--validation-days",
+                        "5",
+                        "--test-days",
+                        "5",
+                        "--step-days",
+                        "5",
+                        "--embargo-days",
+                        "1",
+                        "--final-holdout-days",
+                        "5",
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            manifest = json.loads(output.read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(manifest["artifact"], "dataset_split_manifest")
+        self.assertEqual(manifest["symbol"], "NQ_1M")
+        self.assertFalse(manifest["final_holdout_policy"]["llm_feedback_includes_final_holdout"])
+        self.assertIn("final_holdout", manifest["final_holdout_policy"]["llm_hidden_splits"])
+        self.assertGreaterEqual(len(manifest["plan"]["folds"]), 1)
+        self.assertTrue(manifest["data_version_hash"])
+        self.assertIn(str(output), stdout.getvalue())
 
     def test_build_higher_timeframe_bars_from_1m_bars(self) -> None:
         hour = datetime(2025, 3, 19, 13, tzinfo=UTC)
