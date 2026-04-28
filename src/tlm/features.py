@@ -11,6 +11,7 @@ CORE_EXECUTABLE_FEATURES = {
     "bar_body_ratio",
     "body_to_range",
     "breakout_failure_flag",
+    "bar_volume",
     "close_zscore_20",
     "ema_9_minus_ema_21",
     "ema_slope_9",
@@ -40,6 +41,16 @@ CORE_EXECUTABLE_FEATURES = {
     "upper_shadow_pct",
     "upper_wick_ratio",
     "volatility_compression",
+    "volume_absorption_flag",
+    "volume_ma_5",
+    "volume_ma_20",
+    "volume_percentile_session",
+    "volume_price_confirm",
+    "volume_spike_flag",
+    "relative_volume_5",
+    "relative_volume_20",
+    "multi_timeframe_volume_confirm",
+    "low_volume_filter",
     "vwap_dist",
     "vwap_reclaim_flag",
 }
@@ -62,12 +73,17 @@ def compute_executable_features(
     highs = [float(bar["high"]) for bar in bars]
     lows = [float(bar["low"]) for bar in bars]
     opens = [float(bar["open"]) for bar in bars]
+    volumes = [_bar_volume(bar) for bar in bars]
     ema_9 = _ema_series(closes, 9)
     ema_21 = _ema_series(closes, 21)
     atr_14 = _atr_series(highs, lows, closes, 14)
     zscore_20 = _zscore_series(closes, 20)
     realized_vol_20 = _realized_volatility_series(closes, 20)
     range_percentile_20 = _range_percentile_series(highs, lows, 20)
+    volume_ma_5 = _rolling_mean(volumes, 5)
+    volume_ma_20 = _rolling_mean(volumes, 20)
+    volume_sum_5 = _rolling_sum(volumes, 5)
+    volume_sum_15 = _rolling_sum(volumes, 15)
 
     enriched: list[dict] = []
     prior_day_high: float | None = None
@@ -92,6 +108,7 @@ def compute_executable_features(
         high = highs[index]
         low = lows[index]
         open_price = opens[index]
+        bar_volume = volumes[index]
         if current_day != bar_day:
             if current_day is not None:
                 prior_day_high = day_high
@@ -116,7 +133,7 @@ def compute_executable_features(
         session_minute = _session_minutes(timestamp.time(), trade_start)
         minutes_to_close = _minutes_between(timestamp.time(), flatten_time)
         typical_price = (high + low + close) / 3
-        weight = max(float(bar.get("tick_count", 1) or 1), 1.0)
+        weight = max(bar_volume, 1.0)
         vwap_numerator += typical_price * weight
         vwap_denominator += weight
         vwap = vwap_numerator / vwap_denominator if vwap_denominator else close
@@ -168,9 +185,37 @@ def compute_executable_features(
             elif previous_vwap_dist > 0 >= vwap_dist:
                 vwap_reclaim = -1.0
         previous_vwap_dist = vwap_dist
+        relative_volume_5 = _ratio(bar_volume, volume_ma_5[index])
+        relative_volume_20 = _ratio(bar_volume, volume_ma_20[index])
+        volume_percentile_session = _volume_percentile_same_day(volumes, bars, index)
+        five_minute_confirm = _ratio(volume_sum_5[index], _rolling_mean_before(volume_sum_5, index, 20))
+        fifteen_minute_confirm = _ratio(volume_sum_15[index], _rolling_mean_before(volume_sum_15, index, 20))
+        multi_timeframe_volume_confirm = (
+            1.0
+            if relative_volume_5 is not None
+            and five_minute_confirm is not None
+            and fifteen_minute_confirm is not None
+            and relative_volume_5 >= 1.5
+            and five_minute_confirm >= 1.2
+            and fifteen_minute_confirm >= 1.1
+            else 0.0
+        )
+        return_1m = _return(closes, index, 1)
+        return_5m = _return(closes, index, 5)
+        volume_spike_flag = 1.0 if relative_volume_20 is not None and relative_volume_20 >= 2.0 else 0.0
+        price_confirm = 0.0
+        if volume_spike_flag and return_5m is not None:
+            price_confirm = 1.0 if return_5m > 0 else -1.0 if return_5m < 0 else 0.0
+        absorption_flag = 0.0
+        if volume_spike_flag and atr_14[index] is not None:
+            weak_body = abs(close - open_price) <= max(atr_14[index] * 0.15, tick_size)
+            if weak_body:
+                absorption_flag = -1.0 if close >= open_price else 1.0
+        low_volume_filter = 1.0 if relative_volume_20 is not None and relative_volume_20 < 0.5 else 0.0
 
         features = {
             "atr_14": atr_14[index],
+            "bar_volume": bar_volume,
             "bar_body_ratio": body / bar_range if bar_range else 0.0,
             "body_to_range": abs(body) / bar_range if bar_range else 0.0,
             "breakout_failure_flag": breakout_failure,
@@ -192,17 +237,27 @@ def compute_executable_features(
             "pullback_depth": pullback_depth,
             "range_percentile_20": range_percentile_20[index],
             "realized_volatility_20": realized_vol_20[index],
-            "return_1m": _return(closes, index, 1),
+            "return_1m": return_1m,
             "return_5m": _return(closes, index, 5),
             "return_15m": _return(closes, index, 15),
             "session_high_dist": session_high_dist,
             "session_low_dist": session_low_dist,
             "spread_ticks": float(bar.get("avg_spread", 0.0) or 0.0) / tick_size if tick_size else 0.0,
-            "tick_count_1m": float(bar.get("tick_count", 0) or 0),
+            "tick_count_1m": bar_volume,
             "trend_age": float(trend_age),
             "upper_shadow_pct": upper_wick / bar_range if bar_range else 0.0,
             "upper_wick_ratio": upper_wick / bar_range if bar_range else 0.0,
             "volatility_compression": volatility_compression,
+            "volume_absorption_flag": absorption_flag,
+            "volume_ma_5": volume_ma_5[index],
+            "volume_ma_20": volume_ma_20[index],
+            "volume_percentile_session": volume_percentile_session,
+            "volume_price_confirm": price_confirm,
+            "volume_spike_flag": volume_spike_flag,
+            "relative_volume_5": relative_volume_5,
+            "relative_volume_20": relative_volume_20,
+            "multi_timeframe_volume_confirm": multi_timeframe_volume_confirm,
+            "low_volume_filter": low_volume_filter,
             "vwap_dist": vwap_dist,
             "vwap_reclaim_flag": vwap_reclaim,
         }
@@ -241,6 +296,10 @@ def feature_value(bar: dict, name: str):
 
 
 _FEATURE_ALIASES = {
+    "volume": "bar_volume",
+    "volume_1m": "bar_volume",
+    "relative_volume_5m": "relative_volume_5",
+    "volume_spike_ratio": "relative_volume_20",
     "candle_body_pct": "bar_body_ratio",
     "realized_vol_20": "realized_volatility_20",
 }
@@ -344,10 +403,52 @@ def _rolling_mean(values: Sequence[float], window: int) -> list[float | None]:
     return series
 
 
+def _rolling_sum(values: Sequence[float], window: int) -> list[float | None]:
+    series: list[float | None] = []
+    for index, _value in enumerate(values):
+        if index + 1 < window:
+            series.append(None)
+            continue
+        series.append(sum(values[index + 1 - window : index + 1]))
+    return series
+
+
 def _return(values: Sequence[float], index: int, lookback: int) -> float | None:
     if index < lookback:
         return None
     return values[index] - values[index - lookback]
+
+
+def _bar_volume(bar: dict) -> float:
+    value = bar.get("bar_volume", bar.get("volume", bar.get("tick_count", 0)))
+    return max(float(value or 0), 0.0)
+
+
+def _ratio(numerator: float | None, denominator: float | None) -> float | None:
+    if numerator is None or denominator is None or denominator <= 0:
+        return None
+    return numerator / denominator
+
+
+def _rolling_mean_before(values: Sequence[float | None], index: int, lookback: int) -> float | None:
+    start = max(0, index - lookback)
+    sample = [float(value) for value in values[start:index] if value is not None]
+    if not sample:
+        return None
+    return sum(sample) / len(sample)
+
+
+def _volume_percentile_same_day(volumes: Sequence[float], bars: Sequence[dict], index: int) -> float | None:
+    current_day = bars[index]["timestamp"].date()
+    sample = [
+        volumes[item]
+        for item in range(0, index + 1)
+        if bars[item]["timestamp"].date() == current_day
+    ]
+    if len(sample) < 5:
+        return None
+    current = volumes[index]
+    return sum(1 for value in sample if value <= current) / len(sample)
 
 
 def _none_if_missing(left, right, fn):
