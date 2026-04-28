@@ -10,6 +10,7 @@ from typing import Sequence
 import duckdb
 
 from .config import CostModelConfig, SymbolConfig
+from .features import compute_executable_features, feature_snapshot_hash, feature_value
 from .metrics import BacktestMetrics, calculate_metrics
 from .storage import compute_data_version_hash
 from .strategy import StrategySpec
@@ -47,6 +48,8 @@ class Trade:
     active_event_ids_at_exit: list[str] = field(default_factory=list)
     event_policy_action: str = "allow"
     blocked_or_delayed_reason: str | None = None
+    feature_values_at_entry: dict = field(default_factory=dict)
+    predicate_evaluation_at_entry: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         payload = asdict(self)
@@ -64,6 +67,8 @@ class BacktestResult:
     trades: list[Trade]
     metrics: BacktestMetrics
     event_attribution: dict = field(default_factory=dict)
+    feature_snapshot_hash: str | None = None
+    executable_features: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -74,6 +79,8 @@ class BacktestResult:
             "trades": [trade.to_dict() for trade in self.trades],
             "metrics": self.metrics.to_dict(),
             "event_attribution": self.event_attribution,
+            "feature_snapshot_hash": self.feature_snapshot_hash,
+            "executable_features": self.executable_features,
         }
 
 
@@ -167,7 +174,13 @@ def run_bar_backtest(
         raise ValueError(f"Bar backtester does not support strategy_family: {spec.strategy_family}")
     cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     bars = load_bar_rows(bar_files)
-    raw_trades = run_bar_strategy(spec, symbol_config, bars, cost_model)
+    feature_bars = compute_executable_features(
+        bars,
+        session_trade=spec.session.trade,
+        flatten=spec.session.flatten,
+        tick_size=cost_model.tick_size,
+    )
+    raw_trades = run_bar_strategy(spec, symbol_config, feature_bars, cost_model)
     trades, event_attribution = apply_event_policy_to_trades(spec, raw_trades, event_contexts)
     trade_pnls = [trade.net_pnl for trade in trades]
     equity = [starting_equity]
@@ -191,6 +204,8 @@ def run_bar_backtest(
         trades,
         metrics,
         event_attribution,
+        feature_snapshot_hash=feature_snapshot_hash(feature_bars),
+        executable_features=sorted((feature_bars[0].get("features") or {}).keys()) if feature_bars else [],
     )
 
 
@@ -388,6 +403,8 @@ def run_bar_strategy(
     bars: Sequence[dict],
     cost_model: CostModelConfig,
 ) -> list[Trade]:
+    if spec.raw.get("signal_grammar"):
+        return run_signal_grammar_strategy(spec, symbol_config, bars, cost_model)
     if spec.strategy_family == "opening_range_breakout":
         return run_opening_range_breakout(spec, symbol_config, bars, cost_model)
     if spec.strategy_family == "trend_pullback":
@@ -723,6 +740,111 @@ def run_gap_fade_or_continuation(
     return run_signal_bar_strategy(spec, bars, cost_model or default_cost_model(symbol_config, spec.cost_model), signal)
 
 
+def run_signal_grammar_strategy(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
+) -> list[Trade]:
+    if not bars:
+        return []
+    cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
+    grammar = spec.raw.get("signal_grammar")
+    if not isinstance(grammar, dict):
+        raise ValueError("signal_grammar must be an object")
+    entry = grammar.get("entry")
+    if not isinstance(entry, dict):
+        raise ValueError("signal_grammar.entry must be an object")
+    filters = grammar.get("filters", {})
+    exit_spec = grammar.get("exit", {})
+    contracts = int(spec.risk.get("position_sizing", {}).get("contracts", 1))
+    max_trades_per_day = int(spec.risk.get("max_trades_per_day", 999_999))
+    trade_start, trade_end = parse_session_range(spec.session.trade)
+    flatten_time = parse_clock(spec.session.flatten)
+
+    trades: list[Trade] = []
+    by_day: dict[object, list[tuple[int, dict]]] = {}
+    for index, bar in enumerate(bars):
+        by_day.setdefault(bar["timestamp"].date(), []).append((index, bar))
+
+    for _, indexed_day_bars in sorted(by_day.items(), key=lambda item: item[0]):
+        session_bars = [
+            (global_index, bar)
+            for global_index, bar in indexed_day_bars
+            if trade_start <= bar["timestamp"].time() <= flatten_time
+        ]
+        position = None
+        trades_today = 0
+        for session_index, (_global_index, bar) in enumerate(session_bars):
+            if bar["timestamp"].time() > trade_end and position is None:
+                continue
+            if position is None and trades_today < max_trades_per_day:
+                filter_passed, filter_audit = _evaluate_grammar_node(filters, bar)
+                if filter_passed:
+                    for side in ("long", "short"):
+                        if side == "long" and spec.direction not in {"long", "long_short"}:
+                            continue
+                        if side == "short" and spec.direction not in {"short", "long_short"}:
+                            continue
+                        side_rule = entry.get(side)
+                        passed, predicate_audit = _evaluate_grammar_node(side_rule, bar)
+                        if passed:
+                            position = _open_position(
+                                side,
+                                bar,
+                                contracts,
+                                session_index,
+                                f"signal_grammar_{side}",
+                                feature_values=_selected_feature_values(bar, predicate_audit + filter_audit),
+                                predicate_evaluation=predicate_audit + filter_audit,
+                            )
+                            position.update(_grammar_exit_points(exit_spec, bar, spec))
+                            trades_today += 1
+                            break
+                if position is not None:
+                    continue
+
+            if position is not None:
+                holding_minutes = session_index - position["entry_index"]
+                stop_points = float(position["stop_points"])
+                take_profit_points = float(position["take_profit_points"])
+                max_holding_minutes = int(position["max_holding_minutes"])
+                exit_reason = None
+                exit_price = None
+                if position["side"] == "long":
+                    stop_price = position["entry_price"] - stop_points
+                    take_price = position["entry_price"] + take_profit_points
+                    if bar["low"] <= stop_price:
+                        exit_reason, exit_price = "stop_loss", stop_price
+                    elif bar["high"] >= take_price:
+                        exit_reason, exit_price = "take_profit", take_price
+                    elif holding_minutes >= max_holding_minutes:
+                        exit_reason, exit_price = "max_holding", bar["bid_close"]
+                    elif bar["timestamp"].time() >= flatten_time:
+                        exit_reason, exit_price = "session_flatten", bar["bid_close"]
+                else:
+                    stop_price = position["entry_price"] + stop_points
+                    take_price = position["entry_price"] - take_profit_points
+                    if bar["high"] >= stop_price:
+                        exit_reason, exit_price = "stop_loss", stop_price
+                    elif bar["low"] <= take_price:
+                        exit_reason, exit_price = "take_profit", take_price
+                    elif holding_minutes >= max_holding_minutes:
+                        exit_reason, exit_price = "max_holding", bar["ask_close"]
+                    elif bar["timestamp"].time() >= flatten_time:
+                        exit_reason, exit_price = "session_flatten", bar["ask_close"]
+                if exit_reason and exit_price is not None:
+                    trades.append(_close_position(position, bar, exit_price, exit_reason, cost_model))
+                    position = None
+
+        if position is not None and session_bars:
+            last_bar = session_bars[-1][1]
+            exit_price = last_bar["bid_close"] if position["side"] == "long" else last_bar["ask_close"]
+            trades.append(_close_position(position, last_bar, exit_price, "end_of_data", cost_model))
+
+    return trades
+
+
 def run_signal_bar_strategy(
     spec: StrategySpec,
     bars: Sequence[dict],
@@ -997,6 +1119,124 @@ def _exit_value(exit_config: dict) -> float:
     raise ValueError("Phase 2 backtester supports point-based exits only")
 
 
+def _grammar_exit_points(exit_spec: dict, bar: dict, spec: StrategySpec) -> dict:
+    if not isinstance(exit_spec, dict):
+        exit_spec = {}
+    stop_config = exit_spec.get("stop") or spec.exit.get("stop_loss", {})
+    take_config = exit_spec.get("take_profit") or spec.exit.get("take_profit", {})
+    time_stop = exit_spec.get("time_stop") or {"minutes": spec.exit.get("max_holding_minutes", 10)}
+    return {
+        "stop_points": _exit_points_from_config(stop_config, bar, spec.exit["stop_loss"]),
+        "take_profit_points": _exit_points_from_config(take_config, bar, spec.exit["take_profit"]),
+        "max_holding_minutes": int(time_stop.get("minutes", spec.exit.get("max_holding_minutes", 10))),
+    }
+
+
+def _exit_points_from_config(config: dict, bar: dict, fallback: dict) -> float:
+    exit_type = config.get("type", fallback.get("type", "points"))
+    if exit_type == "points":
+        return float(config.get("value", fallback.get("value", 1)))
+    if exit_type == "atr_multiple":
+        feature = feature_value(bar, str(config.get("feature", "atr_14")))
+        if feature is None:
+            return float(fallback.get("value", 1))
+        return max(float(feature) * float(config.get("multiple", 1)), 0.25)
+    raise ValueError(f"Unsupported signal_grammar exit type: {exit_type}")
+
+
+def _evaluate_grammar_node(node, bar: dict) -> tuple[bool, list[dict]]:
+    if node in (None, {}):
+        return True, []
+    if not isinstance(node, dict):
+        raise ValueError("signal_grammar nodes must be objects")
+    if "all" in node:
+        audits: list[dict] = []
+        passed = True
+        for child in node["all"]:
+            child_passed, child_audit = _evaluate_grammar_node(child, bar)
+            audits.extend(child_audit)
+            passed = passed and child_passed
+        return passed, audits
+    if "any" in node:
+        audits = []
+        passed = False
+        for child in node["any"]:
+            child_passed, child_audit = _evaluate_grammar_node(child, bar)
+            audits.extend(child_audit)
+            passed = passed or child_passed
+        return passed, audits
+    if "not" in node:
+        child_passed, child_audit = _evaluate_grammar_node(node["not"], bar)
+        return not child_passed, child_audit
+    audit = _evaluate_predicate(node, bar)
+    return bool(audit["passed"]), [audit]
+
+
+def _evaluate_predicate(predicate: dict, bar: dict) -> dict:
+    left_name = str(predicate.get("feature", predicate.get("left", "")))
+    operator = str(predicate.get("op", "=="))
+    right_value = predicate.get("value", predicate.get("right"))
+    left_value = feature_value(bar, left_name)
+    resolved_right = feature_value(bar, str(right_value)) if isinstance(right_value, str) and _looks_like_feature(right_value) else right_value
+    passed = _compare_values(left_value, operator, resolved_right)
+    return {
+        "feature": left_name,
+        "op": operator,
+        "left": left_value,
+        "right": resolved_right,
+        "passed": passed,
+    }
+
+
+def _looks_like_feature(value: str) -> bool:
+    if value.lower() in {"true", "false"}:
+        return False
+    try:
+        float(value)
+        return False
+    except ValueError:
+        return True
+
+
+def _compare_values(left, operator: str, right) -> bool:
+    if left is None or right is None:
+        return False
+    left = _coerce_scalar(left)
+    right = _coerce_scalar(right)
+    if operator == ">":
+        return left > right
+    if operator == ">=":
+        return left >= right
+    if operator == "<":
+        return left < right
+    if operator == "<=":
+        return left <= right
+    if operator == "==":
+        return left == right
+    if operator == "!=":
+        return left != right
+    raise ValueError(f"Unsupported signal_grammar operator: {operator}")
+
+
+def _coerce_scalar(value):
+    if isinstance(value, str):
+        lowered = value.lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        try:
+            return float(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _selected_feature_values(bar: dict, audits: Sequence[dict]) -> dict:
+    names = sorted({audit["feature"] for audit in audits if audit.get("feature")})
+    return {name: feature_value(bar, name) for name in names}
+
+
 def _indicator_by_type(spec: StrategySpec, indicator_type: str) -> tuple[str, dict]:
     for name, config in spec.indicators.items():
         if config.get("type") == indicator_type:
@@ -1077,6 +1317,8 @@ def _open_position(
     contracts: int,
     entry_index: int,
     entry_reason: str,
+    feature_values: dict | None = None,
+    predicate_evaluation: list[dict] | None = None,
 ) -> dict:
     entry_price = bar["ask_close"] if side == "long" else bar["bid_close"]
     return {
@@ -1086,6 +1328,8 @@ def _open_position(
         "entry_index": entry_index,
         "contracts": contracts,
         "entry_reason": entry_reason,
+        "feature_values": feature_values or {},
+        "predicate_evaluation": predicate_evaluation or [],
     }
 
 
@@ -1126,6 +1370,8 @@ def _close_position(
         net_pnl=net_pnl,
         entry_reason=position["entry_reason"],
         exit_reason=exit_reason,
+        feature_values_at_entry=position.get("feature_values", {}),
+        predicate_evaluation_at_entry=position.get("predicate_evaluation", []),
     )
 
 

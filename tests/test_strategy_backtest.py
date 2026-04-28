@@ -312,6 +312,47 @@ class StrategyValidationTests(unittest.TestCase):
 
 
 class BarBacktestTests(unittest.TestCase):
+    def test_signal_grammar_uses_executable_features_and_records_predicates(self) -> None:
+        payload = base_spec()
+        payload["name"] = "test_signal_grammar"
+        payload["strategy_family"] = "intraday_momentum"
+        payload["market_hypothesis"] = (
+            "Executable feature grammar can trade only when computed intraday features "
+            "satisfy explicit predicates."
+        )
+        payload["direction"] = "long"
+        payload["indicators"] = {"momentum": {"type": "momentum", "lookback_minutes": 5, "threshold_points": 2}}
+        payload["parameters"] = {"momentum_lookback_minutes": {"values": [5]}}
+        payload["signal_grammar"] = {
+            "entry": {
+                "long": {
+                    "all": [
+                        {"feature": "return_5m", "op": ">=", "value": 2.0},
+                        {"feature": "minutes_since_open", "op": ">=", "value": 5},
+                    ]
+                }
+            },
+            "filters": {"all": [{"feature": "spread_ticks", "op": "<=", "value": 4}]},
+            "exit": {
+                "stop": {"type": "points", "value": 2},
+                "take_profit": {"type": "points", "value": 1},
+                "time_stop": {"minutes": 5},
+            },
+        }
+        rows = build_bar_rows(
+            datetime(2025, 1, 2, 13, 30),
+            [(100 + index, 102 + index, 99 + index, 100 + index) for index in range(20)],
+        )
+
+        result = run_bar_result_for_rows(payload, rows)
+
+        self.assertGreaterEqual(len(result.trades), 1)
+        self.assertEqual(result.trades[0].entry_reason, "signal_grammar_long")
+        self.assertIn("return_5m", result.trades[0].feature_values_at_entry)
+        self.assertTrue(all(item["passed"] for item in result.trades[0].predicate_evaluation_at_entry))
+        self.assertIsNotNone(result.feature_snapshot_hash)
+        self.assertIn("return_5m", result.executable_features)
+
     def test_opening_range_breakout_produces_deterministic_trade(self) -> None:
         start = datetime(2025, 3, 19, 13, 30)
         rows = []
