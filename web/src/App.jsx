@@ -42,6 +42,18 @@ const DEFAULT_HISTORY_FILTERS = {
   sortBy: "sharpe"
 };
 
+const DEFAULT_VOL_FILTERS = {
+  query: "",
+  family: "all",
+  status: "all",
+  minSharpe: "",
+  minAnnualTrades: "1000",
+  minWinProbability: "",
+  maxAvgBidAskCost: "",
+  maxEventDependency: "",
+  sortBy: "sharpe"
+};
+
 const COMPARISON_COLORS = ["#2dd4bf", "#60a5fa", "#f59e0b", "#f87171", "#a78bfa", "#22c55e", "#f97316", "#38bdf8"];
 
 function today() {
@@ -106,6 +118,7 @@ export default function App() {
   const [notice, setNotice] = useState({ tone: "neutral", text: "Connected UI shell. Start FastAPI on port 8000." });
   const [isPending, setIsPending] = useState(false);
   const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS);
+  const [volFilters, setVolFilters] = useState(DEFAULT_VOL_FILTERS);
   const [selectedStrategyIds, setSelectedStrategyIds] = useState([]);
   const [comparisonArtifacts, setComparisonArtifacts] = useState({});
   const [comparisonLoading, setComparisonLoading] = useState(false);
@@ -201,6 +214,10 @@ export default function App() {
 
   function updateTriggerGateForm(key, value) {
     setTriggerGateForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateVolFilter(key, value) {
+    setVolFilters((current) => ({ ...current, [key]: value }));
   }
 
   async function runAction(label, fn) {
@@ -533,6 +550,9 @@ export default function App() {
   const implementedFeatureCount = featureReadiness?.by_status?.implemented ?? 0;
   const generatedStrategyCount = featureReadiness?.generated_strategy_summary?.strategy_count ?? 0;
   const volSummary = volOverview?.strategy_leaderboard?.summary ?? {};
+  const volRows = volOverview?.strategy_leaderboard?.rows ?? [];
+  const volOptions = useMemo(() => buildVolOptions(volRows), [volRows]);
+  const filteredVolRows = useMemo(() => filterVolRows(volRows, volFilters), [volRows, volFilters]);
   const volFeatureStatus = volOverview?.feature_readiness?.status ?? "unknown";
   const volQuoteStatus = volOverview?.quote_replay?.status ?? "unknown";
   const volPaperStatus = volOverview?.paper_shadow?.status ?? "unknown";
@@ -628,6 +648,14 @@ export default function App() {
           </ActionButton>
         </div>
         <VolPipelineTable overview={volOverview} />
+        <VolStrategyExplorer
+          overview={volOverview}
+          rows={filteredVolRows}
+          totalRows={volRows.length}
+          filters={volFilters}
+          options={volOptions}
+          onFilter={updateVolFilter}
+        />
       </Panel>
 
       <section className="workbench-grid">
@@ -1266,11 +1294,212 @@ function VolPipelineTable({ overview }) {
   );
 }
 
+function VolStrategyExplorer({ overview, rows, totalRows, filters, options, onFilter }) {
+  const hashes = overview?.strategy_leaderboard?.artifact_hashes ?? {};
+  const familyAttribution = overview?.strategy_leaderboard?.family_attribution ?? [];
+  return (
+    <section className="vol-explorer" aria-label="VOL strategy details">
+      <div className="artifact-hash-strip">
+        <Metric label="Data Hash" value={shortHash(hashes.data_version_hash)} detail="bar files and run scope" />
+        <Metric label="Feature Hash" value={shortHash(hashes.feature_snapshot_hash)} detail="feature snapshot summary" />
+        <Metric label="Cost Hash" value={shortHash(hashes.cost_model_hash)} detail="execution cost model" />
+      </div>
+      <div className="history-filter-grid vol-filter-grid">
+        <TextField label="Search VOL" value={filters.query} onChange={(value) => onFilter("query", value)} />
+        <label className="field">
+          <span>Family</span>
+          <select value={filters.family} onChange={(event) => onFilter("family", event.target.value)}>
+            <option value="all">all</option>
+            {options.families.map((family) => <option key={family} value={family}>{family}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>Status</span>
+          <select value={filters.status} onChange={(event) => onFilter("status", event.target.value)}>
+            <option value="all">all</option>
+            <option value="candidate">candidate</option>
+            <option value="final">final target</option>
+            <option value="rejected">rejected</option>
+          </select>
+        </label>
+        <TextField label="Min Sharpe" type="number" value={filters.minSharpe} onChange={(value) => onFilter("minSharpe", value)} />
+        <TextField label="Min Annual Trades" type="number" value={filters.minAnnualTrades} onChange={(value) => onFilter("minAnnualTrades", value)} />
+        <TextField label="Min Win Probability" type="number" value={filters.minWinProbability} onChange={(value) => onFilter("minWinProbability", value)} />
+        <TextField label="Max Bid/Ask Cost" type="number" value={filters.maxAvgBidAskCost} onChange={(value) => onFilter("maxAvgBidAskCost", value)} />
+        <TextField label="Max Event Dependency" type="number" value={filters.maxEventDependency} onChange={(value) => onFilter("maxEventDependency", value)} />
+        <label className="field">
+          <span>Sort By</span>
+          <select value={filters.sortBy} onChange={(event) => onFilter("sortBy", event.target.value)}>
+            <option value="sharpe">sharpe</option>
+            <option value="annual_trades">annual trades</option>
+            <option value="win_probability">win probability</option>
+            <option value="net_pnl">net pnl</option>
+            <option value="cost">bid/ask cost</option>
+          </select>
+        </label>
+      </div>
+      <div className="history-summary-strip" aria-label="VOL filtered summary">
+        <Metric label="Visible VOL Rows" value={formatCompact(rows.length)} detail={`${formatCompact(totalRows)} total`} />
+        <Metric label="Families" value={formatCompact(familyAttribution.length)} detail="family attribution groups" />
+        <Metric label="Candidates" value={formatCompact(overview?.strategy_leaderboard?.summary?.candidate_vol_rows ?? 0)} detail="pre-screen gate pass" />
+      </div>
+      <VolFamilyAttribution rows={familyAttribution} />
+      <VolStrategyCards rows={rows.slice(0, 12)} />
+    </section>
+  );
+}
+
+function VolFamilyAttribution({ rows }) {
+  if (!rows.length) {
+    return <EmptyState title="No VOL family attribution" text="Run VOL pre-screen to populate family-level attribution." />;
+  }
+  return (
+    <div className="table-wrap compact-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Family</th>
+            <th>Strategies</th>
+            <th>Candidates</th>
+            <th>Best Sharpe</th>
+            <th>Median Trades</th>
+            <th>Best Strategy</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.strategy_family}>
+              <td>{row.strategy_family}</td>
+              <td>{formatCompact(row.strategy_count)}</td>
+              <td>{formatCompact(row.candidate_count)}</td>
+              <td>{formatNumber(row.best_sharpe_test)}</td>
+              <td>{formatCompact(row.median_annual_trades_test)}</td>
+              <td>{row.best_strategy_name}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function VolStrategyCards({ rows }) {
+  if (!rows.length) {
+    return <EmptyState title="No VOL rows match filters" text="Relax filters or rerun VOL pre-screen." />;
+  }
+  return (
+    <div className="strategy-card-grid vol-card-grid">
+      {rows.map((row) => {
+        const featureCard = row.vol_feature_card ?? {};
+        const executionCard = row.execution_card ?? {};
+        const eventView = row.event_non_event_view ?? {};
+        return (
+          <article key={row.experiment_id} className="strategy-card vol-strategy-card">
+            <div className="strategy-card-topline">
+              <span className={`status-pill ${row.final_target_passed ? "completed" : row.passed ? "candidate" : "failed"}`}>
+                {row.final_target_passed ? "final" : row.passed ? "candidate" : "rejected"}
+              </span>
+              <span>{row.strategy_family}</span>
+            </div>
+            <h3>{row.strategy_name}</h3>
+            <p>{row.strategy_card?.market_hypothesis ?? "No VOL hypothesis recorded."}</p>
+            <div className="strategy-card-metrics">
+              <Metric label="Sharpe" value={formatNumber(row.sharpe_test)} detail={`${formatCompact(row.annual_trades_test)} annual trades`} />
+              <Metric label="Win Prob." value={formatPercent(row.win_probability_test)} detail={`PF ${formatNumber(row.profit_factor_test)}`} />
+            </div>
+            <dl className="vol-card-facts">
+              <div><dt>Spec</dt><dd>{shortHash(row.strategy_spec_hash)}</dd></div>
+              <div><dt>Features</dt><dd>{formatCompact(featureCard.feature_count)} · {shortHash(featureCard.feature_snapshot_hash)}</dd></div>
+              <div><dt>Cost</dt><dd>{shortHash(row.cost_model_hash ?? executionCard.cost_model_hash)}</dd></div>
+              <div><dt>Event View</dt><dd>{eventView.status ?? "unknown"}</dd></div>
+            </dl>
+            <div className="gate-list" aria-label="VOL parameter heatmap">
+              {(row.parameter_heatmap ?? []).slice(0, 5).map((item) => (
+                <span key={item.parameter}>
+                  {item.parameter}: {formatCompact(item.candidate_count)}
+                </span>
+              ))}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 function buildHistoryOptions(rows) {
   return {
     executionModes: uniqueSorted(rows.map((row) => row.execution_mode).filter(Boolean)),
     moduleIds: uniqueSorted(rows.map((row) => row.module_id).filter(Boolean))
   };
+}
+
+function buildVolOptions(rows) {
+  return {
+    families: uniqueSorted(rows.map((row) => row.strategy_family).filter(Boolean))
+  };
+}
+
+function filterVolRows(rows, filters) {
+  const query = filters.query.trim().toLowerCase();
+  const minSharpe = parseOptionalNumber(filters.minSharpe);
+  const minAnnualTrades = parseOptionalNumber(filters.minAnnualTrades);
+  const minWinProbability = parseProbabilityFilter(filters.minWinProbability);
+  const maxAvgBidAskCost = parseOptionalNumber(filters.maxAvgBidAskCost);
+  const maxEventDependency = parseOptionalNumber(filters.maxEventDependency);
+  const filtered = rows.filter((row) => {
+    if (filters.family !== "all" && row.strategy_family !== filters.family) {
+      return false;
+    }
+    if (filters.status === "candidate" && !row.passed) {
+      return false;
+    }
+    if (filters.status === "final" && !row.final_target_passed) {
+      return false;
+    }
+    if (filters.status === "rejected" && row.passed) {
+      return false;
+    }
+    if (!passesMinimum(row.sharpe_test, minSharpe)) {
+      return false;
+    }
+    if (!passesMinimum(row.annual_trades_test, minAnnualTrades)) {
+      return false;
+    }
+    if (!passesMinimum(row.win_probability_test, minWinProbability)) {
+      return false;
+    }
+    const bidAskCost = row.execution_card?.avg_bid_ask_cost_usd;
+    if (maxAvgBidAskCost !== null && bidAskCost !== null && bidAskCost !== undefined && Number(bidAskCost) > maxAvgBidAskCost) {
+      return false;
+    }
+    const eventDependency = row.event_non_event_view?.event_dependency_ratio;
+    if (maxEventDependency !== null && eventDependency !== null && eventDependency !== undefined && Number(eventDependency) > maxEventDependency) {
+      return false;
+    }
+    if (!query) {
+      return true;
+    }
+    return [
+      row.strategy_name,
+      row.strategy_family,
+      row.strategy_card?.market_hypothesis,
+      row.strategy_spec_hash,
+      row.cost_model_hash
+    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
+  });
+  return sortVolRows(filtered, filters.sortBy);
+}
+
+function sortVolRows(rows, sortBy) {
+  const sortKey = {
+    annual_trades: "annual_trades_test",
+    win_probability: "win_probability_test",
+    net_pnl: "net_pnl_test",
+    cost: "avg_bid_ask_cost_usd",
+    sharpe: "sharpe_test"
+  }[sortBy] ?? "sharpe_test";
+  return [...rows].sort((left, right) => Number(right[sortKey] ?? right.execution_card?.[sortKey] ?? -Infinity) - Number(left[sortKey] ?? left.execution_card?.[sortKey] ?? -Infinity));
 }
 
 function filterHistoryRows(rows, filters) {

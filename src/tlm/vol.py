@@ -193,7 +193,11 @@ def run_vol_prescreen(
             "strategy_name": spec.name,
             "strategy_family": spec.strategy_family,
             "strategy_spec_hash": strategy_spec_hash(spec),
+            "vol_feature_card": _vol_feature_card(spec, feature_hashes),
             "strategy_card": _vol_strategy_card(spec),
+            "execution_card": _vol_execution_card(cost_model),
+            "event_non_event_view": _vol_event_non_event_view(),
+            "parameter_heatmap": _vol_parameter_heatmap(spec),
             "cost_model": cost_model.to_dict(),
             "cost_model_hash": stable_hash(cost_model.to_dict()),
             "data_version_hash": compute_data_version_hash(
@@ -942,3 +946,57 @@ def _vol_strategy_card(spec: StrategySpec) -> dict[str, Any]:
         "core_feature_count": len(spec.raw.get("feature_set", [])),
         "parameter_keys": sorted((spec.raw.get("parameters") or {}).keys()),
     }
+
+
+def _vol_feature_card(spec: StrategySpec, feature_hashes: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    feature_names = [
+        item.get("name")
+        for item in spec.raw.get("feature_set", [])
+        if isinstance(item, dict) and item.get("name")
+    ]
+    return {
+        "feature_count": len(feature_names),
+        "features": feature_names,
+        "required_vol_features_present": sorted(set(feature_names).intersection(VOL_REQUIRED_FEATURES)),
+        "feature_snapshot_hash": stable_hash(feature_hashes),
+        "bar_volume_mapping": "Databento OHLCV tick_count -> bar_volume",
+    }
+
+
+def _vol_execution_card(cost_model: CostModelConfig) -> dict[str, Any]:
+    return {
+        "execution_mode": "ohlcv_prescreen",
+        "cost_model_hash": stable_hash(cost_model.to_dict()),
+        "cost_model": cost_model.to_dict(),
+        "quote_replay_status": "required_before_paper_shadow",
+        "paper_shadow_status": "required_before_promotion",
+        "limit_fill_validation": "required_when_quote_report_available",
+        "adverse_selection_validation": "required_when_quote_report_available",
+    }
+
+
+def _vol_event_non_event_view() -> dict[str, Any]:
+    return {
+        "status": "not_available_in_ohlcv_prescreen",
+        "non_event_sharpe": None,
+        "event_dependency_ratio": None,
+        "event_window_drawdown": None,
+        "requires_macro_event_context": True,
+    }
+
+
+def _vol_parameter_heatmap(spec: StrategySpec) -> list[dict[str, Any]]:
+    heatmap = []
+    for name, config in sorted((spec.raw.get("parameters") or {}).items()):
+        values = config.get("values") if isinstance(config, dict) else None
+        if not isinstance(values, list):
+            continue
+        heatmap.append(
+            {
+                "parameter": name,
+                "candidate_count": len(values),
+                "values": values,
+                "selected": values[0] if values else None,
+            }
+        )
+    return heatmap

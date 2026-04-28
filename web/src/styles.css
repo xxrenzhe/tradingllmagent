@@ -956,6 +956,59 @@ pre {
   margin: 14px 0;
 }
 
+.vol-explorer {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.artifact-hash-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vol-filter-grid {
+  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(140px, 1fr));
+}
+
+.vol-card-grid {
+  margin-top: 2px;
+}
+
+.vol-strategy-card {
+  align-content: start;
+}
+
+.vol-card-facts {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.vol-card-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  padding-bottom: 6px;
+}
+
+.vol-card-facts dt {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.vol-card-facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .inline-control,
 .checkbox-control {
   display: inline-flex;
@@ -1066,6 +1119,7 @@ pre {
   .factory-columns,
   .history-filter-grid,
   .history-summary-strip,
+  .artifact-hash-strip,
   .strategy-card-grid,
   .module-memory-grid,
   .chart-grid,
