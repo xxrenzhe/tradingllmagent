@@ -18,6 +18,7 @@ from .backtest import (
     run_bar_backtest,
     run_tick_backtest,
 )
+from .attribution import build_search_attribution_report
 from .cli_dates import iter_dates
 from .config import CostModelConfig, SymbolConfig
 from .leaderboard import calculate_sharpe_decay, evaluate_hard_gates, robustness_score
@@ -718,7 +719,9 @@ def seed_discovery_suffix(seed: StrategySpec, seed_index: int) -> str:
 
 def write_strategy_discovery_result(path: Path, discovery: StrategyDiscoveryResult | SeedPoolStrategyDiscoveryResult) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(discovery.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    payload = discovery.to_dict()
+    payload["attribution_report"] = build_search_attribution_report(discovery.results)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def run_research_bar_validation(
@@ -1762,6 +1765,7 @@ def write_research_artifacts(
             "non_overlap_test_fold_indexes": result.non_overlap_test_fold_indexes,
             "non_overlap_test_metrics": result.non_overlap_test_metrics.to_dict(),
         },
+        "pre_screen_report": result.pre_screen_report,
         "reproducibility": {
             "code_version": result.snapshot.get("code_version"),
             "config_snapshot_hash": result.snapshot.get("config_snapshot_hash"),
@@ -2145,6 +2149,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "signal_similarity_report": payload.get("signal_similarity_report", {}),
                 "next_round_suggestions": payload.get("next_round_suggestions", []),
                 "final_holdout_policy": payload.get("final_holdout_policy", {}),
+                "pre_screen_report": payload.get("pre_screen_report", {}),
                 "overlapping_test_folds": payload.get("overlapping_test_folds", False),
                 "non_overlap_test_fold_indexes": payload.get("non_overlap_test_fold_indexes", []),
                 "passed": payload["gates"]["passed"],
