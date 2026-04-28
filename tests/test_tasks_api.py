@@ -933,6 +933,11 @@ class APIImportTests(unittest.TestCase):
         required_paths = [
             "/api/data/symbols",
             "/api/data/quality",
+            "/api/data/import-firstrate",
+            "/api/data/bar-quality",
+            "/api/data/split-manifest",
+            "/api/data/import-databento-quotes",
+            "/api/data/quote-replay",
             "/api/tasks/{task_id}/events",
             "/api/experiments/research-runs",
             "/api/experiments/target-discovery",

@@ -44,6 +44,66 @@ paths:
       responses:
         "200":
           description: Queued task.
+  /api/data/import-firstrate:
+    post:
+      summary: Queue FirstRate NQ 1m CSV import into local bar partitions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/bar-quality:
+    post:
+      summary: Queue bar-level data quality checks for imported NQ data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/split-manifest:
+    post:
+      summary: Queue dataset split manifest generation with hidden final holdout policy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/import-databento-quotes:
+    post:
+      summary: Queue Databento TBBO or MBP-1 quote CSV import into local quote partitions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/quote-replay:
+    post:
+      summary: Queue quote-level bid/ask execution replay for candidate backtest trades.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
   /api/data/quality:
     get:
       summary: Build a local data quality report.
