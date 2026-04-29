@@ -25,6 +25,8 @@ DEFAULT_TP_SL_PAIRS = (
     (6, 24),
 )
 
+OHLCV_FAMILY_HORIZONS = (5, 15, 30, 60, 120)
+
 
 def mine_databento_nq_profitable_strategies(
     *,
@@ -58,7 +60,9 @@ def mine_databento_nq_profitable_strategies(
         }
         cost_adjusted = _run_close_to_close_scans(con, context, round_trip_cost_usd)
         cost_adjusted.extend(_run_tp_sl_scans(con, context, round_trip_cost_usd))
+        cost_adjusted.extend(_run_ohlcv_family_scans(con, context, round_trip_cost_usd))
         gross_candidates = _run_tp_sl_scans(con, context, 0.0)
+        gross_candidates.extend(_run_ohlcv_family_scans(con, context, 0.0))
     finally:
         con.close()
 
@@ -120,6 +124,18 @@ def mine_databento_nq_profitable_strategies(
                 "trend_vs_ma20_or_ma50",
                 "relative_volume_bin",
                 "range_regime",
+                "breakout_20_previous_range",
+                "close_zscore_50",
+                "body_to_range",
+                "intraday_opening_window_utc",
+            ],
+            "ohlcv_family_scans": [
+                "breakout_continuation",
+                "range_expansion_continuation",
+                "trend_pullback_reclaim",
+                "zscore_mean_reversion",
+                "volume_climax_reversion",
+                "low_volume_drift",
             ],
         },
         "summary": {
@@ -133,8 +149,8 @@ def mine_databento_nq_profitable_strategies(
         "gross_only_candidates": gross_only,
         "blocked_next_steps": [] if qualified else [
             "No scanned candidate met annual_trades > 1000, win_probability > 0.53, and cost-adjusted net_pnl > 0.",
-            "Download TBBO/MBP-1 before promoting any gross-only candidate.",
-            "Extend search with order-book features, not more OHLCV-only curve fitting.",
+            "Stay in OHLCV-only research mode: add walk-forward family search before trusting any in-sample candidate.",
+            "Prefer session-normalized OHLCV features, volatility-regime splits, and simpler risk filters over higher-dimensional curve fitting.",
         ],
     }
     report["report_hash"] = stable_hash({key: value for key, value in report.items() if key != "report_hash"})
@@ -174,16 +190,133 @@ def _run_close_to_close_scans(con: duckdb.DuckDBPyConnection, context: dict[str,
                 AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon} AND {horizon + 2}
             ), pnl AS (
               SELECT 'close_to_close_feature_scan' AS scan_type, {horizon} AS horizon_minutes,
-                     bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin,
+                     bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin, 0 AS range_bin,
                      NULL::DOUBLE AS take_profit_points, NULL::DOUBLE AS stop_loss_points,
                      1 AS direction, (future_close-close)*{context["point_value"]}-{cost} AS pnl
               FROM feats
               UNION ALL
               SELECT 'close_to_close_feature_scan', {horizon},
-                     bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin,
+                     bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin, 0 AS range_bin,
                      NULL::DOUBLE, NULL::DOUBLE,
                      -1, (close-future_close)*{context["point_value"]}-{cost}
               FROM feats
+            )
+            {_candidate_select_sql(context)}
+            """,
+        )
+        candidates.extend(_annotate_rows(rows, cost))
+    return candidates
+
+
+def _run_ohlcv_family_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], cost: float) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for horizon in OHLCV_FAMILY_HORIZONS:
+        rows = _fetch_dicts(
+            con,
+            f"""
+            WITH raw AS (
+              SELECT timestamp, open, high, low, close, tick_count,
+                     CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER) AS moday,
+                     CAST(strftime(timestamp, '%w') AS INTEGER) AS dow,
+                     close - lag(close, 1) OVER (ORDER BY timestamp) AS ret1,
+                     close - lag(close, 5) OVER (ORDER BY timestamp) AS ret5,
+                     avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS ma20,
+                     avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS ma50,
+                     stddev_pop(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS close_std50,
+                     avg(tick_count) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS vol20,
+                     avg(tick_count) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS vol50,
+                     avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
+                     max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
+                     min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
+                     lead(close, {horizon}) OVER (ORDER BY timestamp) AS future_close,
+                     lead(timestamp, {horizon}) OVER (ORDER BY timestamp) AS future_ts
+              FROM read_parquet('{context["parquet_glob"]}')
+              WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
+            ), feats AS (
+              SELECT *,
+                     floor(moday/120)*120 AS bucket_start,
+                     moday % {horizon} AS phase,
+                     CASE WHEN close > ma50 THEN 1 ELSE -1 END AS trend_bin,
+                     CASE WHEN tick_count >= vol50*2.0 THEN 3 WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin,
+                     CASE WHEN (high-low) >= range20*2.0 THEN 3 WHEN (high-low) >= range20*1.5 THEN 2 WHEN (high-low) >= range20 THEN 1 WHEN (high-low) < range20*0.7 THEN -1 ELSE 0 END AS range_bin,
+                     CASE WHEN close_std50 > 0 THEN (close-ma50)/close_std50 ELSE 0 END AS z50,
+                     CASE WHEN high > low THEN (close-open)/(high-low) ELSE 0 END AS body_to_range,
+                     CASE WHEN close > high20_prev THEN 1 WHEN close < low20_prev THEN -1 ELSE 0 END AS breakout20
+              FROM raw
+              WHERE future_close IS NOT NULL AND ma20 IS NOT NULL AND ma50 IS NOT NULL AND close_std50 IS NOT NULL
+                AND vol20 IS NOT NULL AND vol50 IS NOT NULL AND range20 IS NOT NULL
+                AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon} AND {horizon + 2}
+            ), signals AS (
+              SELECT 'breakout_continuation' AS scan_type, {horizon} AS horizon_minutes, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, 1 AS direction, future_close, close
+              FROM feats
+              WHERE breakout20 = 1 AND trend_bin = 1 AND volume_bin >= 1
+              UNION ALL
+              SELECT 'breakout_continuation', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, -1, future_close, close
+              FROM feats
+              WHERE breakout20 = -1 AND trend_bin = -1 AND volume_bin >= 1
+              UNION ALL
+              SELECT 'range_expansion_continuation', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, 1, future_close, close
+              FROM feats
+              WHERE body_to_range >= 0.6 AND range_bin >= 2 AND volume_bin >= 1
+              UNION ALL
+              SELECT 'range_expansion_continuation', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, -1, future_close, close
+              FROM feats
+              WHERE body_to_range <= -0.6 AND range_bin >= 2 AND volume_bin >= 1
+              UNION ALL
+              SELECT 'trend_pullback_reclaim', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, 1, future_close, close
+              FROM feats
+              WHERE trend_bin = 1 AND ret5 < 0 AND ret1 > 0 AND close > ma20
+              UNION ALL
+              SELECT 'trend_pullback_reclaim', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, -1, future_close, close
+              FROM feats
+              WHERE trend_bin = -1 AND ret5 > 0 AND ret1 < 0 AND close < ma20
+              UNION ALL
+              SELECT 'zscore_mean_reversion', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, -1, future_close, close
+              FROM feats
+              WHERE z50 >= 2 AND volume_bin <= 1
+              UNION ALL
+              SELECT 'zscore_mean_reversion', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, 1, future_close, close
+              FROM feats
+              WHERE z50 <= -2 AND volume_bin <= 1
+              UNION ALL
+              SELECT 'volume_climax_reversion', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, -1, future_close, close
+              FROM feats
+              WHERE z50 >= 1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
+              UNION ALL
+              SELECT 'volume_climax_reversion', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, 1, future_close, close
+              FROM feats
+              WHERE z50 <= -1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
+              UNION ALL
+              SELECT 'low_volume_drift', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, 1, future_close, close
+              FROM feats
+              WHERE trend_bin = 1 AND volume_bin = -1 AND ret1 > 0
+              UNION ALL
+              SELECT 'low_volume_drift', {horizon}, bucket_start, phase, dow,
+                     trend_bin, volume_bin, range_bin, -1, future_close, close
+              FROM feats
+              WHERE trend_bin = -1 AND volume_bin = -1 AND ret1 < 0
+            ), pnl AS (
+              SELECT scan_type, horizon_minutes, bucket_start, phase, dow,
+                     NULL::INTEGER AS ret1_sign, NULL::INTEGER AS ret5_bin,
+                     trend_bin, volume_bin, range_bin,
+                     NULL::DOUBLE AS take_profit_points, NULL::DOUBLE AS stop_loss_points,
+                     direction,
+                     CASE WHEN direction = 1
+                       THEN (future_close-close)*{context["point_value"]}-{cost}
+                       ELSE (close-future_close)*{context["point_value"]}-{cost}
+                     END AS pnl
+              FROM signals
             )
             {_candidate_select_sql(context)}
             """,
@@ -219,13 +352,14 @@ def _run_tp_sl_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], co
                      CASE WHEN ret1 > 0 THEN 1 WHEN ret1 < 0 THEN -1 ELSE 0 END AS ret1_sign,
                      0 AS ret5_bin,
                      CASE WHEN close > ma20 THEN 1 ELSE -1 END AS trend_bin,
-                     0 AS volume_bin
+                     0 AS volume_bin,
+                     0 AS range_bin
               FROM raw
               WHERE future_close IS NOT NULL AND ma20 IS NOT NULL
                 AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon} AND {horizon + 2}
             ), pnl AS (
               SELECT 'tp_sl_feature_scan' AS scan_type, {horizon} AS horizon_minutes,
-                     bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin,
+                     bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin, range_bin,
                      p.take_profit_points, p.stop_loss_points, 1 AS direction,
                      CASE
                        WHEN fwd_low <= close-p.stop_loss_points THEN -p.stop_loss_points*{context["point_value"]}-{cost}
@@ -235,7 +369,7 @@ def _run_tp_sl_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], co
               FROM feats CROSS JOIN params p
               UNION ALL
               SELECT 'tp_sl_feature_scan', {horizon},
-                     bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin,
+                     bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin, range_bin,
                      p.take_profit_points, p.stop_loss_points, -1,
                      CASE
                        WHEN fwd_high >= close+p.stop_loss_points THEN -p.stop_loss_points*{context["point_value"]}-{cost}
@@ -253,7 +387,7 @@ def _run_tp_sl_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], co
 
 def _candidate_select_sql(context: dict[str, Any]) -> str:
     return f"""
-    SELECT scan_type, horizon_minutes, bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin,
+    SELECT scan_type, horizon_minutes, bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin, range_bin,
            take_profit_points, stop_loss_points, direction,
            count(*) AS trades,
            count(*) / (
@@ -309,6 +443,7 @@ def _candidate_rule(row: dict[str, Any]) -> dict[str, Any]:
             "ret5_bin": row.get("ret5_bin"),
             "trend_bin": row.get("trend_bin"),
             "volume_bin": row.get("volume_bin"),
+            "range_bin": row.get("range_bin"),
         },
         "exit": {
             "horizon_minutes": row.get("horizon_minutes"),
