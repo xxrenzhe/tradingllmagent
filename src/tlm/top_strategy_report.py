@@ -35,6 +35,7 @@ def generate_top_strategy_html_report(
     top_n: int = 3,
     sample_trade_count: int = 3,
     objective: str = "annualized_quality",
+    comparison_objectives: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     report_paths = [Path(path) for path in (mining_report_paths or ([] if mining_report_path is None else [mining_report_path]))]
     if not report_paths:
@@ -47,29 +48,42 @@ def generate_top_strategy_html_report(
         for path in report_paths
     ]
     capital_base_usd = float(next((report.get("starting_equity") for report in mining_reports if report.get("starting_equity") is not None), 100_000.0))
-    strategies = _select_top_yearly_strategies(mining_reports, top_n=top_n, objective=objective)
+    objective_order = _objective_order(objective, comparison_objectives)
     round_trip_cost_usd = max(float(report.get("round_trip_cost_usd") or 0.0) for report in mining_reports)
 
     con = duckdb.connect(":memory:")
     try:
-        enriched = []
-        for index, strategy in enumerate(strategies, start=1):
-            source_report = mining_reports[int(strategy["source_report_index"])]
-            context = _replay_context(source_report, data_root)
-            strategy_round_trip_cost_usd = float(source_report.get("round_trip_cost_usd") or 0.0)
-            bar_minutes = int(source_report.get("timeframe_minutes") or timeframe_minutes(str(source_report["timeframe"])))
-            signals = _replay_strategy_signals(con, context, strategy, strategy_round_trip_cost_usd)
-            samples = _sample_trades(signals, limit=sample_trade_count)
-            enriched.append(
-                _enrich_strategy(
-                    con=con,
-                    context=context,
-                    strategy={**strategy, "display_id": f"S{index}"},
-                    signals=signals,
-                    sample_trades=samples,
-                    bar_minutes=bar_minutes,
-                    capital_base_usd=capital_base_usd,
+        strategy_sets = []
+        for objective_index, objective_name in enumerate(objective_order, start=1):
+            strategies = _select_top_yearly_strategies(mining_reports, top_n=top_n, objective=objective_name)
+            enriched = []
+            for strategy_index, strategy in enumerate(strategies, start=1):
+                source_report = mining_reports[int(strategy["source_report_index"])]
+                context = _replay_context(source_report, data_root)
+                strategy_round_trip_cost_usd = float(source_report.get("round_trip_cost_usd") or 0.0)
+                bar_minutes = int(source_report.get("timeframe_minutes") or timeframe_minutes(str(source_report["timeframe"])))
+                signals = _replay_strategy_signals(con, context, strategy, strategy_round_trip_cost_usd)
+                samples = _sample_trades(signals, limit=sample_trade_count)
+                enriched.append(
+                    _enrich_strategy(
+                        con=con,
+                        context=context,
+                        strategy={**strategy, "display_id": f"O{objective_index}-S{strategy_index}"},
+                        signals=signals,
+                        sample_trades=samples,
+                        bar_minutes=bar_minutes,
+                        capital_base_usd=capital_base_usd,
+                    )
                 )
+            strategy_sets.append(
+                {
+                    "objective": objective_name,
+                    "selection_policy": _selection_policy(objective_name),
+                    "strategy_count": len(enriched),
+                    "strategies": enriched,
+                    "total_net_pnl": sum(float(item["replayed_metrics"].get("net_pnl") or 0.0) for item in enriched),
+                    "total_excess_net_pnl": sum(float(item["excess_summary"].get("excess_net_pnl") or 0.0) for item in enriched),
+                }
             )
     finally:
         con.close()
@@ -92,8 +106,9 @@ def generate_top_strategy_html_report(
         "capital_base_usd": capital_base_usd,
         "selection_objective": objective,
         "selection_policy": _selection_policy(objective),
-        "strategy_count": len(enriched),
-        "strategies": enriched,
+        "strategy_count": len(strategy_sets[0]["strategies"]) if strategy_sets else 0,
+        "strategies": strategy_sets[0]["strategies"] if strategy_sets else [],
+        "strategy_sets": strategy_sets,
     }
     payload["report_hash"] = stable_hash(_json_ready(payload))
 
@@ -105,7 +120,8 @@ def generate_top_strategy_html_report(
         "html": str(output_html),
         "data": str(data_path),
         "selection_objective": objective,
-        "strategy_count": len(enriched),
+        "strategy_count": len(strategy_sets[0]["strategies"]) if strategy_sets else 0,
+        "strategy_set_count": len(strategy_sets),
         "report_hash": payload["report_hash"],
     }
 
@@ -116,43 +132,83 @@ def generate_top_strategy_comparison_html(
     output_html: Path,
 ) -> dict[str, Any]:
     reports = [json.loads(path.read_text(encoding="utf-8")) for path in report_data_paths]
-    rows = []
-    for report, path in zip(reports, report_data_paths):
+    strategy_sets = []
+    source_reports_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    symbols = set()
+    timeframes = set()
+    date_from_values = []
+    date_to_values = []
+    round_trip_cost_usd = 0.0
+    capital_base_usd = 100_000.0
+    for report in reports:
         strategies = report.get("strategies", [])
-        rows.append(
+        strategy_sets.append(
             {
-                "name": path.stem,
-                "path": str(path),
                 "objective": report.get("selection_objective"),
-                "policy": report.get("selection_policy"),
-                "source_reports": report.get("source_reports") or [],
+                "selection_policy": report.get("selection_policy"),
                 "strategy_count": len(strategies),
+                "strategies": strategies,
                 "total_net_pnl": sum(float(strategy["replayed_metrics"].get("net_pnl") or 0.0) for strategy in strategies),
                 "total_excess_net_pnl": sum(float(strategy["excess_summary"].get("excess_net_pnl") or 0.0) for strategy in strategies),
-                "strategies": [
-                    {
-                        "display_id": strategy.get("display_id"),
-                        "source_timeframe": strategy.get("source_timeframe"),
-                        "selection_rule": strategy.get("selection_rule"),
-                        "net_pnl": float(strategy["replayed_metrics"].get("net_pnl") or 0.0),
-                        "annualized_net_pnl": float(strategy["replayed_metrics"].get("annualized_net_pnl") or 0.0),
-                        "profit_factor": float(strategy["replayed_metrics"].get("profit_factor") or 0.0),
-                        "win_probability": float(strategy["replayed_metrics"].get("win_probability") or 0.0),
-                        "passed_gate_count": int((strategy.get("evaluation_summary") or {}).get("passed_gate_count") or 0),
-                        "total_gate_count": int((strategy.get("evaluation_summary") or {}).get("total_gate_count") or 0),
-                    }
-                    for strategy in strategies
-                ],
             }
         )
+        for source_report in report.get("source_reports") or []:
+            key = (str(source_report.get("path")), str(source_report.get("timeframe")))
+            source_reports_by_key[key] = source_report
+        symbols.add(str(report.get("symbol")))
+        for timeframe in str(report.get("timeframe") or "").split(", "):
+            if timeframe:
+                timeframes.add(timeframe)
+        if report.get("date_from"):
+            date_from_values.append(str(report.get("date_from")))
+        if report.get("date_to"):
+            date_to_values.append(str(report.get("date_to")))
+        round_trip_cost_usd = max(round_trip_cost_usd, float(report.get("round_trip_cost_usd") or 0.0))
+        capital_base_usd = float(report.get("capital_base_usd") or capital_base_usd)
+    primary = strategy_sets[0] if strategy_sets else {"objective": "annualized_quality", "selection_policy": _selection_policy("annualized_quality"), "strategies": []}
     payload = {
-        "artifact": "top_strategy_comparison_html_report",
-        "report_count": len(rows),
-        "reports": rows,
+        "artifact": "top_strategy_html_report",
+        "source_report": None,
+        "source_reports": list(source_reports_by_key.values()),
+        "symbol": sorted(symbols)[0] if len(symbols) == 1 else sorted(symbols),
+        "timeframe": ", ".join(sorted(timeframes, key=timeframe_minutes)),
+        "date_from": min(date_from_values) if date_from_values else None,
+        "date_to": max(date_to_values) if date_to_values else None,
+        "round_trip_cost_usd": round_trip_cost_usd,
+        "capital_base_usd": capital_base_usd,
+        "selection_objective": primary.get("objective"),
+        "selection_policy": primary.get("selection_policy"),
+        "strategy_count": len(primary.get("strategies") or []),
+        "strategies": primary.get("strategies") or [],
+        "strategy_sets": strategy_sets,
     }
+    payload["report_hash"] = stable_hash(_json_ready(payload))
     output_html.parent.mkdir(parents=True, exist_ok=True)
-    output_html.write_text(_render_comparison_html(payload), encoding="utf-8")
-    return {"html": str(output_html), "report_count": len(rows)}
+    data_path = output_html.with_suffix(".data.json")
+    write_json(data_path, _json_ready(_export_payload(payload)))
+    output_html.write_text(_render_html(payload, data_path.name), encoding="utf-8")
+    return {
+        "html": str(output_html),
+        "data": str(data_path),
+        "report_count": len(strategy_sets),
+        "report_hash": payload["report_hash"],
+    }
+
+
+def _objective_order(primary_objective: str, comparison_objectives: Sequence[str] | None) -> list[str]:
+    preferred = [primary_objective]
+    if comparison_objectives:
+        preferred.extend(str(objective) for objective in comparison_objectives)
+    else:
+        preferred.extend(["net_pnl", "stability_first"])
+    ordered = []
+    seen = set()
+    for objective in preferred:
+        if objective in seen:
+            continue
+        seen.add(objective)
+        ordered.append(objective)
+    return ordered
 
 
 def _select_top_yearly_strategies(
@@ -244,6 +300,19 @@ def _selection_policy(objective: str) -> str:
         "balanced": "top yearly-profitable strategies by annualized net PnL, then the weaker of full-period and test-period profit factor",
     }
     return policies.get(objective, policies["annualized_quality"])
+
+
+def _objective_label(objective: str) -> str:
+    labels = {
+        "annualized_quality": "年化质量优先",
+        "annualized_net_pnl": "年化净收益优先",
+        "net_pnl": "总净收益优先",
+        "stability_first": "稳定性优先",
+        "profit_factor": "PF 优先",
+        "test_profit_factor": "测试期 PF 优先",
+        "balanced": "平衡优先",
+    }
+    return labels.get(objective, objective)
 
 
 def _replay_context(report: dict[str, Any], data_root: Path) -> dict[str, Any]:
@@ -721,8 +790,18 @@ def _trade_marker(signal: dict[str, Any]) -> dict[str, Any]:
 
 
 def _render_html(payload: dict[str, Any], data_filename: str) -> str:
-    strategy_sections = "\n".join(_strategy_section(strategy) for strategy in payload["strategies"])
-    overview_rows = "\n".join(_overview_row(strategy) for strategy in payload["strategies"])
+    strategy_sets = payload.get("strategy_sets") or [
+        {
+            "objective": payload.get("selection_objective"),
+            "selection_policy": payload.get("selection_policy"),
+            "strategy_count": len(payload["strategies"]),
+            "total_net_pnl": sum(float(strategy["replayed_metrics"].get("net_pnl") or 0.0) for strategy in payload["strategies"]),
+            "total_excess_net_pnl": sum(float(strategy["excess_summary"].get("excess_net_pnl") or 0.0) for strategy in payload["strategies"]),
+            "strategies": payload["strategies"],
+        }
+    ]
+    objective_rows = "\n".join(_objective_overview_row(report) for report in strategy_sets)
+    overview_sections = "\n".join(_strategy_set_section(report) for report in strategy_sets)
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -803,21 +882,21 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
 </head>
 <body>
   <header>
-    <h1>NQ_CME Top 3 策略表现报告</h1>
+    <h1>NQ_CME Top 策略综合报告</h1>
     <div class="meta">数据: {html.escape(str(payload["symbol"]))} {html.escape(str(payload["timeframe"]))} OHLCV, {html.escape(str(payload["date_from"]))} 至 {html.escape(str(payload["date_to"]))}; 成本: {fmt_usd(payload["round_trip_cost_usd"])} / trade; 收益率基准资金: {fmt_usd(payload["capital_base_usd"])}; 名义收益率按各策略激活窗口首根 NQ close × point_value 的 1手名义价值计算</div>
   </header>
   <main>
     <section class="section">
       <h2>总览</h2>
-      <p>本报告从已有挖掘结果中选择 Top 3，并按策略构成去重。选择目标: {html.escape(str(payload.get("selection_objective")))}；选择规则: {html.escape(str(payload.get("selection_policy")))}。所有交易均基于 OHLCV bar 级重放，不能证明真实 bid/ask、限价成交率或排队成本。</p>
+      <p>本报告将不同排序口径收敛为一份总报告：同一份 HTML 内同时展示“年化质量优先”“总净收益优先”“稳定性优先”的 Top 策略结果，并按策略构成去重。所有交易均基于 OHLCV bar 级重放，不能证明真实 bid/ask、限价成交率或排队成本。</p>
       <p class="note">来源报告: {'; '.join(f"{html.escape(str(row['timeframe']))} -> {html.escape(str(row['path']))} (候选 {row['yearly_profitable_candidate_count']})" for row in payload.get('source_reports', []))}</p>
       <table>
-        <thead><tr><th>策略</th><th>周期</th><th>激活年份</th><th>边数量</th><th>净收益</th><th>收益率(10万)</th><th>收益率(1手名义)</th><th>年化净收益</th><th>年化收益率(10万)</th><th>年化收益率(1手名义)</th><th>PF</th><th>胜率</th><th>门槛</th></tr></thead>
-        <tbody>{overview_rows}</tbody>
+        <thead><tr><th>口径</th><th>策略数</th><th>Top合计净收益</th><th>Top合计超额收益</th><th>选择规则</th></tr></thead>
+        <tbody>{objective_rows}</tbody>
       </table>
       <p class="note">配套结构化数据: {html.escape(data_filename)}</p>
     </section>
-    {strategy_sections}
+    {overview_sections}
   </main>
   <script>
     (() => {{
@@ -961,6 +1040,34 @@ def _comparison_report_section(report: dict[str, Any]) -> str:
     """
 
 
+def _objective_overview_row(report: dict[str, Any]) -> str:
+    return (
+        f"<tr><td>{html.escape(_objective_label(str(report.get('objective'))))}</td>"
+        f"<td>{int(report.get('strategy_count') or 0)}</td>"
+        f"<td>{fmt_usd(report.get('total_net_pnl'))}</td>"
+        f"<td>{fmt_usd(report.get('total_excess_net_pnl'))}</td>"
+        f"<td>{html.escape(str(report.get('selection_policy')))}</td></tr>"
+    )
+
+
+def _strategy_set_section(report: dict[str, Any]) -> str:
+    strategies = report.get("strategies") or []
+    overview_rows = "\n".join(_overview_row(strategy) for strategy in strategies)
+    strategy_sections = "\n".join(_strategy_section(strategy) for strategy in strategies)
+    objective = str(report.get("objective"))
+    return f"""
+    <section class="section">
+      <h2>{html.escape(_objective_label(objective))}</h2>
+      <p class="note">选择目标: {html.escape(objective)} | 选择规则: {html.escape(str(report.get("selection_policy")))}</p>
+      <table>
+        <thead><tr><th>策略</th><th>周期</th><th>激活年份</th><th>边数量</th><th>净收益</th><th>收益率(10万)</th><th>收益率(1手名义)</th><th>年化净收益</th><th>年化收益率(10万)</th><th>年化收益率(1手名义)</th><th>PF</th><th>胜率</th><th>门槛</th></tr></thead>
+        <tbody>{overview_rows}</tbody>
+      </table>
+    </section>
+    {strategy_sections}
+    """
+
+
 def _strategy_section(strategy: dict[str, Any]) -> str:
     metrics = strategy["replayed_metrics"]
     benchmark = strategy["benchmark"]
@@ -969,6 +1076,8 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
     analysis = strategy.get("strategy_analysis") or {}
     profile = analysis.get("strategy_profile") or {}
     evaluation = strategy.get("evaluation_summary") or {}
+    strategy_curve = strategy.get("equity_curve") or strategy.get("equity_curve_sampled") or []
+    benchmark_curve = benchmark.get("equity_curve") or benchmark.get("equity_curve_sampled") or []
     return f"""
     <section class="section">
       <h2>{html.escape(strategy["display_id"])} · {html.escape(str(strategy["selection_rule"]))}</h2>
@@ -1017,7 +1126,7 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
       <table>{_edge_rows(strategy.get("constituent_edges") or [])}</table>
       <h3>资金曲线</h3>
       <div class="chart" data-interactive-chart="true">{_line_svg(strategy["equity_curve_sampled"], title="累计净收益")}</div>
-      <div class="chart" data-interactive-chart="true">{_comparison_line_svg(strategy["equity_curve"], benchmark["equity_curve"])}</div>
+      <div class="chart" data-interactive-chart="true">{_comparison_line_svg(strategy_curve, benchmark_curve)}</div>
       <h3>年度表现</h3>
       <div class="chart">{_bar_svg(strategy["annual_results"], "year", "net_pnl")}</div>
       <table>{_period_rows(strategy["annual_results"], ["year"])}</table>

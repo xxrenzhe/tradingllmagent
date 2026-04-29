@@ -12,12 +12,18 @@ from tlm.top_strategy_report import (
     _line_svg,
     _merge_period_results,
     _monthly_signal_results,
+    _objective_order,
     _select_top_yearly_strategies,
     _with_return_metrics,
 )
 
 
 class TopStrategyReportTests(unittest.TestCase):
+    def test_objective_order_dedupes_and_keeps_primary_first(self) -> None:
+        order = _objective_order("annualized_quality", ["net_pnl", "annualized_quality", "stability_first"])
+
+        self.assertEqual(order, ["annualized_quality", "net_pnl", "stability_first"])
+
     def test_select_top_yearly_strategies_dedupes_by_edge_composition(self) -> None:
         edge = {
             "scan_type": "low_volume_drift",
