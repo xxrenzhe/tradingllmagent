@@ -16,6 +16,50 @@
   "data_version_hash": "078da287809495e2d1ed5e239034d24ce7debe2839325a6ef1036a1fac91688e",
   "date_from": "2010-06-06",
   "date_to": "2026-04-27",
+  "evaluation_periods": {
+    "full_backtest": {
+      "from": "2010-06-06",
+      "role": "full_sample_report",
+      "to": "2026-04-27"
+    },
+    "walk_forward": {
+      "mode": "train_window_candidate_must_independently_pass_next_test_window",
+      "step_years": 8,
+      "test_years": 1,
+      "train_years": 8,
+      "windows": [
+        {
+          "fold": 1,
+          "matched_stable_candidate_count": 0,
+          "test": {
+            "from": "2018-01-01",
+            "to": "2018-12-31"
+          },
+          "test_candidate_count": 0,
+          "train": {
+            "from": "2010-06-06",
+            "to": "2017-12-31"
+          },
+          "train_candidate_count": 0
+        },
+        {
+          "fold": 2,
+          "matched_stable_candidate_count": 0,
+          "test": {
+            "from": "2026-01-01",
+            "to": "2026-04-27"
+          },
+          "test_candidate_count": 0,
+          "train": {
+            "from": "2018-01-01",
+            "to": "2025-12-31"
+          },
+          "train_candidate_count": 0
+        }
+      ]
+    },
+    "yearly_results_location": "regime_basket_replays[*].one_trade_per_timestamp.yearly_results and regime_basket_replays[*].optimized_subsets[*].one_trade_per_timestamp.yearly_results"
+  },
   "gross_only_candidates": [],
   "qualified_candidates": [],
   "regime_basket_replays": [],
@@ -1469,7 +1513,7 @@
       }
     ]
   },
-  "report_hash": "ff1ba6dcad8f951fcb630aea378a9ced24bbd0761e693ce355443418617ec28d",
+  "report_hash": "98a7fc3d650fc5d04862f8b58369f711cd0c30a40b7af70d70df2fe7090aa200",
   "round_trip_cost_usd": 15.0,
   "schema_version": 1,
   "search_space": {
