@@ -355,6 +355,7 @@ def _run_regime_first_edge_search(
     context: dict[str, Any],
     round_trip_cost_usd: float,
 ) -> dict[str, Any]:
+    _ensure_regime_feature_table(con, context)
     rows = []
     for horizon_bars, horizon_minutes in _horizon_specs(context, "ohlcv_family"):
         rows.extend(
@@ -362,65 +363,12 @@ def _run_regime_first_edge_search(
                 con,
                 f"""
                 WITH raw AS (
-                  SELECT timestamp, open, high, low, close, tick_count,
-                         CAST(timestamp AS DATE) AS bar_date,
-                         CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER) AS moday,
-                         CAST(strftime(timestamp, '%w') AS INTEGER) AS dow,
-                         close - lag(close, 1) OVER (ORDER BY timestamp) AS ret1,
-                         close - lag(close, 5) OVER (ORDER BY timestamp) AS ret5,
-                         lag(close, 1) OVER (ORDER BY timestamp) AS prev_close,
-                         lag(high, 1) OVER (ORDER BY timestamp) AS prev_high,
-                         lag(low, 1) OVER (ORDER BY timestamp) AS prev_low,
-                         avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS ma20,
-                         avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS ma50,
-                         stddev_pop(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS close_std50,
-                         avg(tick_count) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS vol50,
-                         avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
-                         max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
-                         min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
-                         sum(((high+low+close)/3.0)*greatest(tick_count, 1)) OVER (
-                           PARTITION BY CAST(timestamp AS DATE)
-                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                         ) / NULLIF(sum(greatest(tick_count, 1)) OVER (
-                           PARTITION BY CAST(timestamp AS DATE)
-                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                         ), 0) AS session_vwap,
-                         max(high) OVER (
-                           PARTITION BY CAST(timestamp AS DATE)
-                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-                         ) AS session_high_prev,
-                         min(low) OVER (
-                           PARTITION BY CAST(timestamp AS DATE)
-                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-                         ) AS session_low_prev,
-                         max(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN high END) OVER (
-                           PARTITION BY CAST(timestamp AS DATE)
-                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-                         ) AS opening_high_prev,
-                         min(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN low END) OVER (
-                           PARTITION BY CAST(timestamp AS DATE)
-                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-                         ) AS opening_low_prev,
+                  SELECT *,
                          lead(close, {horizon_bars}) OVER (ORDER BY timestamp) AS future_close,
                          lead(timestamp, {horizon_bars}) OVER (ORDER BY timestamp) AS future_ts
-                  FROM read_parquet('{context["parquet_glob"]}')
-                  WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
+                  FROM regime_feature_base
                 ), feats AS (
                   SELECT *,
-                         CASE
-                           WHEN moday BETWEEN 0 AND 359 THEN 'utc_0000_0559'
-                           WHEN moday BETWEEN 360 AND 719 THEN 'utc_0600_1159'
-                           WHEN moday BETWEEN 720 AND 1019 THEN 'utc_1200_1659'
-                           WHEN moday BETWEEN 1020 AND 1259 THEN 'utc_1700_2059'
-                           ELSE 'utc_2100_2359'
-                         END AS session_bucket,
-                         CASE WHEN close > ma50 THEN 1 ELSE -1 END AS trend_bin,
-                         CASE WHEN tick_count >= vol50*2.0 THEN 3 WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin,
-                         CASE WHEN (high-low) >= range20*2.0 THEN 3 WHEN (high-low) >= range20*1.5 THEN 2 WHEN (high-low) >= range20 THEN 1 WHEN (high-low) < range20*0.7 THEN -1 ELSE 0 END AS range_bin,
-                         CASE WHEN close_std50 > 0 THEN (close-ma50)/close_std50 ELSE 0 END AS z50,
-                         close - session_vwap AS vwap_dist,
-                         lag(close - session_vwap, 1) OVER (ORDER BY timestamp) AS prev_vwap_dist,
-                         CASE WHEN high > low THEN (close-open)/(high-low) ELSE 0 END AS body_to_range,
                          CASE WHEN close > high20_prev THEN 1 WHEN close < low20_prev THEN -1 ELSE 0 END AS breakout20
                   FROM raw
                   WHERE future_close IS NOT NULL AND ma20 IS NOT NULL AND ma50 IS NOT NULL AND close_std50 IS NOT NULL
@@ -665,6 +613,74 @@ def _dedupe_payloads_by_hash(rows: Sequence[dict[str, Any]], hash_key: str) -> l
         else:
             by_hash.setdefault(row_hash, row)
     return list(by_hash.values())
+
+
+def _ensure_regime_feature_table(con: duckdb.DuckDBPyConnection, context: dict[str, Any]) -> None:
+    con.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE regime_feature_base AS
+        WITH raw AS (
+          SELECT timestamp, open, high, low, close, tick_count,
+                 CAST(timestamp AS DATE) AS bar_date,
+                 CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER) AS moday,
+                 CAST(strftime(timestamp, '%w') AS INTEGER) AS dow,
+                 close - lag(close, 1) OVER (ORDER BY timestamp) AS ret1,
+                 close - lag(close, 5) OVER (ORDER BY timestamp) AS ret5,
+                 lag(high, 1) OVER (ORDER BY timestamp) AS prev_high,
+                 lag(low, 1) OVER (ORDER BY timestamp) AS prev_low,
+                 avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS ma20,
+                 avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS ma50,
+                 stddev_pop(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS close_std50,
+                 avg(tick_count) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS vol50,
+                 avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
+                 max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
+                 min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
+                 sum(((high+low+close)/3.0)*greatest(tick_count, 1)) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                 ) / NULLIF(sum(greatest(tick_count, 1)) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                 ), 0) AS session_vwap,
+                 max(high) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                 ) AS session_high_prev,
+                 min(low) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                 ) AS session_low_prev,
+                 max(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN high END) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                 ) AS opening_high_prev,
+                 min(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN low END) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                 ) AS opening_low_prev
+          FROM read_parquet('{context["parquet_glob"]}')
+          WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
+        )
+        SELECT *,
+               CASE
+                 WHEN moday BETWEEN 0 AND 359 THEN 'utc_0000_0559'
+                 WHEN moday BETWEEN 360 AND 719 THEN 'utc_0600_1159'
+                 WHEN moday BETWEEN 720 AND 1019 THEN 'utc_1200_1659'
+                 WHEN moday BETWEEN 1020 AND 1259 THEN 'utc_1700_2059'
+                 ELSE 'utc_2100_2359'
+               END AS session_bucket,
+               CASE WHEN close > ma50 THEN 1 ELSE -1 END AS trend_bin,
+               CASE WHEN tick_count >= vol50*2.0 THEN 3 WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin,
+               CASE WHEN (high-low) >= range20*2.0 THEN 3 WHEN (high-low) >= range20*1.5 THEN 2 WHEN (high-low) >= range20 THEN 1 WHEN (high-low) < range20*0.7 THEN -1 ELSE 0 END AS range_bin,
+               CASE WHEN close_std50 > 0 THEN (close-ma50)/close_std50 ELSE 0 END AS z50,
+               close - session_vwap AS vwap_dist,
+               lag(close - session_vwap, 1) OVER (ORDER BY timestamp) AS prev_vwap_dist,
+               CASE WHEN high > low THEN (close-open)/(high-low) ELSE 0 END AS body_to_range
+        FROM raw
+        WHERE ma20 IS NOT NULL AND ma50 IS NOT NULL AND close_std50 IS NOT NULL
+          AND vol50 IS NOT NULL AND range20 IS NOT NULL
+        """
+    )
 
 
 def _regime_basket(
@@ -1211,6 +1227,7 @@ def _replay_regime_edges_for_horizon(
 ) -> list[dict[str, Any]]:
     if not indexed_edges:
         return []
+    _ensure_regime_feature_table(con, context)
     horizon_bars = max(1, (horizon_minutes + int(context["timeframe_minutes"]) - 1) // int(context["timeframe_minutes"]))
     values = ", ".join(
         "("
@@ -1231,65 +1248,12 @@ def _replay_regime_edges_for_horizon(
         WITH edges(rule_index, scan_type, session_bucket, dow, trend_bin, volume_bin, range_bin, direction) AS (
           VALUES {values}
         ), raw AS (
-          SELECT timestamp, open, high, low, close, tick_count,
-                 CAST(timestamp AS DATE) AS bar_date,
-                 CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER) AS moday,
-                 CAST(strftime(timestamp, '%w') AS INTEGER) AS dow,
-                 close - lag(close, 1) OVER (ORDER BY timestamp) AS ret1,
-                 close - lag(close, 5) OVER (ORDER BY timestamp) AS ret5,
-                 lag(close, 1) OVER (ORDER BY timestamp) AS prev_close,
-                 lag(high, 1) OVER (ORDER BY timestamp) AS prev_high,
-                 lag(low, 1) OVER (ORDER BY timestamp) AS prev_low,
-                 avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS ma20,
-                 avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS ma50,
-                 stddev_pop(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS close_std50,
-                 avg(tick_count) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS vol50,
-                 avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
-                 max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
-                 min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
-                 sum(((high+low+close)/3.0)*greatest(tick_count, 1)) OVER (
-                   PARTITION BY CAST(timestamp AS DATE)
-                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                 ) / NULLIF(sum(greatest(tick_count, 1)) OVER (
-                   PARTITION BY CAST(timestamp AS DATE)
-                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                 ), 0) AS session_vwap,
-                 max(high) OVER (
-                   PARTITION BY CAST(timestamp AS DATE)
-                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-                 ) AS session_high_prev,
-                 min(low) OVER (
-                   PARTITION BY CAST(timestamp AS DATE)
-                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-                 ) AS session_low_prev,
-                 max(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN high END) OVER (
-                   PARTITION BY CAST(timestamp AS DATE)
-                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-                 ) AS opening_high_prev,
-                 min(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN low END) OVER (
-                   PARTITION BY CAST(timestamp AS DATE)
-                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-                 ) AS opening_low_prev,
+          SELECT *,
                  lead(close, {horizon_bars}) OVER (ORDER BY timestamp) AS future_close,
                  lead(timestamp, {horizon_bars}) OVER (ORDER BY timestamp) AS future_ts
-          FROM read_parquet('{context["parquet_glob"]}')
-          WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
+          FROM regime_feature_base
         ), feats AS (
           SELECT *,
-                 CASE
-                   WHEN moday BETWEEN 0 AND 359 THEN 'utc_0000_0559'
-                   WHEN moday BETWEEN 360 AND 719 THEN 'utc_0600_1159'
-                   WHEN moday BETWEEN 720 AND 1019 THEN 'utc_1200_1659'
-                   WHEN moday BETWEEN 1020 AND 1259 THEN 'utc_1700_2059'
-                   ELSE 'utc_2100_2359'
-                 END AS session_bucket,
-                 CASE WHEN close > ma50 THEN 1 ELSE -1 END AS trend_bin,
-                 CASE WHEN tick_count >= vol50*2.0 THEN 3 WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin,
-                 CASE WHEN (high-low) >= range20*2.0 THEN 3 WHEN (high-low) >= range20*1.5 THEN 2 WHEN (high-low) >= range20 THEN 1 WHEN (high-low) < range20*0.7 THEN -1 ELSE 0 END AS range_bin,
-                 CASE WHEN close_std50 > 0 THEN (close-ma50)/close_std50 ELSE 0 END AS z50,
-                 close - session_vwap AS vwap_dist,
-                 lag(close - session_vwap, 1) OVER (ORDER BY timestamp) AS prev_vwap_dist,
-                 CASE WHEN high > low THEN (close-open)/(high-low) ELSE 0 END AS body_to_range,
                  CASE WHEN close > high20_prev THEN 1 WHEN close < low20_prev THEN -1 ELSE 0 END AS breakout20
           FROM raw
           WHERE future_close IS NOT NULL AND ma20 IS NOT NULL AND ma50 IS NOT NULL AND close_std50 IS NOT NULL
