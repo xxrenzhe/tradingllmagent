@@ -874,7 +874,7 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
       <table>{_edge_rows(strategy.get("constituent_edges") or [])}</table>
       <h3>资金曲线</h3>
       <div class="chart">{_line_svg(strategy["equity_curve_sampled"], title="累计净收益")}</div>
-      <div class="chart">{_comparison_line_svg(strategy["equity_curve_sampled"], benchmark["equity_curve_sampled"])}</div>
+      <div class="chart">{_comparison_line_svg(strategy["equity_curve"], benchmark["equity_curve"])}</div>
       <h3>年度表现</h3>
       <div class="chart">{_bar_svg(strategy["annual_results"], "year", "net_pnl")}</div>
       <table>{_period_rows(strategy["annual_results"], ["year"])}</table>
@@ -1064,15 +1064,7 @@ def _comparison_line_svg(strategy_points: Sequence[dict[str, Any]], benchmark_po
     pad = 38
     if not strategy_points or not benchmark_points:
         return "<svg viewBox=\"0 0 900 260\"></svg>"
-    bench_by_ts = {str(point["timestamp"]): float(point["equity"]) for point in benchmark_points}
-    aligned = [
-        {
-            "timestamp": point["timestamp"],
-            "strategy": float(point["equity"]),
-            "benchmark": bench_by_ts.get(str(point["timestamp"]), 0.0),
-        }
-        for point in strategy_points
-    ]
+    aligned = _aligned_equity_curves(strategy_points, benchmark_points)
     values = [row["strategy"] for row in aligned] + [row["benchmark"] for row in aligned]
     low, high = min(values), max(values)
     if high == low:
@@ -1093,6 +1085,34 @@ def _comparison_line_svg(strategy_points: Sequence[dict[str, Any]], benchmark_po
         f"<text x=\"{pad+48}\" y=\"{height-8}\" fill=\"#a15c00\" font-size=\"12\">基准</text>"
         f"</svg>"
     )
+
+
+def _aligned_equity_curves(
+    strategy_points: Sequence[dict[str, Any]],
+    benchmark_points: Sequence[dict[str, Any]],
+    *,
+    max_points: int = 1200,
+) -> list[dict[str, Any]]:
+    if not strategy_points or not benchmark_points:
+        return []
+    ordered_strategy = sorted(strategy_points, key=lambda row: str(row["timestamp"]))
+    ordered_benchmark = sorted(benchmark_points, key=lambda row: str(row["timestamp"]))
+    benchmark_index = 0
+    last_benchmark_equity = float(ordered_benchmark[0]["equity"])
+    aligned = []
+    for point in ordered_strategy:
+        strategy_ts = str(point["timestamp"])
+        while benchmark_index < len(ordered_benchmark) and str(ordered_benchmark[benchmark_index]["timestamp"]) <= strategy_ts:
+            last_benchmark_equity = float(ordered_benchmark[benchmark_index]["equity"])
+            benchmark_index += 1
+        aligned.append(
+            {
+                "timestamp": strategy_ts,
+                "strategy": float(point["equity"]),
+                "benchmark": last_benchmark_equity,
+            }
+        )
+    return _sample_series(aligned, max_points=max_points)
 
 
 def _bar_svg(rows: Sequence[dict[str, Any]], label_key: str, value_key: str) -> str:

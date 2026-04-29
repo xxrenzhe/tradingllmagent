@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime
 
 from tlm.top_strategy_report import (
+    _aligned_equity_curves,
     _benchmark_metrics,
     _benchmark_period_results,
     _candlestick_svg,
@@ -412,6 +413,24 @@ class TopStrategyReportTests(unittest.TestCase):
 
         self.assertEqual([row["net_pnl"] for row in monthly], [0.0, 400.0, 200.0])
         self.assertEqual(sum(row["net_pnl"] for row in monthly), 600.0)
+
+    def test_aligned_equity_curves_uses_latest_benchmark_value(self) -> None:
+        aligned = _aligned_equity_curves(
+            [
+                {"timestamp": "2025-01-01 09:31:00", "equity": 10.0},
+                {"timestamp": "2025-01-01 09:33:00", "equity": 20.0},
+                {"timestamp": "2025-01-01 09:35:00", "equity": 40.0},
+            ],
+            [
+                {"timestamp": "2025-01-01 09:30:00", "equity": 1.0},
+                {"timestamp": "2025-01-01 09:32:00", "equity": 2.0},
+                {"timestamp": "2025-01-01 09:34:00", "equity": 3.0},
+            ],
+            max_points=10,
+        )
+
+        self.assertEqual([row["benchmark"] for row in aligned], [1.0, 2.0, 3.0])
+        self.assertEqual([row["strategy"] for row in aligned], [10.0, 20.0, 40.0])
 
     def test_candlestick_svg_contains_entry_and_exit_markers(self) -> None:
         bars = [
