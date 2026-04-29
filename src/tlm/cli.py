@@ -823,6 +823,7 @@ def cmd_research_top_strategy_report(args: argparse.Namespace) -> int:
         output_html=Path(args.output),
         top_n=args.top_n,
         sample_trade_count=args.sample_trade_count,
+        objective=args.objective,
     )
     print(json.dumps(output, indent=2, sort_keys=True))
     return 0
@@ -1464,6 +1465,11 @@ def build_parser() -> argparse.ArgumentParser:
     top_strategy_report.add_argument("--data-root", default="data")
     top_strategy_report.add_argument("--top-n", type=int, default=3)
     top_strategy_report.add_argument("--sample-trade-count", type=int, default=3)
+    top_strategy_report.add_argument(
+        "--objective",
+        choices=["net_pnl", "profit_factor", "test_profit_factor", "balanced"],
+        default="net_pnl",
+    )
     top_strategy_report.add_argument("--output", default="experiments/profit_mining/top3_strategy_report.html")
     top_strategy_report.set_defaults(func=cmd_research_top_strategy_report)
 

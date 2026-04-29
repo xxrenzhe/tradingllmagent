@@ -66,6 +66,53 @@ class TopStrategyReportTests(unittest.TestCase):
         self.assertEqual(selected[0]["basket_id"], "basket_a")
         self.assertEqual(selected[1]["selection_rule"], "top_net_pnl")
 
+    def test_select_top_yearly_strategies_can_rank_by_profit_factor(self) -> None:
+        edge = {
+            "scan_type": "low_volume_drift",
+            "horizon_minutes": 120,
+            "session_bucket": "utc_1200_1659",
+            "dow": 1,
+            "direction_label": "long",
+            "trend_bin": 1,
+            "volume_bin": -1,
+            "range_bin": -1,
+        }
+        report = {
+            "regime_basket_replays": [
+                {
+                    "basket_id": "high_net",
+                    "basket_hash": "a",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "all_edges",
+                            "activation_start_year": 2019,
+                            "constituent_edges": [edge],
+                            "full_after_activation": {"net_pnl": 1000, "annual_trades": 1200, "profit_factor": 1.2},
+                            "test": {"net_pnl": 500, "profit_factor": 1.1},
+                        }
+                    ],
+                },
+                {
+                    "basket_id": "high_pf",
+                    "basket_hash": "b",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "pf_edges",
+                            "activation_start_year": 2020,
+                            "constituent_edges": [{**edge, "dow": 2}],
+                            "full_after_activation": {"net_pnl": 800, "annual_trades": 1200, "profit_factor": 1.5},
+                            "test": {"net_pnl": 400, "profit_factor": 1.4},
+                        }
+                    ],
+                },
+            ]
+        }
+
+        selected = _select_top_yearly_strategies(report, top_n=2, objective="profit_factor")
+
+        self.assertEqual(selected[0]["basket_id"], "high_pf")
+        self.assertEqual(selected[1]["basket_id"], "high_net")
+
     def test_monthly_signal_results_groups_by_calendar_month(self) -> None:
         rows = _monthly_signal_results(
             [

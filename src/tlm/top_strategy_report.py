@@ -33,9 +33,10 @@ def generate_top_strategy_html_report(
     output_html: Path,
     top_n: int = 3,
     sample_trade_count: int = 3,
+    objective: str = "net_pnl",
 ) -> dict[str, Any]:
     mining_report = json.loads(mining_report_path.read_text(encoding="utf-8"))
-    strategies = _select_top_yearly_strategies(mining_report, top_n=top_n)
+    strategies = _select_top_yearly_strategies(mining_report, top_n=top_n, objective=objective)
     context = _replay_context(mining_report, data_root)
     round_trip_cost_usd = float(mining_report.get("round_trip_cost_usd") or 0.0)
     bar_minutes = int(mining_report.get("timeframe_minutes") or timeframe_minutes(str(mining_report["timeframe"])))
@@ -67,7 +68,8 @@ def generate_top_strategy_html_report(
         "date_from": mining_report.get("date_from"),
         "date_to": mining_report.get("date_to"),
         "round_trip_cost_usd": round_trip_cost_usd,
-        "selection_policy": "top yearly-profitable strategies by net PnL, de-duplicated by edge composition",
+        "selection_objective": objective,
+        "selection_policy": _selection_policy(objective),
         "strategy_count": len(enriched),
         "strategies": enriched,
     }
@@ -80,12 +82,17 @@ def generate_top_strategy_html_report(
     return {
         "html": str(output_html),
         "data": str(data_path),
+        "selection_objective": objective,
         "strategy_count": len(enriched),
         "report_hash": payload["report_hash"],
     }
 
 
-def _select_top_yearly_strategies(report: dict[str, Any], top_n: int) -> list[dict[str, Any]]:
+def _select_top_yearly_strategies(
+    report: dict[str, Any],
+    top_n: int,
+    objective: str = "net_pnl",
+) -> list[dict[str, Any]]:
     candidates = []
     for replay in report.get("regime_basket_replays", []):
         for candidate in replay.get("yearly_profitable_candidates", []):
@@ -96,14 +103,7 @@ def _select_top_yearly_strategies(report: dict[str, Any], top_n: int) -> list[di
                     "basket_hash": replay.get("basket_hash"),
                 }
             )
-    candidates.sort(
-        key=lambda row: (
-            float(row["full_after_activation"].get("net_pnl") or 0.0),
-            float(row["test"].get("net_pnl") or 0.0),
-            float(row["full_after_activation"].get("annual_trades") or 0.0),
-        ),
-        reverse=True,
-    )
+    candidates.sort(key=lambda row: _selection_key(row, objective), reverse=True)
     selected = []
     seen = set()
     for candidate in candidates:
@@ -120,6 +120,33 @@ def _select_top_yearly_strategies(report: dict[str, Any], top_n: int) -> list[di
         if len(selected) >= top_n:
             break
     return selected
+
+
+def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, float, float, float]:
+    full = candidate.get("full_after_activation") or {}
+    test = candidate.get("test") or {}
+    full_pf = float(full.get("profit_factor") or 0.0)
+    test_pf = float(test.get("profit_factor") or 0.0)
+    full_net = float(full.get("net_pnl") or 0.0)
+    test_net = float(test.get("net_pnl") or 0.0)
+    annual_trades = float(full.get("annual_trades") or 0.0)
+    if objective == "profit_factor":
+        return (full_pf, test_pf, full_net, annual_trades)
+    if objective == "test_profit_factor":
+        return (test_pf, full_pf, test_net, annual_trades)
+    if objective == "balanced":
+        return (min(full_pf, test_pf), full_net, test_net, annual_trades)
+    return (full_net, test_net, annual_trades, full_pf)
+
+
+def _selection_policy(objective: str) -> str:
+    policies = {
+        "net_pnl": "top yearly-profitable strategies by net PnL, de-duplicated by edge composition",
+        "profit_factor": "top yearly-profitable strategies by full-period profit factor, de-duplicated by edge composition",
+        "test_profit_factor": "top yearly-profitable strategies by recent test-period profit factor, de-duplicated by edge composition",
+        "balanced": "top yearly-profitable strategies by the weaker of full-period and test-period profit factor, then net PnL",
+    }
+    return policies.get(objective, policies["net_pnl"])
 
 
 def _replay_context(report: dict[str, Any], data_root: Path) -> dict[str, Any]:
@@ -399,7 +426,7 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
   <main>
     <section class="section">
       <h2>总览</h2>
-      <p>本报告从已有挖掘结果中按净收益选择 Top 3，并按策略构成去重。所有交易均基于 OHLCV bar 级重放，不能证明真实 bid/ask、限价成交率或排队成本。</p>
+      <p>本报告从已有挖掘结果中选择 Top 3，并按策略构成去重。选择目标: {html.escape(str(payload.get("selection_objective")))}；选择规则: {html.escape(str(payload.get("selection_policy")))}。所有交易均基于 OHLCV bar 级重放，不能证明真实 bid/ask、限价成交率或排队成本。</p>
       <table>
         <thead><tr><th>策略</th><th>激活年份</th><th>边数量</th><th>净收益</th><th>PF</th><th>胜率</th><th>年化交易</th><th>最大回撤</th></tr></thead>
         <tbody>{overview_rows}</tbody>
