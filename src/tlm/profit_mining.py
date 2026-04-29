@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Sequence
@@ -161,6 +161,7 @@ def mine_databento_nq_profitable_strategies(
         "timeframe": timeframe,
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
+        "evaluation_periods": _evaluation_periods(date_from, date_to, walk_forward),
         "target": {
             "min_annual_trades": min_annual_trades,
             "min_win_probability": min_win_probability,
@@ -782,14 +783,29 @@ def _replay_metrics(
     context: dict[str, Any],
 ) -> dict[str, Any]:
     ordered_signals = sorted(signals, key=lambda signal: signal["timestamp"])
-    trades = len(ordered_signals)
-    net_pnl = sum(float(signal["pnl"]) for signal in ordered_signals)
-    wins = [float(signal["pnl"]) for signal in ordered_signals if float(signal["pnl"]) > 0]
-    losses = [float(signal["pnl"]) for signal in ordered_signals if float(signal["pnl"]) < 0]
+    metrics = _signal_metrics(ordered_signals, day_count)
+    annual_trades = metrics["annual_trades"]
+    win_probability = metrics["win_probability"]
+    return {
+        **metrics,
+        "yearly_results": _yearly_signal_results(ordered_signals),
+        "target_qualified": (
+            annual_trades > float(context["min_annual_trades"])
+            and win_probability > float(context["min_win_probability"])
+            and metrics["net_pnl"] > 0
+        ),
+    }
+
+
+def _signal_metrics(signals: Sequence[dict[str, Any]], day_count: int) -> dict[str, Any]:
+    trades = len(signals)
+    net_pnl = sum(float(signal["pnl"]) for signal in signals)
+    wins = [float(signal["pnl"]) for signal in signals if float(signal["pnl"]) > 0]
+    losses = [float(signal["pnl"]) for signal in signals if float(signal["pnl"]) < 0]
     equity = 0.0
     peak = 0.0
     max_drawdown = 0.0
-    for signal in ordered_signals:
+    for signal in signals:
         equity += float(signal["pnl"])
         peak = max(peak, equity)
         max_drawdown = max(max_drawdown, peak - equity)
@@ -805,10 +821,75 @@ def _replay_metrics(
         "profit_factor": profit_factor,
         "max_drawdown": max_drawdown,
         "return_to_drawdown": net_pnl / max_drawdown if max_drawdown else None,
-        "target_qualified": (
-            annual_trades > float(context["min_annual_trades"])
-            and win_probability > float(context["min_win_probability"])
-            and net_pnl > 0
+    }
+
+
+def _yearly_signal_results(signals: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_year: dict[int, list[dict[str, Any]]] = {}
+    for signal in signals:
+        timestamp = _signal_timestamp(signal)
+        by_year.setdefault(timestamp.year, []).append(signal)
+    results = []
+    for year, year_signals in sorted(by_year.items()):
+        ordered = sorted(year_signals, key=lambda signal: signal["timestamp"])
+        metrics = _signal_metrics(ordered, _calendar_days_in_year(year))
+        results.append(
+            {
+                "year": year,
+                "period_from": f"{year}-01-01",
+                "period_to": f"{year}-12-31",
+                **metrics,
+            }
+        )
+    return results
+
+
+def _signal_timestamp(signal: dict[str, Any]) -> datetime:
+    value = signal["timestamp"]
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        return datetime.fromisoformat(value)
+    raise TypeError(f"Unsupported signal timestamp type: {type(value)!r}")
+
+
+def _calendar_days_in_year(year: int) -> int:
+    return (date(year + 1, 1, 1) - date(year, 1, 1)).days
+
+
+def _evaluation_periods(date_from: date, date_to: date, walk_forward: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "full_backtest": {
+            "role": "full_sample_report",
+            "from": date_from.isoformat(),
+            "to": date_to.isoformat(),
+        },
+        "walk_forward": {
+            "mode": walk_forward.get("mode"),
+            "train_years": walk_forward.get("train_years"),
+            "test_years": walk_forward.get("test_years"),
+            "step_years": walk_forward.get("step_years"),
+            "windows": [
+                {
+                    "fold": index + 1,
+                    "train": {
+                        "from": window.get("train_from"),
+                        "to": window.get("train_to"),
+                    },
+                    "test": {
+                        "from": window.get("test_from"),
+                        "to": window.get("test_to"),
+                    },
+                    "train_candidate_count": window.get("train_candidate_count"),
+                    "test_candidate_count": window.get("test_candidate_count"),
+                    "matched_stable_candidate_count": window.get("matched_stable_candidate_count"),
+                }
+                for index, window in enumerate(walk_forward.get("windows", []))
+            ],
+        },
+        "yearly_results_location": (
+            "regime_basket_replays[*].one_trade_per_timestamp.yearly_results and "
+            "regime_basket_replays[*].optimized_subsets[*].one_trade_per_timestamp.yearly_results"
         ),
     }
 
