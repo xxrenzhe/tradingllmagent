@@ -402,6 +402,7 @@ class TopStrategyReportTests(unittest.TestCase):
         self.assertGreater(metrics["annualized_net_pnl"], 0.0)
         self.assertEqual(metrics["net_return"], 0.001)
         self.assertEqual(metrics["net_return_on_notional"], 0.005)
+        self.assertEqual(metrics["notional_base_usd"], 20_000.0)
         self.assertEqual(metrics["max_drawdown"], 100.0)
         self.assertEqual(merged[0]["excess_net_pnl"], 50.0)
         self.assertEqual(merged[0]["excess_net_return"], 0.0005)
