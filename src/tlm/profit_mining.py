@@ -122,11 +122,24 @@ def mine_databento_nq_profitable_strategies(
             )
     gross_only = sorted(gross_only, key=lambda row: float(row["gross_net_pnl"]), reverse=True)[:max_candidates]
 
+    qualified_regime_basket_replays = [
+        replay
+        for replay in regime_basket_replays
+        if replay["one_trade_per_timestamp"]["target_qualified"]
+    ]
     regime_basket_found = bool(regime_first.get("qualified_regime_baskets"))
     report = {
         "schema_version": 1,
         "artifact": "databento_nq_profit_strategy_mining_report",
-        "status": "target_found" if qualified else "regime_basket_found" if regime_basket_found else "not_found",
+        "status": (
+            "target_found"
+            if qualified
+            else "executable_regime_basket_found"
+            if qualified_regime_basket_replays
+            else "regime_basket_found"
+            if regime_basket_found
+            else "not_found"
+        ),
         "symbol": symbol_config.alias,
         "timeframe": timeframe,
         "date_from": date_from.isoformat(),
@@ -187,13 +200,7 @@ def mine_databento_nq_profitable_strategies(
             "walk_forward_stable_candidate_count": len(walk_forward["stable_candidates"]),
             "regime_first_candidate_count": len(regime_first["top_regime_edges"]),
             "qualified_regime_basket_count": len(regime_first.get("qualified_regime_baskets", [])),
-            "qualified_regime_basket_replay_count": len(
-                [
-                    replay
-                    for replay in regime_basket_replays
-                    if replay["one_trade_per_timestamp"]["target_qualified"]
-                ]
-            ),
+            "qualified_regime_basket_replay_count": len(qualified_regime_basket_replays),
             "best_cost_adjusted_net_pnl": qualified[0]["net_pnl"] if qualified else None,
             "best_gross_net_pnl": gross_only[0]["gross_net_pnl"] if gross_only else None,
             "best_regime_break_even_cost_usd": regime_first["top_regime_edges"][0]["break_even_cost_usd"]
@@ -205,7 +212,7 @@ def mine_databento_nq_profitable_strategies(
         "walk_forward": walk_forward,
         "regime_first": regime_first,
         "regime_basket_replays": regime_basket_replays,
-        "blocked_next_steps": [] if qualified else [
+        "blocked_next_steps": [] if qualified or qualified_regime_basket_replays else [
             "No single scanned candidate met annual_trades > 1000, win_probability > 0.53, and cost-adjusted net_pnl > 0.",
             "Stay in OHLCV-only research mode: add walk-forward family search before trusting any in-sample candidate.",
             "Prefer session-normalized OHLCV features, volatility-regime splits, and simpler risk filters over higher-dimensional curve fitting.",
