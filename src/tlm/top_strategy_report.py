@@ -719,7 +719,29 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
     .good {{ color: var(--good); }}
     .bad {{ color: var(--bad); }}
     .warn {{ color: var(--warn); }}
-    .chart {{ width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: white; padding: 10px; }}
+    .chart {{ width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: white; padding: 10px; position: relative; }}
+    .chart svg {{ display: block; width: 100%; height: auto; }}
+    .chart-tooltip {{
+      position: absolute;
+      min-width: 180px;
+      max-width: 280px;
+      pointer-events: none;
+      background: rgba(15, 23, 40, 0.94);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.45;
+      box-shadow: 0 10px 24px rgba(15, 23, 40, 0.18);
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 120ms ease, transform 120ms ease;
+      z-index: 5;
+      white-space: pre-line;
+    }}
+    .chart-tooltip.is-visible {{ opacity: 1; transform: translateY(0); }}
+    .chart-hover-line {{ stroke: rgba(23, 105, 170, 0.45); stroke-width: 1.2; stroke-dasharray: 4 4; visibility: hidden; }}
     .kline-grid {{ display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }}
     .note {{ color: var(--muted); font-size: 13px; }}
     .heat td {{ min-width: 68px; }}
@@ -751,6 +773,61 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
     </section>
     {strategy_sections}
   </main>
+  <script>
+    (() => {{
+      const charts = document.querySelectorAll('.chart[data-interactive-chart="true"]');
+      charts.forEach((chart) => {{
+        const svg = chart.querySelector('svg');
+        if (!svg) return;
+        const hoverTargets = svg.querySelectorAll('[data-tooltip]');
+        if (!hoverTargets.length) return;
+        const crosshair = svg.querySelector('.chart-hover-line');
+        const tooltip = document.createElement('div');
+        tooltip.className = 'chart-tooltip';
+        chart.appendChild(tooltip);
+
+        const hideTooltip = () => {{
+          tooltip.classList.remove('is-visible');
+          if (crosshair) crosshair.style.visibility = 'hidden';
+        }};
+
+        const placeTooltip = (event) => {{
+          const rect = chart.getBoundingClientRect();
+          const tooltipRect = tooltip.getBoundingClientRect();
+          let left = event.clientX - rect.left + 14;
+          let top = event.clientY - rect.top - tooltipRect.height - 12;
+          if (left + tooltipRect.width > rect.width - 8) {{
+            left = rect.width - tooltipRect.width - 8;
+          }}
+          if (left < 8) left = 8;
+          if (top < 8) {{
+            top = event.clientY - rect.left + 14;
+            top = event.clientY - rect.top + 14;
+          }}
+          tooltip.style.left = `${{left}}px`;
+          tooltip.style.top = `${{top}}px`;
+        }};
+
+        hoverTargets.forEach((target) => {{
+          const show = (event) => {{
+            tooltip.textContent = target.dataset.tooltip || '';
+            tooltip.classList.add('is-visible');
+            if (crosshair && target.dataset.crosshairX) {{
+              crosshair.setAttribute('x1', target.dataset.crosshairX);
+              crosshair.setAttribute('x2', target.dataset.crosshairX);
+              crosshair.style.visibility = 'visible';
+            }}
+            placeTooltip(event);
+          }};
+          target.addEventListener('mouseenter', show);
+          target.addEventListener('mousemove', show);
+          target.addEventListener('mouseleave', hideTooltip);
+        }});
+
+        chart.addEventListener('mouseleave', hideTooltip);
+      }});
+    }})();
+  </script>
 </body>
 </html>
 """
@@ -873,8 +950,8 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
       <p>{_profile_pills(profile)}</p>
       <table>{_edge_rows(strategy.get("constituent_edges") or [])}</table>
       <h3>资金曲线</h3>
-      <div class="chart">{_line_svg(strategy["equity_curve_sampled"], title="累计净收益")}</div>
-      <div class="chart">{_comparison_line_svg(strategy["equity_curve"], benchmark["equity_curve"])}</div>
+      <div class="chart" data-interactive-chart="true">{_line_svg(strategy["equity_curve_sampled"], title="累计净收益")}</div>
+      <div class="chart" data-interactive-chart="true">{_comparison_line_svg(strategy["equity_curve"], benchmark["equity_curve"])}</div>
       <h3>年度表现</h3>
       <div class="chart">{_bar_svg(strategy["annual_results"], "year", "net_pnl")}</div>
       <table>{_period_rows(strategy["annual_results"], ["year"])}</table>
@@ -1061,6 +1138,7 @@ def _line_svg(points: Sequence[dict[str, Any]], *, title: str) -> str:
         f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"{html.escape(title)}\">"
         f"<text x=\"{pad}\" y=\"22\" fill=\"#667085\" font-size=\"13\">{html.escape(title)}</text>"
         f"<line x1=\"{pad}\" y1=\"{zero_y:.1f}\" x2=\"{width-pad}\" y2=\"{zero_y:.1f}\" stroke=\"#d9e0ea\"/>"
+        f"<line class=\"chart-hover-line\" x1=\"{pad}\" y1=\"{pad}\" x2=\"{pad}\" y2=\"{height-pad}\"/>"
         f"<polyline fill=\"none\" stroke=\"#1769aa\" stroke-width=\"2.2\" points=\"{poly}\"/>"
         f"{hover_targets}"
         f"<text x=\"{pad}\" y=\"{height-8}\" fill=\"#667085\" font-size=\"12\">{html.escape(str(points[0]['timestamp'])[:10])}</text>"
@@ -1100,6 +1178,7 @@ def _comparison_line_svg(strategy_points: Sequence[dict[str, Any]], benchmark_po
     return (
         f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"策略与基准对比曲线\">"
         f"<text x=\"{pad}\" y=\"22\" fill=\"#667085\" font-size=\"13\">策略 vs NQ 持有累计收益</text>"
+        f"<line class=\"chart-hover-line\" x1=\"{pad}\" y1=\"{pad}\" x2=\"{pad}\" y2=\"{height-pad}\"/>"
         f"<polyline fill=\"none\" stroke=\"#1769aa\" stroke-width=\"2.2\" points=\"{strategy_poly}\"/>"
         f"<polyline fill=\"none\" stroke=\"#a15c00\" stroke-width=\"2.2\" points=\"{benchmark_poly}\"/>"
         f"{hover_targets}"
@@ -1163,8 +1242,9 @@ def _hover_targets_svg(
             right = pad + min(1.0, right_ratio) * chart_width
             x = left
             rect_width = max(1.0, right - left)
+        center_x = pad if point_count == 1 else pad + index / (point_count - 1) * chart_width
         segments.append(
-            f"<rect x=\"{x:.1f}\" y=\"{pad:.1f}\" width=\"{rect_width:.1f}\" height=\"{height - pad * 2:.1f}\" fill=\"rgba(0,0,0,0)\" pointer-events=\"all\"><title>{html.escape(label)}</title></rect>"
+            f"<rect x=\"{x:.1f}\" y=\"{pad:.1f}\" width=\"{rect_width:.1f}\" height=\"{height - pad * 2:.1f}\" fill=\"rgba(0,0,0,0)\" pointer-events=\"all\" style=\"cursor: crosshair;\" data-crosshair-x=\"{center_x:.1f}\" data-tooltip=\"{html.escape(label, quote=True)}\"></rect>"
         )
     return "".join(segments)
 

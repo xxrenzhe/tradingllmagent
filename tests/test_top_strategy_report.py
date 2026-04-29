@@ -461,7 +461,8 @@ class TopStrategyReportTests(unittest.TestCase):
             title="累计净收益",
         )
 
-        self.assertIn("<title>2025-01-01 09:30:00 | 累计净收益 $10 | 单笔变动 $10</title>", svg)
+        self.assertIn("data-tooltip=\"2025-01-01 09:30:00 | 累计净收益 $10 | 单笔变动 $10\"", svg)
+        self.assertIn("chart-hover-line", svg)
 
     def test_comparison_line_svg_hover_title_contains_nq_index(self) -> None:
         svg = _comparison_line_svg(
@@ -477,6 +478,7 @@ class TopStrategyReportTests(unittest.TestCase):
 
         self.assertIn("NQ指数 17,000.25", svg)
         self.assertIn("NQ指数 17,005.50", svg)
+        self.assertIn("data-crosshair-x=", svg)
 
 
 if __name__ == "__main__":
