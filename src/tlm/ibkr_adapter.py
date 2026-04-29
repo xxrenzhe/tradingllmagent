@@ -35,6 +35,9 @@ class OfficialIbkrAdapter:
     _pnl: dict[int, dict[str, Any]] = field(default_factory=dict)
     _pnl_events: dict[int, threading.Event] = field(default_factory=dict)
     _positions: list[dict[str, Any]] = field(default_factory=list)
+    _runtime_order_status: list[dict[str, Any]] = field(default_factory=list)
+    _pending_executions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    _commission_reports: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self._init_client()
@@ -191,6 +194,27 @@ class OfficialIbkrAdapter:
             "submitted_at": _now(),
         }
 
+    def drain_runtime_events(self) -> dict[str, Any]:
+        with self.lock:
+            executions = []
+            for execution_id, payload in list(self._pending_executions.items()):
+                commission = self._commission_reports.get(execution_id, {})
+                executions.append(
+                    {
+                        **payload,
+                        "commission": _optional_float(commission.get("commission")) or 0.0,
+                        "realized_pnl": _optional_float(commission.get("realized_pnl")),
+                    }
+                )
+            drained = {
+                "order_status": list(self._runtime_order_status),
+                "executions": executions,
+            }
+            self._runtime_order_status.clear()
+            self._pending_executions.clear()
+            self._commission_reports.clear()
+            return drained
+
     def _init_client(self) -> None:
         from ibapi.client import EClient
         from ibapi.wrapper import EWrapper
@@ -275,6 +299,51 @@ class OfficialIbkrAdapter:
                 event = adapter._pnl_events.get(reqId)
                 if event is not None:
                     event.set()
+
+            def orderStatus(  # noqa: N802
+                self,
+                orderId: int,
+                status: str,
+                filled: float,
+                remaining: float,
+                avgFillPrice: float,
+                permId: int,
+                parentId: int,
+                lastFillPrice: float,
+                clientId: int,
+                whyHeld: str,
+                mktCapPrice: float,
+            ) -> None:
+                with adapter.lock:
+                    adapter._runtime_order_status.append(
+                        {
+                            "order_id": orderId,
+                            "status": status,
+                            "filled": filled,
+                            "remaining": remaining,
+                            "average_fill_price": avgFillPrice,
+                            "why_held": whyHeld or None,
+                        }
+                    )
+
+            def execDetails(self, reqId: int, contract: Any, execution: Any) -> None:  # noqa: N802
+                with adapter.lock:
+                    adapter._pending_executions[str(execution.execId)] = {
+                        "execution_id": str(execution.execId),
+                        "order_id": int(execution.orderId),
+                        "symbol": contract.symbol,
+                        "side": str(execution.side).upper(),
+                        "quantity": int(execution.shares),
+                        "fill_price": float(execution.price),
+                        "filled_at": _ibkr_time_to_iso(str(execution.time)),
+                    }
+
+            def commissionReport(self, commissionReport: Any) -> None:  # noqa: N802
+                with adapter.lock:
+                    adapter._commission_reports[str(commissionReport.execId)] = {
+                        "commission": float(commissionReport.commission),
+                        "realized_pnl": _optional_float(commissionReport.realizedPNL),
+                    }
 
             def error(self, reqId: int, errorCode: int, errorString: str, advancedOrderRejectJson: str = "") -> None:  # noqa: N802
                 adapter.errors.append(
@@ -408,3 +477,13 @@ def _optional_float(value: Any) -> float | None:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _ibkr_time_to_iso(value: str) -> str:
+    cleaned = value.strip()
+    for pattern in ("%Y%m%d  %H:%M:%S", "%Y%m%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(cleaned, pattern).replace(tzinfo=UTC).isoformat()
+        except ValueError:
+            continue
+    return _now()

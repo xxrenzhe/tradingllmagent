@@ -78,6 +78,32 @@ class FakeIbkrAdapter:
         self.submitted_orders.append(payload)
         return payload
 
+    def drain_runtime_events(self) -> dict:
+        return {
+            "order_status": [
+                {
+                    "order_id": 9001,
+                    "status": "Filled",
+                    "filled": 1,
+                    "remaining": 0,
+                    "average_fill_price": 19000.25,
+                }
+            ],
+            "executions": [
+                {
+                    "execution_id": "exec-live-1",
+                    "order_id": 9001,
+                    "symbol": "MNQ",
+                    "side": "BUY",
+                    "quantity": 1,
+                    "fill_price": 19000.25,
+                    "commission": 0.47,
+                    "realized_pnl": 12.5,
+                    "filled_at": datetime.now(UTC).isoformat(),
+                }
+            ],
+        }
+
 
 class IbkrPaperGatewayTests(unittest.TestCase):
     def ready_gateway(self) -> IbkrPaperGateway:
@@ -270,6 +296,16 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(gateway.market_data_readiness("MNQ")["status"], "ready")
         self.assertEqual(gateway.positions_report()["count"], 1)
         self.assertEqual(gateway.account_snapshots_report()["count"], 1)
+
+    def test_sync_runtime_events_updates_local_execution_ledger(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+        gateway.connect()
+
+        event = gateway.sync_runtime_events()
+
+        self.assertEqual(event["event_type"], "runtime_event_sync_completed")
+        self.assertEqual(gateway.executions_report()["count"], 1)
+        self.assertEqual(gateway.execution_ledger()["net_realized_pnl"], 12.5)
 
     def test_default_mnq_config_and_cost_model_are_available(self) -> None:
         symbol = get_symbol("MNQ_IBKR")

@@ -1022,6 +1022,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/gateways/ibkr/positions/sync", paths)
         self.assertIn("/api/gateways/ibkr/account-snapshots", paths)
         self.assertIn("/api/gateways/ibkr/account-snapshots/sync", paths)
+        self.assertIn("/api/gateways/ibkr/runtime-events/sync", paths)
         self.assertIn("/api/gateways/ibkr/reviews", paths)
         self.assertIn("/api/gateways/ibkr/fast-path-optimizer", paths)
         self.assertIn("/api/ibkr-paper/runs", paths)
@@ -1198,6 +1199,7 @@ class APIImportTests(unittest.TestCase):
             "/api/gateways/ibkr/positions/sync",
             "/api/gateways/ibkr/account-snapshots",
             "/api/gateways/ibkr/account-snapshots/sync",
+            "/api/gateways/ibkr/runtime-events/sync",
             "/api/gateways/ibkr/reviews",
             "/api/gateways/ibkr/fast-path-optimizer",
             "/api/ibkr-paper/runs",

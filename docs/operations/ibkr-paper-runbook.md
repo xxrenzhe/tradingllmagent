@@ -43,6 +43,7 @@ Recommended adapter sync sequence after connect:
 - `POST /api/gateways/ibkr/market-data/sync`
 - `POST /api/gateways/ibkr/positions/sync`
 - `POST /api/gateways/ibkr/account-snapshots/sync`
+- `POST /api/gateways/ibkr/runtime-events/sync`
 
 ## Normal Loop
 
@@ -52,6 +53,7 @@ Recommended adapter sync sequence after connect:
 - Only allow a paper order when review action is `paper_allow` and gateway readiness is `ready`.
 - Submit only deterministic bracket order drafts with entry, stop-loss, take-profit, and max holding minutes.
 - Use `POST /api/gateways/ibkr/bracket-orders/{bracket_id}/submit` only after the local draft is approved and the active `MNQ` contract month or local symbol is configured.
+- After submission, poll `POST /api/gateways/ibkr/runtime-events/sync` to ingest `orderStatus`, `execDetails`, and `commissionReport` into the local execution ledger.
 - Record order status, fills, commission, positions, and account snapshots from IBKR callbacks.
 - Use `/api/gateways/ibkr/execution-ledger` as the source of real paper PnL for strategy diagnosis.
 - Use `/api/ibkr-paper/reports/current` for the runtime promotion-blocker and paper PnL report.

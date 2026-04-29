@@ -966,6 +966,10 @@ def create_app():
     def ibkr_account_snapshots_sync() -> dict:
         return ibkr_gateway.sync_account_snapshot()
 
+    @app.post("/api/gateways/ibkr/runtime-events/sync")
+    def ibkr_runtime_events_sync() -> dict:
+        return ibkr_gateway.sync_runtime_events()
+
     @app.post("/api/gateways/ibkr/reconciliation")
     def ibkr_reconciliation(payload: dict = Body(default={})) -> dict:
         return ibkr_gateway.reconcile_position(

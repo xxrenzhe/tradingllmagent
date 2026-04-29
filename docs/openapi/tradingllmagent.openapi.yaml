@@ -685,6 +685,12 @@ paths:
       responses:
         "200":
           description: IBKR paper account snapshot sync event.
+  /api/gateways/ibkr/runtime-events/sync:
+    post:
+      summary: Drain IBKR order status and execution callbacks from the configured adapter into the local paper ledger.
+      responses:
+        "200":
+          description: IBKR runtime event sync event.
   /api/gateways/ibkr/reconciliation:
     post:
       summary: Reconcile tracked IBKR paper position against expected quantity.
