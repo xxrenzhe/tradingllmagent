@@ -466,6 +466,63 @@ def build_vol_paper_shadow_review(paper_reports: Sequence[Path] | None = None) -
     }
 
 
+def load_vol_quote_replay_artifact(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = None
+    if isinstance(payload, dict) and payload.get("artifact") == "vol_quote_replay_report":
+        return payload
+    return build_vol_quote_replay_report(quote_files=[], existing_reports=[path])
+
+
+def load_vol_paper_shadow_artifact(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = None
+    if isinstance(payload, dict) and payload.get("artifact") == "vol_paper_shadow_review":
+        return payload
+    return build_vol_paper_shadow_review([path])
+
+
+def build_vol_execution_evidence(
+    *,
+    quote_reports: Sequence[Path] | None = None,
+    paper_reports: Sequence[Path] | None = None,
+) -> dict[str, Any]:
+    quote_artifacts = [path for path in (quote_reports or []) if path.exists()]
+    paper_artifacts = [path for path in (paper_reports or []) if path.exists()]
+    quote_replay = (
+        load_vol_quote_replay_artifact(quote_artifacts[0])
+        if quote_artifacts
+        else build_vol_quote_replay_report(quote_files=[], existing_reports=[])
+    )
+    paper_shadow = (
+        load_vol_paper_shadow_artifact(paper_artifacts[0])
+        if paper_artifacts
+        else build_vol_paper_shadow_review([])
+    )
+    missing_requirements = []
+    if quote_replay.get("status") != "ready_for_review":
+        missing_requirements.append("quote_replay")
+    if paper_shadow.get("status") != "ready_for_review":
+        missing_requirements.append("paper_shadow")
+    return {
+        "schema_version": 1,
+        "artifact": "vol_execution_evidence",
+        "status": "ready_for_promotion" if not missing_requirements else "blocked",
+        "missing_requirements": missing_requirements,
+        "quote_replay": quote_replay,
+        "paper_shadow": paper_shadow,
+        "promotion_gate": {
+            "requires_quote_replay": True,
+            "requires_paper_shadow": True,
+            "ready_for_promotion": not missing_requirements,
+        },
+    }
+
+
 def _load_paper_shadow_records(path: Path) -> list[dict[str, Any]]:
     payloads = []
     if path.suffix == ".jsonl":

@@ -30,6 +30,8 @@ from .events import (
 )
 from .feature_catalog import feature_readiness_report
 from .firstrate import import_firstrate_bars
+from .ibkr_gateway import IbkrPaperGateway
+from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .monitor import build_monitor_report, write_monitor_outputs
 from .modules import (
@@ -45,6 +47,7 @@ from .quotes import build_quote_execution_report, import_databento_quotes
 from .profit_mining import mine_databento_nq_profitable_strategies
 from .research import (
     StrategyTargetCriteria,
+    build_leaderboard_report_payload,
     discover_strategy_seed_specs,
     load_leaderboard_report,
     run_budgeted_research,
@@ -53,6 +56,12 @@ from .research import (
     write_research_result,
     write_strategy_discovery_result,
 )
+from .research_config import (
+    PRIMARY_RESEARCH_SYMBOL,
+    PRIMARY_RESEARCH_TIMEFRAME,
+    PRIMARY_TOP_STRATEGY_OBJECTIVE,
+)
+from .research_pipeline import ResearchPipeline
 from .storage import (
     bar_path,
     compute_data_version_hash,
@@ -64,7 +73,11 @@ from .storage import (
     write_ticks_parquet,
 )
 from .strategy import StrategySpecError, load_strategy_spec, with_strategy_symbol
-from .strategy_generation import write_feature_combo_strategy_specs, write_vol_strategy_specs
+from .strategy_generation import (
+    write_feature_combo_strategy_specs,
+    write_primary_nq_strategy_specs,
+    write_vol_strategy_specs,
+)
 from .top_strategy_report import generate_top_strategy_comparison_html, generate_top_strategy_html_report
 from .trigger_gate import (
     append_trigger_gate_outcome_from_payload,
@@ -576,6 +589,8 @@ def cmd_research_run(args: argparse.Namespace) -> int:
     date_to = parse_date(args.date_to)
     experiment_id = args.experiment_id or f"{spec.name}_{date_from.isoformat()}_{date_to.isoformat()}"
     experiment_db = Path(args.experiment_db)
+    quote_reports = [Path(path) for path in (args.quote_reports or [])]
+    paper_reports = [Path(path) for path in (args.paper_reports or [])]
     record_experiment(
         experiment_db,
         experiment_id=experiment_id,
@@ -589,6 +604,8 @@ def cmd_research_run(args: argparse.Namespace) -> int:
             "llm_model": args.llm_model,
             "llm_parameters": args.llm_parameters,
             "seed_spec": str(Path(args.spec)) if args.spec else None,
+            "quote_reports": [str(path) for path in quote_reports],
+            "paper_reports": [str(path) for path in paper_reports],
         },
     )
     results = run_budgeted_research(
@@ -619,7 +636,12 @@ def cmd_research_run(args: argparse.Namespace) -> int:
     )
     for result in results:
         output_path = Path(args.experiments_root) / result.experiment_id / "leaderboard.json"
-        write_research_result(output_path, result)
+        write_research_result(
+            output_path,
+            result,
+            quote_reports=quote_reports,
+            paper_reports=paper_reports,
+        )
         record_trial(experiment_db, experiment_id, result)
         record_audit_event(
             experiment_db,
@@ -639,9 +661,42 @@ def cmd_research_run(args: argparse.Namespace) -> int:
         experiment_id=experiment_id,
         symbol=args.symbol or spec.symbol,
         status="completed",
-        metadata={"trials": len(results), "execution_mode": args.execution_mode},
+        metadata={
+            "trials": len(results),
+            "execution_mode": args.execution_mode,
+            "quote_reports": [str(path) for path in quote_reports],
+            "paper_reports": [str(path) for path in paper_reports],
+        },
     )
     print(json.dumps({"trials": len(results)}, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_research_primary_run(args: argparse.Namespace) -> int:
+    spec = load_strategy_spec(Path(args.spec))
+    date_from = parse_date(args.date_from)
+    date_to = parse_date(args.date_to)
+    experiment_id = args.experiment_id or f"primary_{spec.name}_{date_from.isoformat()}_{date_to.isoformat()}"
+    result = ResearchPipeline().run(
+        seed_spec=spec,
+        data_root=Path(args.data_root),
+        experiments_root=Path(args.experiments_root),
+        experiment_db=Path(args.experiment_db),
+        config_dir=Path(args.config_dir),
+        date_from=date_from,
+        date_to=date_to,
+        experiment_id=experiment_id,
+        max_trials=args.max_trials,
+        starting_equity=args.starting_equity,
+        max_parameter_combinations=args.max_parameter_combinations,
+        allow_high_parameter_budget=args.allow_high_parameter_budget,
+        random_seed=args.random_seed,
+        llm_model=args.llm_model,
+        llm_parameters=args.llm_parameters,
+        quote_reports=[Path(path) for path in (args.quote_reports or [])],
+        paper_reports=[Path(path) for path in (args.paper_reports or [])],
+    )
+    print(json.dumps(result.__dict__, indent=2, sort_keys=True))
     return 0
 
 
@@ -703,10 +758,9 @@ def cmd_research_propose(args: argparse.Namespace) -> int:
 
 
 def cmd_research_generate_feature_seeds(args: argparse.Namespace) -> int:
-    paths = write_feature_combo_strategy_specs(
+    paths = write_primary_nq_strategy_specs(
         output_dir=Path(args.output_dir),
         count=args.count,
-        random_seed=args.random_seed,
         symbol=args.symbol,
         timeframe=args.timeframe,
         prefix=args.prefix,
@@ -1006,35 +1060,13 @@ def cmd_research_discover_target(args: argparse.Namespace) -> int:
 def cmd_report_leaderboard(args: argparse.Namespace) -> int:
     report = load_leaderboard_report(Path(args.experiments_root))
     if args.experiment_id:
-        for key in [
-            "leaderboard",
-            "candidate_leaderboard",
-            "freeze_confirmed_leaderboard",
-            "rejected",
-            "rows",
-        ]:
-            report[key] = [
+        report = build_leaderboard_report_payload(
+            [
                 row
-                for row in report[key]
+                for row in report["rows"]
                 if row["experiment_id"] == args.experiment_id
                 or row["experiment_id"].startswith(f"{args.experiment_id}_")
             ]
-        report["summary"] = {
-            "passed": len(report["leaderboard"]),
-            "candidate": len(report["candidate_leaderboard"]),
-            "freeze_confirmed": len(report["freeze_confirmed_leaderboard"]),
-            "rejected": len(report["rejected"]),
-            "total": len(report["rows"]),
-        }
-        report["conclusion"] = (
-            "qualified_strategies_found"
-            if report["leaderboard"]
-            else "no_qualified_strategies_found"
-        )
-        report["message"] = (
-            f"Found {len(report['leaderboard'])} freeze-confirmed qualified strategies."
-            if report["leaderboard"]
-            else "No qualified strategies found under the current out-of-sample gates."
         )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
@@ -1049,6 +1081,85 @@ def cmd_report_experiment(args: argparse.Namespace) -> int:
         )
     )
     return 0
+
+
+def cmd_ibkr_health(args: argparse.Namespace) -> int:
+    gateway = IbkrPaperGateway()
+    print(json.dumps(gateway.health(), indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_ibkr_readiness(args: argparse.Namespace) -> int:
+    gateway = IbkrPaperGateway()
+    print(json.dumps(gateway.readiness(symbol=args.symbol, max_stale_seconds=args.max_stale_seconds), indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_ibkr_contract_details(args: argparse.Namespace) -> int:
+    gateway = IbkrPaperGateway()
+    if args.details:
+        event = gateway.record_contract_details(json.loads(Path(args.details).read_text(encoding="utf-8")))
+        payload = {"event": event, "readiness": gateway.contract_readiness(args.symbol)}
+    else:
+        payload = gateway.contract_readiness(args.symbol)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_ibkr_paper_run(args: argparse.Namespace) -> int:
+    gateway = IbkrPaperGateway()
+    report = _ibkr_cli_report(gateway, args.run_id or "pending")
+    run = create_ibkr_paper_run_artifacts(
+        run_id=args.run_id,
+        root=Path(args.output_root),
+        report={
+            **report,
+            "requested_symbol": args.symbol,
+            "requested_quantity": args.quantity,
+        },
+    )
+    print(json.dumps(run, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_ibkr_safe_mode(args: argparse.Namespace) -> int:
+    gateway = IbkrPaperGateway()
+    print(json.dumps(gateway.enter_safe_mode(args.reason), indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_ibkr_kill_switch(args: argparse.Namespace) -> int:
+    gateway = IbkrPaperGateway()
+    print(json.dumps(gateway.kill_switch(args.reason), indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_ibkr_flatten(args: argparse.Namespace) -> int:
+    gateway = IbkrPaperGateway()
+    print(json.dumps(gateway.flatten_paper_position(args.reason), indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_ibkr_report(args: argparse.Namespace) -> int:
+    if args.run_id == "current":
+        payload = _ibkr_cli_report(IbkrPaperGateway(), "current")
+    else:
+        payload = load_ibkr_paper_report(Path(args.output_root), args.run_id)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def _ibkr_cli_report(gateway: IbkrPaperGateway, run_id: str) -> dict:
+    return build_ibkr_paper_report(
+        run_id=run_id,
+        health=gateway.health(),
+        readiness=gateway.readiness(),
+        contracts=gateway.contract_readiness(),
+        market_data=gateway.market_data_readiness(),
+        bracket_orders=gateway.bracket_order_report(),
+        execution_ledger=gateway.execution_ledger(),
+        incidents={"incidents": gateway.incident_events, "count": len(gateway.incident_events)},
+    )
 
 
 def cmd_paper_replay(args: argparse.Namespace) -> int:
@@ -1392,7 +1503,31 @@ def build_parser() -> argparse.ArgumentParser:
     research_run.add_argument("--final-holdout-days", type=int, default=365)
     research_run.add_argument("--min-folds", type=int, default=1)
     research_run.add_argument("--indicator-warmup-days", type=int)
+    research_run.add_argument("--quote-reports", action="append")
+    research_run.add_argument("--paper-reports", action="append")
     research_run.set_defaults(func=cmd_research_run)
+
+    primary_run = research_subparsers.add_parser("primary-run")
+    primary_run.add_argument("--spec", required=True)
+    primary_run.add_argument("--from", dest="date_from", required=True)
+    primary_run.add_argument("--to", dest="date_to", required=True)
+    primary_run.add_argument("--experiment-id")
+    primary_run.add_argument("--experiments-root", default="experiments")
+    primary_run.add_argument("--experiment-db", default="experiments/research.sqlite3")
+    primary_run.add_argument("--max-trials", type=int, default=1)
+    primary_run.add_argument("--random-seed", type=int, default=0)
+    primary_run.add_argument("--llm-model", default="local-deterministic-template")
+    primary_run.add_argument("--llm-parameters", type=parse_json_object, default={})
+    primary_run.add_argument(
+        "--max-parameter-combinations",
+        type=int,
+        default=DEFAULT_PARAMETER_BUDGET,
+    )
+    primary_run.add_argument("--allow-high-parameter-budget", action="store_true")
+    primary_run.add_argument("--starting-equity", type=float, default=100_000)
+    primary_run.add_argument("--quote-reports", action="append")
+    primary_run.add_argument("--paper-reports", action="append")
+    primary_run.set_defaults(func=cmd_research_primary_run)
 
     propose = research_subparsers.add_parser("propose")
     propose.add_argument("--spec", required=True)
@@ -1412,17 +1547,17 @@ def build_parser() -> argparse.ArgumentParser:
     generate_feature_seeds.add_argument("--count", type=int, default=28)
     generate_feature_seeds.add_argument("--random-seed", type=int, default=0)
     generate_feature_seeds.add_argument("--output-dir", default="strategies")
-    generate_feature_seeds.add_argument("--symbol", default="NQmain")
-    generate_feature_seeds.add_argument("--timeframe", default="1m")
-    generate_feature_seeds.add_argument("--prefix", default="generated_feature_combo")
-    generate_feature_seeds.add_argument("--manifest-output")
+    generate_feature_seeds.add_argument("--symbol", default=PRIMARY_RESEARCH_SYMBOL)
+    generate_feature_seeds.add_argument("--timeframe", default=PRIMARY_RESEARCH_TIMEFRAME)
+    generate_feature_seeds.add_argument("--prefix", default="primary_nq")
+    generate_feature_seeds.add_argument("--manifest-output", default="strategies/generated/primary_nq_manifest.json")
     generate_feature_seeds.set_defaults(func=cmd_research_generate_feature_seeds)
 
     generate_vol_seeds = research_subparsers.add_parser("generate-vol-seeds")
     generate_vol_seeds.add_argument("--count", type=int, default=50)
     generate_vol_seeds.add_argument("--output-dir", default="strategies")
-    generate_vol_seeds.add_argument("--symbol", default="NQ_CME")
-    generate_vol_seeds.add_argument("--timeframe", default="1m")
+    generate_vol_seeds.add_argument("--symbol", default=PRIMARY_RESEARCH_SYMBOL)
+    generate_vol_seeds.add_argument("--timeframe", default=PRIMARY_RESEARCH_TIMEFRAME)
     generate_vol_seeds.add_argument("--prefix", default="vol_execution")
     generate_vol_seeds.add_argument("--manifest-output", default="strategies/generated/vol_execution_manifest.json")
     generate_vol_seeds.set_defaults(func=cmd_research_generate_vol_seeds)
@@ -1443,8 +1578,8 @@ def build_parser() -> argparse.ArgumentParser:
     vol_artifacts.set_defaults(func=cmd_research_vol_artifacts)
 
     vol_prescreen = research_subparsers.add_parser("vol-prescreen")
-    vol_prescreen.add_argument("--symbol", default="NQ_CME")
-    vol_prescreen.add_argument("--timeframe", default="1m")
+    vol_prescreen.add_argument("--symbol", default=PRIMARY_RESEARCH_SYMBOL)
+    vol_prescreen.add_argument("--timeframe", default=PRIMARY_RESEARCH_TIMEFRAME)
     vol_prescreen.add_argument("--from", dest="date_from", required=True)
     vol_prescreen.add_argument("--to", dest="date_to", required=True)
     vol_prescreen.add_argument("--strategies-root", default="strategies")
@@ -1456,8 +1591,8 @@ def build_parser() -> argparse.ArgumentParser:
     vol_prescreen.set_defaults(func=cmd_research_vol_prescreen)
 
     mine_profitable_nq = research_subparsers.add_parser("mine-profitable-nq")
-    mine_profitable_nq.add_argument("--symbol", default="NQ_CME")
-    mine_profitable_nq.add_argument("--timeframe", default="1m")
+    mine_profitable_nq.add_argument("--symbol", default=PRIMARY_RESEARCH_SYMBOL)
+    mine_profitable_nq.add_argument("--timeframe", default=PRIMARY_RESEARCH_TIMEFRAME)
     mine_profitable_nq.add_argument("--from", dest="date_from", required=True)
     mine_profitable_nq.add_argument("--to", dest="date_to", required=True)
     mine_profitable_nq.add_argument("--data-root", default="data")
@@ -1479,8 +1614,8 @@ def build_parser() -> argparse.ArgumentParser:
     top_strategy_report.add_argument("--sample-trade-count", type=int, default=3)
     top_strategy_report.add_argument(
         "--objective",
-        choices=["annualized_quality", "annualized_net_pnl", "net_pnl", "stability_first", "profit_factor", "test_profit_factor", "balanced"],
-        default="annualized_quality",
+        choices=["expectancy_first", "annualized_quality", "annualized_net_pnl", "net_pnl", "stability_first", "profit_factor", "test_profit_factor", "balanced"],
+        default=PRIMARY_TOP_STRATEGY_OBJECTIVE,
     )
     top_strategy_report.add_argument("--output", default="experiments/profit_mining/top3_strategy_report.html")
     top_strategy_report.set_defaults(func=cmd_research_top_strategy_report)
@@ -1548,6 +1683,39 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument("--experiment-id", required=True)
     experiment.add_argument("--experiment-db", default="experiments/research.sqlite3")
     experiment.set_defaults(func=cmd_report_experiment)
+
+    ibkr = subparsers.add_parser("ibkr")
+    ibkr_subparsers = ibkr.add_subparsers(dest="ibkr_command", required=True)
+    ibkr_health = ibkr_subparsers.add_parser("health")
+    ibkr_health.set_defaults(func=cmd_ibkr_health)
+    ibkr_readiness = ibkr_subparsers.add_parser("readiness")
+    ibkr_readiness.add_argument("--symbol", default="MNQ")
+    ibkr_readiness.add_argument("--max-stale-seconds", type=int, default=5)
+    ibkr_readiness.set_defaults(func=cmd_ibkr_readiness)
+    ibkr_contract_details = ibkr_subparsers.add_parser("contract-details")
+    ibkr_contract_details.add_argument("--symbol", default="MNQ")
+    ibkr_contract_details.add_argument("--details")
+    ibkr_contract_details.set_defaults(func=cmd_ibkr_contract_details)
+    ibkr_paper_run = ibkr_subparsers.add_parser("paper-run")
+    ibkr_paper_run.add_argument("--symbol", default="MNQ")
+    ibkr_paper_run.add_argument("--quantity", type=int, default=1)
+    ibkr_paper_run.add_argument("--run-id")
+    ibkr_paper_run.add_argument("--output-root", default="experiments/ibkr_paper")
+    ibkr_paper_run.set_defaults(func=cmd_ibkr_paper_run)
+    ibkr_safe_mode = ibkr_subparsers.add_parser("safe-mode")
+    ibkr_safe_mode.add_argument("--reason", default="manual")
+    ibkr_safe_mode.set_defaults(func=cmd_ibkr_safe_mode)
+    ibkr_kill_switch = ibkr_subparsers.add_parser("kill-switch")
+    ibkr_kill_switch.add_argument("--reason", default="manual")
+    ibkr_kill_switch.set_defaults(func=cmd_ibkr_kill_switch)
+    ibkr_flatten = ibkr_subparsers.add_parser("flatten")
+    ibkr_flatten.add_argument("--symbol", default="MNQ")
+    ibkr_flatten.add_argument("--reason", default="manual")
+    ibkr_flatten.set_defaults(func=cmd_ibkr_flatten)
+    ibkr_report = ibkr_subparsers.add_parser("report")
+    ibkr_report.add_argument("--run-id", required=True)
+    ibkr_report.add_argument("--output-root", default="experiments/ibkr_paper")
+    ibkr_report.set_defaults(func=cmd_ibkr_report)
 
     paper = subparsers.add_parser("paper")
     paper_subparsers = paper.add_subparsers(dest="paper_command", required=True)

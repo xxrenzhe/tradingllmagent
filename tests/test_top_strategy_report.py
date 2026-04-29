@@ -9,8 +9,11 @@ from tlm.top_strategy_report import (
     _benchmark_period_results,
     _candlestick_svg,
     _comparison_line_svg,
+    _evaluation_summary,
     _line_svg,
     _merge_period_results,
+    _merged_strategy_equity_curves,
+    _multi_strategy_line_svg,
     _monthly_signal_results,
     _objective_order,
     _select_top_yearly_strategies,
@@ -19,10 +22,57 @@ from tlm.top_strategy_report import (
 
 
 class TopStrategyReportTests(unittest.TestCase):
+    def test_objective_order_defaults_to_primary_research_order(self) -> None:
+        order = _objective_order("expectancy_first", None)
+
+        self.assertEqual(order, ["expectancy_first", "stability_first", "annualized_quality"])
+
     def test_objective_order_dedupes_and_keeps_primary_first(self) -> None:
         order = _objective_order("annualized_quality", ["net_pnl", "annualized_quality", "stability_first"])
 
         self.assertEqual(order, ["annualized_quality", "net_pnl", "stability_first"])
+
+    def test_evaluation_summary_surfaces_execution_evidence_status(self) -> None:
+        candidate = {
+            "candidate_stage": "execution_validated_candidate",
+            "execution_validation": {"status": "validated", "paper_shadow_allowed": True},
+            "execution_evidence": {
+                "status": "incomplete_evidence",
+                "missing_requirements": ["paper_shadow"],
+                "quote_replay": {
+                    "status": "ready_for_review",
+                    "execution_report_summaries": [{"avg_bid_ask_cost_usd": 10.0}],
+                },
+                "paper_shadow": {"status": "blocked", "summary": {"record_count": 0}},
+            },
+            "full_after_activation": {
+                "net_pnl": 1200,
+                "annual_trades": 1500,
+                "profit_factor": 1.2,
+                "win_probability": 0.55,
+                "return_to_drawdown": 1.5,
+                "cost_stress": [
+                    {"label": "configured_cost_plus_1_tick", "net_pnl": 100},
+                    {"label": "configured_cost_plus_2_ticks", "net_pnl": -25},
+                ],
+                "yearly_results": [{"year": 2024, "net_pnl": 100}, {"year": 2025, "net_pnl": 150}],
+            },
+            "test": {"net_pnl": 500},
+        }
+
+        summary = _evaluation_summary(candidate)
+
+        self.assertEqual(summary["candidate_stage"], "execution_validated_candidate")
+        self.assertEqual(summary["execution_validation_status"], "validated")
+        self.assertTrue(summary["paper_shadow_allowed"])
+        self.assertEqual(summary["execution_evidence_status"], "incomplete_evidence")
+        self.assertEqual(summary["execution_evidence_missing_requirements"], ["paper_shadow"])
+        self.assertEqual(summary["quote_replay_status"], "ready_for_review")
+        self.assertEqual(summary["paper_shadow_status"], "blocked")
+        self.assertEqual(summary["paper_shadow_summary"], {"record_count": 0})
+        self.assertEqual(summary["execution_stress_survival_score"], 0.5)
+        self.assertIn("execution_evidence_ready", summary["failed_gates"])
+        self.assertFalse(summary["fully_qualified"])
 
     def test_select_top_yearly_strategies_dedupes_by_edge_composition(self) -> None:
         edge = {
@@ -378,6 +428,76 @@ class TopStrategyReportTests(unittest.TestCase):
 
         self.assertEqual(selected[0]["basket_id"], "slightly_lower_annualized_more_stable")
 
+    def test_select_top_yearly_strategies_can_rank_by_expectancy_first(self) -> None:
+        edge = {
+            "scan_type": "low_volume_drift",
+            "horizon_minutes": 120,
+            "session_bucket": "utc_1200_1659",
+            "dow": 1,
+            "direction_label": "long",
+            "trend_bin": 1,
+            "volume_bin": -1,
+            "range_bin": -1,
+        }
+        report = {
+            "regime_basket_replays": [
+                {
+                    "basket_id": "higher_annualized_lower_expectancy",
+                    "basket_hash": "a",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "fast_edges",
+                            "activation_start_year": 2022,
+                            "constituent_edges": [edge],
+                            "train_period": {"covered_days": 200},
+                            "test_period": {"covered_days": 200},
+                            "full_after_activation": {
+                                "net_pnl": 1800,
+                                "annual_trades": 2400,
+                                "avg_trade_net_pnl": 0.75,
+                                "profit_factor": 1.20,
+                                "win_probability": 0.55,
+                                "return_to_drawdown": 1.4,
+                                "max_drawdown": 180,
+                                "cost_stress": [{"label": "configured_cost_plus_2_ticks", "net_pnl": 90}],
+                                "yearly_results": [{"year": 2024, "net_pnl": 100}, {"year": 2025, "net_pnl": 40}],
+                            },
+                            "test": {"net_pnl": 500, "profit_factor": 1.08, "avg_trade_net_pnl": 0.5},
+                        }
+                    ],
+                },
+                {
+                    "basket_id": "lower_annualized_higher_expectancy",
+                    "basket_hash": "b",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "stable_edges",
+                            "activation_start_year": 2021,
+                            "constituent_edges": [{**edge, "dow": 2}],
+                            "train_period": {"covered_days": 300},
+                            "test_period": {"covered_days": 300},
+                            "full_after_activation": {
+                                "net_pnl": 1500,
+                                "annual_trades": 1200,
+                                "avg_trade_net_pnl": 1.25,
+                                "profit_factor": 1.22,
+                                "win_probability": 0.56,
+                                "return_to_drawdown": 1.8,
+                                "max_drawdown": 120,
+                                "cost_stress": [{"label": "configured_cost_plus_2_ticks", "net_pnl": 110}],
+                                "yearly_results": [{"year": 2024, "net_pnl": 120}, {"year": 2025, "net_pnl": 80}],
+                            },
+                            "test": {"net_pnl": 430, "profit_factor": 1.10, "avg_trade_net_pnl": 1.0},
+                        }
+                    ],
+                },
+            ]
+        }
+
+        selected = _select_top_yearly_strategies(report, top_n=2, objective="expectancy_first")
+
+        self.assertEqual(selected[0]["basket_id"], "lower_annualized_higher_expectancy")
+
     def test_monthly_signal_results_groups_by_calendar_month(self) -> None:
         rows = _monthly_signal_results(
             [
@@ -445,6 +565,54 @@ class TopStrategyReportTests(unittest.TestCase):
 
         self.assertEqual([row["benchmark"] for row in aligned], [1.0, 2.0, 3.0])
         self.assertEqual([row["strategy"] for row in aligned], [10.0, 20.0, 40.0])
+
+    def test_merged_strategy_equity_curves_forward_fills_each_series(self) -> None:
+        merged = _merged_strategy_equity_curves(
+            [
+                {
+                    "series_id": "expectancy",
+                    "label": "Expectancy",
+                    "points": [
+                        {"timestamp": "2025-01-01 09:31:00", "equity": 10.0},
+                        {"timestamp": "2025-01-01 09:35:00", "equity": 40.0},
+                    ],
+                },
+                {
+                    "series_id": "stability",
+                    "label": "Stability",
+                    "points": [
+                        {"timestamp": "2025-01-01 09:33:00", "equity": 20.0},
+                    ],
+                },
+            ],
+            max_points=10,
+        )
+
+        self.assertEqual([row["timestamp"] for row in merged["points"]], ["2025-01-01 09:31:00", "2025-01-01 09:33:00", "2025-01-01 09:35:00"])
+        self.assertEqual([row["values"]["expectancy"] for row in merged["points"]], [10.0, 10.0, 40.0])
+        self.assertEqual([row["values"]["stability"] for row in merged["points"]], [0.0, 20.0, 20.0])
+
+    def test_multi_strategy_line_svg_contains_all_series_tooltips(self) -> None:
+        svg = _multi_strategy_line_svg(
+            {
+                "series": [
+                    {"id": "expectancy", "label": "Expectancy"},
+                    {"id": "stability", "label": "Stability"},
+                    {"id": "annualized", "label": "Annualized"},
+                ],
+                "points": [
+                    {
+                        "timestamp": "2025-01-01 09:31:00",
+                        "values": {"expectancy": 10.0, "stability": 5.0, "annualized": -2.0},
+                    }
+                ],
+            }
+        )
+
+        self.assertIn("Top1 多口径累计收益曲线", svg)
+        self.assertIn("Expectancy $10", svg)
+        self.assertIn("Stability $5", svg)
+        self.assertIn("Annualized $-2", svg)
 
     def test_candlestick_svg_contains_entry_and_exit_markers(self) -> None:
         bars = [

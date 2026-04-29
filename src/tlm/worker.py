@@ -32,6 +32,7 @@ from .research import (
     write_research_result,
     write_strategy_discovery_result,
 )
+from .research_pipeline import ResearchPipeline
 from .storage import (
     bar_path,
     compute_data_version_hash,
@@ -126,6 +127,8 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_nt_export_signal(payload)
     if task_type == "research.run":
         return execute_research_run(payload)
+    if task_type == "research.primary_run":
+        return execute_primary_research_run(payload)
     if task_type == "research.propose":
         return execute_research_propose(payload)
     if task_type == "research.iterate":
@@ -922,6 +925,8 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
     llm_parameters = payload.get("llm_parameters", {})
     if not isinstance(llm_parameters, dict):
         raise ValueError("llm_parameters must be an object")
+    quote_reports = [Path(path) for path in (payload.get("quote_reports") or [])]
+    paper_reports = [Path(path) for path in (payload.get("paper_reports") or [])]
     record_experiment(
         experiment_db,
         experiment_id=experiment_id,
@@ -937,6 +942,8 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
             "llm_model": payload.get("llm_model", "local-deterministic-template"),
             "llm_parameters": llm_parameters,
             "deduplication_report": deduplication_report,
+            "quote_reports": [str(path) for path in quote_reports],
+            "paper_reports": [str(path) for path in paper_reports],
         },
     )
     result_paths = []
@@ -1009,7 +1016,12 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
                     reasons[reason] = reasons.get(reason, 0) + 1
         for result in results:
             output_path = experiments_root / result.experiment_id / "leaderboard.json"
-            write_research_result(output_path, result)
+            write_research_result(
+                output_path,
+                result,
+                quote_reports=quote_reports,
+                paper_reports=paper_reports,
+            )
             record_trial(experiment_db, experiment_id, result)
             record_audit_event(
                 experiment_db,
@@ -1042,9 +1054,41 @@ def execute_research_run(payload: dict[str, Any]) -> dict[str, Any]:
             "by_family": by_family,
             "family_weight_report": result_payload["family_weight_report"],
             "deduplication_report": deduplication_report,
+            "quote_reports": [str(path) for path in quote_reports],
+            "paper_reports": [str(path) for path in paper_reports],
         },
     )
     return result_payload
+
+
+def execute_primary_research_run(payload: dict[str, Any]) -> dict[str, Any]:
+    spec = load_strategy_spec(Path(_required(payload, "spec")))
+    llm_parameters = payload.get("llm_parameters", {})
+    if not isinstance(llm_parameters, dict):
+        raise ValueError("llm_parameters must be an object")
+    date_from = parse_date(_required(payload, "date_from", "from"))
+    date_to = parse_date(_required(payload, "date_to", "to"))
+    experiment_id = payload.get("experiment_id") or f"primary_{spec.name}_{date_from}_{date_to}"
+    result = ResearchPipeline().run(
+        seed_spec=spec,
+        data_root=Path(payload.get("data_root", "data")),
+        experiments_root=Path(payload.get("experiments_root", "experiments")),
+        experiment_db=Path(payload.get("experiment_db", "experiments/research.sqlite3")),
+        config_dir=Path(payload.get("config_dir", "configs")),
+        date_from=date_from,
+        date_to=date_to,
+        experiment_id=experiment_id,
+        max_trials=int(payload.get("max_trials", 1)),
+        starting_equity=float(payload.get("starting_equity", 100_000)),
+        max_parameter_combinations=int(payload.get("max_parameter_combinations", 50)),
+        allow_high_parameter_budget=bool(payload.get("allow_high_parameter_budget", False)),
+        random_seed=int(payload.get("random_seed", 0)),
+        llm_model=str(payload.get("llm_model", "local-deterministic-template")),
+        llm_parameters=llm_parameters,
+        quote_reports=[Path(path) for path in (payload.get("quote_reports") or [])],
+        paper_reports=[Path(path) for path in (payload.get("paper_reports") or [])],
+    )
+    return result.__dict__
 
 
 def build_family_weight_report(

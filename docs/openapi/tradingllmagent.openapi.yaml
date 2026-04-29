@@ -523,6 +523,186 @@ paths:
       responses:
         "200":
           description: Incident timeline.
+  /api/gateways/ibkr/health:
+    get:
+      summary: Check IBKR paper gateway health.
+      responses:
+        "200":
+          description: IBKR paper gateway health.
+  /api/gateways/ibkr/readiness:
+    get:
+      summary: Check IBKR paper-only account and connection readiness.
+      responses:
+        "200":
+          description: IBKR paper readiness report.
+  /api/gateways/ibkr/contracts:
+    get:
+      summary: Check IBKR MNQ contract readiness.
+      responses:
+        "200":
+          description: IBKR contract readiness report.
+    post:
+      summary: Record IBKR contract details for readiness validation.
+      responses:
+        "200":
+          description: IBKR contract details event.
+  /api/gateways/ibkr/market-data:
+    get:
+      summary: Check IBKR real-time market data readiness.
+      responses:
+        "200":
+          description: IBKR market data readiness report.
+    post:
+      summary: Record IBKR market data snapshot for readiness validation.
+      responses:
+        "200":
+          description: IBKR market data event.
+  /api/gateways/ibkr/connect:
+    post:
+      summary: Connect to an IBKR paper gateway adapter.
+      responses:
+        "200":
+          description: IBKR connection event.
+  /api/gateways/ibkr/disconnect:
+    post:
+      summary: Disconnect the IBKR paper gateway adapter.
+      responses:
+        "200":
+          description: IBKR disconnect event.
+  /api/gateways/ibkr/safe-mode:
+    post:
+      summary: Force IBKR paper gateway safe mode.
+      responses:
+        "200":
+          description: IBKR safe-mode incident.
+  /api/gateways/ibkr/bracket-orders:
+    get:
+      summary: Report open IBKR paper bracket order drafts and recent order events.
+      responses:
+        "200":
+          description: IBKR bracket order report.
+    post:
+      summary: Build a paper-only IBKR bracket order draft.
+      responses:
+        "200":
+          description: IBKR bracket order event.
+  /api/gateways/ibkr/cancel-orders:
+    post:
+      summary: Cancel open IBKR paper order drafts.
+      responses:
+        "200":
+          description: IBKR cancel order event.
+  /api/gateways/ibkr/flatten:
+    post:
+      summary: Flatten tracked IBKR paper position state.
+      responses:
+        "200":
+          description: IBKR paper flatten event.
+  /api/gateways/ibkr/kill-switch:
+    post:
+      summary: Cancel orders, flatten paper position, and enter safe mode.
+      responses:
+        "200":
+          description: IBKR kill-switch response.
+  /api/gateways/ibkr/execution-ledger:
+    get:
+      summary: List IBKR paper fills, positions, account snapshots, and PnL summary.
+      responses:
+        "200":
+          description: IBKR paper execution ledger.
+  /api/gateways/ibkr/orders:
+    get:
+      summary: List IBKR paper order drafts, order statuses, and order events.
+      responses:
+        "200":
+          description: IBKR paper order report.
+  /api/gateways/ibkr/order-status:
+    post:
+      summary: Record an IBKR paper order status callback.
+      responses:
+        "200":
+          description: IBKR paper order status event.
+  /api/gateways/ibkr/executions:
+    get:
+      summary: List IBKR paper execution fills and realized PnL.
+      responses:
+        "200":
+          description: IBKR paper executions report.
+    post:
+      summary: Record an IBKR paper execution fill and commission.
+      responses:
+        "200":
+          description: IBKR paper execution fill event.
+  /api/gateways/ibkr/positions:
+    get:
+      summary: List IBKR paper positions and tracked MNQ quantity.
+      responses:
+        "200":
+          description: IBKR paper positions report.
+    post:
+      summary: Record an IBKR paper position snapshot.
+      responses:
+        "200":
+          description: IBKR paper position event.
+  /api/gateways/ibkr/account-snapshots:
+    get:
+      summary: List IBKR paper account and PnL snapshots.
+      responses:
+        "200":
+          description: IBKR paper account snapshots report.
+    post:
+      summary: Record an IBKR paper account and PnL snapshot.
+      responses:
+        "200":
+          description: IBKR paper account snapshot event.
+  /api/gateways/ibkr/reconciliation:
+    post:
+      summary: Reconcile tracked IBKR paper position against expected quantity.
+      responses:
+        "200":
+          description: IBKR paper reconciliation report.
+  /api/gateways/ibkr/reviews:
+    post:
+      summary: Build a 5-minute IBKR structured review request and fallback result.
+      responses:
+        "200":
+          description: IBKR 5-minute structured review payload.
+  /api/gateways/ibkr/fast-path-optimizer:
+    post:
+      summary: Apply risk-reducing fast-path control diffs from an IBKR review result.
+      responses:
+        "200":
+          description: IBKR fast-path optimizer diff report.
+  /api/gateways/ibkr/incidents:
+    get:
+      summary: List IBKR paper gateway incidents.
+      responses:
+        "200":
+          description: IBKR incident timeline.
+  /api/ibkr-paper/runs:
+    post:
+      summary: Create an append-only IBKR Paper run artifact bundle.
+      responses:
+        "200":
+          description: IBKR Paper run artifact manifest.
+  /api/ibkr-paper/runs/{run_id}:
+    get:
+      summary: Load a persisted IBKR Paper run report.
+      responses:
+        "200":
+          description: IBKR Paper run daily report.
+  /api/ibkr-paper/reviews:
+    get:
+      summary: List recent IBKR Paper 5-minute review cycles.
+      responses:
+        "200":
+          description: IBKR Paper review history.
+  /api/ibkr-paper/reports/{run_id}:
+    get:
+      summary: Load current or persisted IBKR Paper runtime report.
+      responses:
+        "200":
+          description: IBKR Paper runtime report.
   /api/incidents:
     post:
       summary: Record an incident or force gateway safety mode.

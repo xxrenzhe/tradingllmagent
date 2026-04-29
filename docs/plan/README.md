@@ -23,6 +23,8 @@ Older documents remain useful as design history, but they should not override ne
 - `docs/plan/11.nq-historical-data-acquisition-plan.md`: authoritative for NQ historical data source selection, FirstRate/Databento data layering, free-data boundaries, acquisition sequencing, and quote-level execution validation.
 - `docs/plan/12.vol-execution-aware-llm-trading-optimization-plan.md`: authoritative for VOL-centered simple strategy search, OHLCV-to-execution validation boundaries, limit-order modeling, paper shadow LLM review, and the next NQ_CME optimization loop.
 - `docs/plan/13.strategy-evaluation-scorecard-and-top3-report-standard.md`: authoritative for excellent-strategy evaluation dimensions, hard filters, annualized-return-first ranking, and cross-timeframe Top3 report selection.
+- `docs/plan/14.cme-nq-futures-one-shot-research-redesign-plan.md`: authoritative for the CME NQ futures primary research object, low-frequency high-edge candidate pipeline, execution-aware promotion gates, and post-cost expectancy ranking.
+- `docs/plan/15.ibkr-paper-llm-optimization-plan.md`: authoritative for removing TradingView from the main runtime loop, IBKR Paper gateway design, MNQ 1m local signals, 5m structured LLM review, bracket-protected paper execution, real paper PnL feedback, and dual-speed LLM optimization.
 
 ## 3. Version Boundaries
 
@@ -54,5 +56,6 @@ The current implementation should follow this order:
 8. Operate the LLM trading optimization factory: governed feature registry, audited strategy factory, anti-overfit promotion gates, paper/sim/live replay attribution, and memory-driven next-round generation.
 9. Upgrade the NQ data foundation: acquire low-cost multi-year 1m bars for search, reserve Databento CME quotes for candidate execution validation, and keep free proxy data out of final profitability claims.
 10. Run the VOL/execution-aware loop on `NQ_CME`: expose `bar_volume`, add VOL feature layers, search simple MA/VOL/MACD/RSI/ATR strategy families, validate execution with quote data, and use paper shadow reports for LLM-guided small-step mutations.
+11. Add the IBKR Paper optimization loop: connect IBKR Paper on Mac, validate real-time MNQ data, run local 1m signals, use 5m structured LLM review, submit only bracket-protected paper orders, record real paper fills/PnL, and allow only risk-reducing fast-path automation.
 
 Do not start from live order buttons, unrestricted NT8 control, or free-form LLM trading actions. Those are downstream capabilities gated by `docs/plan/4.nt8-live-integration-roadmap.md`.

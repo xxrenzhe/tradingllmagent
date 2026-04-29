@@ -30,6 +30,14 @@ from .modules import (
 )
 from .mutations import generate_controlled_mutations
 from .prescreen import build_pre_screen_report
+from .research_config import (
+    PRIMARY_COST_MODEL,
+    PRIMARY_RESEARCH_SYMBOL,
+    PRIMARY_RESEARCH_TIMEFRAME,
+    PRIMARY_TOP_STRATEGY_COMPARISON_OBJECTIVES,
+    PRIMARY_TOP_STRATEGY_OBJECTIVE,
+)
+from .research_ledger import build_research_ledger
 from .snapshot import research_snapshot
 from .storage import bar_path, normalized_tick_path
 from .strategy import StrategySpec, StrategySpecError, load_strategy_spec, parse_strategy_spec, with_strategy_symbol
@@ -40,6 +48,7 @@ from .variants import (
     expand_strategy_variants,
     parameter_grid_metadata,
     prompt_hash,
+    stable_hash,
     strategy_spec_hash,
 )
 from .validation import (
@@ -47,6 +56,19 @@ from .validation import (
     generate_rolling_folds,
     has_overlapping_test_folds,
     non_overlapping_test_fold_indexes,
+)
+
+EXECUTION_EVIDENCE_QUOTE_REPORT_FILENAMES = (
+    "vol_quote_replay_report.json",
+    "quote_replay.json",
+    "quote_execution_validation.json",
+)
+
+EXECUTION_EVIDENCE_PAPER_REPORT_FILENAMES = (
+    "vol_paper_shadow_review.json",
+    "paper_shadow.jsonl",
+    "paper_shadow.json",
+    "paper_shadow_review.json",
 )
 
 
@@ -112,6 +134,11 @@ class ResearchRunResult:
     signal_health_report: dict | None = None
 
     def to_dict(self) -> dict:
+        execution_validation = build_execution_validation_status(
+            symbol=self.strategy_spec.get("symbol", PRIMARY_RESEARCH_SYMBOL),
+            execution_mode=self.execution_mode,
+            promotion_report=self.promotion_report,
+        )
         return {
             "experiment_id": self.experiment_id,
             "execution_mode": self.execution_mode,
@@ -154,6 +181,7 @@ class ResearchRunResult:
             "hard_gate_report": self.hard_gate_report,
             "robustness_score": self.robustness_score,
             "signal_similarity_report": self.signal_similarity_report,
+            "execution_validation": execution_validation,
             "promotion_report": self.promotion_report,
             "strategy_card": self.strategy_card,
             "next_round_suggestions": self.next_round_suggestions,
@@ -1008,6 +1036,13 @@ def run_research_bar_validation(
         aggregate_test_metrics,
         round_trip_cost=round_trip_cost,
     )
+    pre_screen_report["hard_gate_enforced"] = symbol_config.alias == PRIMARY_RESEARCH_SYMBOL
+    pre_screen_report["stage"] = "hard_gate" if pre_screen_report["hard_gate_enforced"] else "advisory"
+    pre_screen_report["prescreen_stage"] = (
+        f"{pre_screen_report['stage']}_passed"
+        if pre_screen_report.get("passed", False)
+        else f"{pre_screen_report['stage']}_rejected"
+    )
     validation_to_test_decay = calculate_sharpe_decay(
         aggregate_validation_metrics.sharpe,
         aggregate_test_metrics.sharpe,
@@ -1017,13 +1052,23 @@ def run_research_bar_validation(
         holdout.metrics.sharpe,
     )
     holdout_days = (plan.final_holdout.end - plan.final_holdout.start).days + 1
-    gates = evaluate_hard_gates(
+    candidate_gates = evaluate_hard_gates(
         aggregate_test_metrics,
         fold_test_metrics,
         holdout.metrics,
         validation_metrics=aggregate_validation_metrics,
         positive_year_ratio=positive_year_ratio,
         round_trip_cost=round_trip_cost,
+        include_final_holdout=False,
+    )
+    freeze_gates = evaluate_hard_gates(
+        aggregate_test_metrics,
+        fold_test_metrics,
+        holdout.metrics,
+        validation_metrics=aggregate_validation_metrics,
+        positive_year_ratio=positive_year_ratio,
+        round_trip_cost=round_trip_cost,
+        include_final_holdout=True,
     )
     overfitting_report = build_overfitting_report(
         grid_metadata=grid_metadata,
@@ -1053,8 +1098,14 @@ def run_research_bar_validation(
         default_parameter_budget=grid_metadata.default_budget,
         positive_year_ratio=positive_year_ratio,
         round_trip_cost=round_trip_cost,
+        include_final_holdout=False,
     )
-    gates_payload = gates.to_dict()
+    gates_payload = enforce_cost_stress_gate(
+        enforce_pre_screen_gate(candidate_gates.to_dict(), pre_screen_report),
+        cost_sensitivity_report,
+    )
+    if not gates_payload["passed"]:
+        score = None
     hard_gate_report = build_hard_gate_report(
         aggregate_test_metrics=aggregate_test_metrics,
         fold_test_metrics=fold_test_metrics,
@@ -1062,10 +1113,11 @@ def run_research_bar_validation(
         validation_metrics=aggregate_validation_metrics,
         positive_year_ratio=positive_year_ratio,
         round_trip_cost=round_trip_cost,
-        gate_reasons=gates_payload["reasons"],
+        gate_reasons=list(gates_payload["reasons"]) + list(freeze_gates.reasons),
+        cost_stress_survives=cost_sensitivity_report.get("worst_case_survives"),
     )
-    final_holdout_policy = build_final_holdout_policy(plan)
-    promotion_report = build_direct_promotion_report(execution_mode)
+    final_holdout_policy = build_final_holdout_policy(plan, freeze_gate=freeze_gates.to_dict())
+    promotion_report = build_direct_promotion_report(execution_mode, pre_screen_report=pre_screen_report)
     next_round_suggestions = build_next_round_suggestions(
         list(gates_payload["reasons"]) + list(pre_screen_report.get("reasons", [])),
         overfitting_report,
@@ -1085,6 +1137,7 @@ def run_research_bar_validation(
         promotion_report=promotion_report,
         next_round_suggestions=next_round_suggestions,
         final_holdout_policy=final_holdout_policy,
+        pre_screen_report=pre_screen_report,
     )
     return ResearchRunResult(
         experiment_id=experiment_id,
@@ -1352,6 +1405,7 @@ def with_promotion_outputs(result: ResearchRunResult, promotion_report: dict) ->
         promotion_report=promotion_report,
         next_round_suggestions=next_round_suggestions,
         final_holdout_policy=result.final_holdout_policy,
+        pre_screen_report=result.pre_screen_report,
     )
     return replace(
         result,
@@ -1361,16 +1415,152 @@ def with_promotion_outputs(result: ResearchRunResult, promotion_report: dict) ->
     )
 
 
-def build_direct_promotion_report(execution_mode: str) -> dict:
+def build_direct_promotion_report(execution_mode: str, pre_screen_report: dict | None = None) -> dict:
+    pre_screen_hard_reject = bool(
+        pre_screen_report
+        and pre_screen_report.get("hard_gate_enforced", False)
+        and not pre_screen_report.get("passed", True)
+    )
     return {
         "mode": execution_mode,
-        "stage": f"direct_{execution_mode}",
-        "promoted": execution_mode == "tick",
-        "reasons": [],
+        "stage": f"direct_{execution_mode}" if not pre_screen_hard_reject else "pre_screen_rejected",
+        "promoted": execution_mode == "tick" and not pre_screen_hard_reject,
+        "reasons": [] if not pre_screen_hard_reject else list(pre_screen_report.get("reasons", [])),
         "bar_summary": None,
         "tick_summary": None,
         "final_holdout_used_for_promotion": False,
     }
+
+
+def requires_execution_validation(symbol: str | None) -> bool:
+    return str(symbol or "") == PRIMARY_RESEARCH_SYMBOL
+
+
+def build_execution_validation_status(
+    *,
+    symbol: str | None,
+    execution_mode: str,
+    promotion_report: dict | None,
+) -> dict[str, Any]:
+    required = requires_execution_validation(symbol)
+    stage = (promotion_report or {}).get("stage")
+    promoted = bool((promotion_report or {}).get("promoted"))
+    if not required:
+        status = "not_required"
+    elif execution_mode == "tick" or promoted or stage in {"direct_tick", "promoted_to_tick"}:
+        status = "validated"
+    elif stage in {"pre_screen_rejected", "bar_rejected_before_tick"}:
+        status = "blocked_before_execution"
+    else:
+        status = "pending_execution_validation"
+    return {
+        "required": required,
+        "status": status,
+        "promotion_stage": stage,
+        "paper_shadow_allowed": status in {"validated", "not_required"},
+    }
+
+
+def build_execution_evidence(
+    *,
+    experiment_dir: Path,
+    symbol: str | None,
+    execution_validation: dict[str, Any],
+    quote_reports: Sequence[Path] = (),
+    paper_reports: Sequence[Path] = (),
+) -> dict[str, Any]:
+    discovered_quote_reports = [
+        experiment_dir / name
+        for name in EXECUTION_EVIDENCE_QUOTE_REPORT_FILENAMES
+        if (experiment_dir / name).exists()
+    ]
+    discovered_paper_reports = [
+        experiment_dir / name
+        for name in EXECUTION_EVIDENCE_PAPER_REPORT_FILENAMES
+        if (experiment_dir / name).exists()
+    ]
+    quote_report_paths = _dedupe_existing_paths([*quote_reports, *discovered_quote_reports])
+    paper_report_paths = _dedupe_existing_paths([*paper_reports, *discovered_paper_reports])
+    from .vol import build_vol_execution_evidence
+
+    vol_execution_evidence = build_vol_execution_evidence(
+        quote_reports=quote_report_paths,
+        paper_reports=paper_report_paths,
+    )
+    required = requires_execution_validation(symbol)
+    validation_status = execution_validation.get("status")
+    if not required:
+        status = "not_required"
+    elif validation_status == "blocked_before_execution":
+        status = "blocked_before_execution"
+    elif validation_status == "pending_execution_validation":
+        status = "awaiting_execution_validation"
+    elif vol_execution_evidence.get("promotion_gate", {}).get("ready_for_promotion"):
+        status = "ready_for_promotion"
+    else:
+        status = "incomplete_evidence"
+    return {
+        "required": required,
+        "status": status,
+        "paper_shadow_allowed": validation_status in {"validated", "not_required"},
+        "paper_shadow_gate": (
+            "allowed_after_execution_validation"
+            if validation_status in {"validated", "not_required"}
+            else "blocked_until_execution_validation"
+        ),
+        "missing_requirements": vol_execution_evidence.get("missing_requirements", []),
+        "quote_report_count": len(quote_report_paths),
+        "paper_report_count": len(paper_report_paths),
+        "quote_reports": [str(path) for path in quote_report_paths],
+        "paper_reports": [str(path) for path in paper_report_paths],
+        "quote_replay": vol_execution_evidence.get("quote_replay", {}),
+        "paper_shadow": vol_execution_evidence.get("paper_shadow", {}),
+        "promotion_gate": vol_execution_evidence.get("promotion_gate", {}),
+    }
+
+
+def _dedupe_existing_paths(paths: Sequence[Path]) -> list[Path]:
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        if not path.exists():
+            continue
+        key = str(path.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(path)
+    return deduped
+
+
+def build_candidate_stage(
+    *,
+    gates: dict[str, Any],
+    pre_screen_report: dict | None,
+    execution_validation: dict[str, Any],
+    final_holdout_policy: dict[str, Any],
+    execution_evidence: dict[str, Any] | None = None,
+) -> str:
+    pre_screen_passed = pre_screen_report is None or pre_screen_report.get("passed") is not False
+    execution_status = execution_validation.get("status")
+    execution_evidence_status = (execution_evidence or {}).get("status")
+    promotion_stage = execution_validation.get("promotion_stage")
+    freeze_policy_enabled = final_holdout_policy.get("strict_freeze_task_implemented") is True
+    freeze_gate = final_holdout_policy.get("freeze_gate")
+    freeze_gate_passed = not isinstance(freeze_gate, dict) or freeze_gate.get("passed") is not False
+    if execution_status in {"validated", "not_required"}:
+        if freeze_policy_enabled and freeze_gate_passed and (
+            execution_status == "not_required" or execution_evidence_status == "ready_for_promotion"
+        ):
+            return "freeze_confirmed_candidate"
+        return "execution_validated_candidate"
+    if promotion_stage == "pre_screen_rejected" or not pre_screen_passed:
+        return "prescreen_rejected_candidate"
+    if execution_status == "blocked_before_execution":
+        return "execution_rejected_candidate"
+    if not gates.get("passed"):
+        return "bar_rejected_candidate"
+    return "bar_validated_candidate"
 
 
 def build_tick_replay_report(spec: StrategySpec, execution_mode: str) -> dict:
@@ -1417,6 +1607,12 @@ def build_bar_to_tick_promotion_report(
 
 def bar_candidate_rejection_reasons(result: ResearchRunResult) -> list[str]:
     reasons = []
+    if (
+        result.pre_screen_report
+        and result.pre_screen_report.get("hard_gate_enforced", False)
+        and not result.pre_screen_report.get("passed", True)
+    ):
+        reasons.extend(result.pre_screen_report.get("reasons", []))
     if result.aggregate_validation_metrics.trade_count <= 0:
         reasons.append("bar_validation_no_trades")
     if result.aggregate_validation_metrics.net_pnl <= 0:
@@ -1427,7 +1623,7 @@ def bar_candidate_rejection_reasons(result: ResearchRunResult) -> list[str]:
         reasons.append("bar_test_net_pnl")
     if result.parameter_budget_exceeded:
         reasons.append("parameter_budget_exceeded_before_tick")
-    return reasons
+    return list(dict.fromkeys(reasons))
 
 
 def promotion_summary(result: ResearchRunResult | None) -> dict | None:
@@ -1442,19 +1638,46 @@ def promotion_summary(result: ResearchRunResult | None) -> dict | None:
     }
 
 
-def build_final_holdout_policy(plan: ValidationPlan) -> dict:
+def build_final_holdout_policy(plan: ValidationPlan, freeze_gate: dict | None = None) -> dict:
     return {
         "status": "freeze_confirmed_after_hidden_holdout_gate",
         "isolation_status": "isolated_from_llm_feedback",
         "run_timing": "deterministic_freeze_confirmation_after_candidate_evaluation",
+        "final_holdout_evaluation_phase": "freeze_confirmation_after_candidate_decision",
         "llm_feedback_includes_final_holdout": False,
         "llm_visible_splits": ["train", "validation"],
         "llm_hidden_splits": ["test", "final_holdout"],
         "promotion_uses_final_holdout": False,
+        "generation_uses_final_holdout": False,
+        "parameter_selection_uses_final_holdout": False,
+        "candidate_ranking_uses_final_holdout": False,
+        "ranking_objective_switching_uses_final_holdout": False,
         "separate_freeze_task_required_for_strict_plan": False,
         "strict_freeze_task_implemented": True,
         "candidate_leaderboard_uses_final_holdout_details": False,
         "freeze_confirmed_leaderboard_uses_final_holdout_details": True,
+        "freeze_gate": freeze_gate or {"passed": None, "reasons": []},
+        "decision_input_policy": {
+            "generation": ["train", "validation"],
+            "parameter_selection": ["train", "validation", "test"],
+            "promotion": ["validation", "test", "execution_validation"],
+            "candidate_ranking": ["validation", "test", "execution_validation", "execution_evidence"],
+            "ranking_objective_switching": ["primary_research_policy"],
+            "freeze_confirmation": ["final_holdout", "execution_evidence"],
+            "final_holdout_excluded_from": [
+                "generation",
+                "parameter_selection",
+                "promotion",
+                "candidate_ranking",
+                "ranking_objective_switching",
+                "report_iteration",
+            ],
+        },
+        "split_boundaries": {
+            "discovery": {"splits": ["train"], "final_holdout_visible": False},
+            "validation_model_selection": {"splits": ["validation", "test"], "final_holdout_visible": False},
+            "freeze_confirmation": {"splits": ["final_holdout"], "available_after": "candidate_decision"},
+        },
         "range": plan.final_holdout.to_dict(),
         "embargo_days": plan.embargo_days,
         "indicator_warmup_days": plan.indicator_warmup_days,
@@ -1473,6 +1696,7 @@ def build_strategy_card(
     promotion_report: dict,
     next_round_suggestions: list[str],
     final_holdout_policy: dict,
+    pre_screen_report: dict | None = None,
     spec: StrategySpec | None = None,
     spec_name: str | None = None,
     strategy_family: str | None = None,
@@ -1482,8 +1706,21 @@ def build_strategy_card(
     module: dict | None = None,
 ) -> dict:
     module_summary = module or (module_summary_for_spec(spec) if spec else {})
+    execution_validation = build_execution_validation_status(
+        symbol=spec.symbol if spec else symbol,
+        execution_mode=execution_mode,
+        promotion_report=promotion_report,
+    )
+    candidate_stage = build_candidate_stage(
+        gates=gates,
+        pre_screen_report=pre_screen_report,
+        execution_validation=execution_validation,
+        final_holdout_policy=final_holdout_policy,
+        execution_evidence=None,
+    )
     return {
         "status": result_status,
+        "candidate_stage": candidate_stage,
         "name": spec.name if spec else spec_name,
         "strategy_family": spec.strategy_family if spec else strategy_family,
         "timeframe": spec.timeframe if spec else timeframe,
@@ -1493,6 +1730,7 @@ def build_strategy_card(
         "market_hypothesis": spec.market_hypothesis if spec else market_hypothesis,
         "execution_mode": execution_mode,
         "promotion_stage": promotion_report.get("stage"),
+        "execution_validation": execution_validation,
         "passed": gates["passed"],
         "robustness_score": robustness_score,
         "key_metrics": {
@@ -1513,8 +1751,14 @@ def compact_metrics(metrics: BacktestMetrics) -> dict:
         "net_pnl": metrics.net_pnl,
         "sharpe": metrics.sharpe,
         "max_drawdown": metrics.max_drawdown,
+        "max_drawdown_pct": metrics.max_drawdown_pct,
+        "net_pnl_to_max_drawdown": metrics.net_pnl_to_max_drawdown,
         "annual_trades": metrics.annual_trades,
         "avg_trade_net_pnl": metrics.avg_trade_net_pnl,
+        "avg_loss_net_pnl": metrics.avg_loss_net_pnl,
+        "largest_loss_net_pnl": metrics.largest_loss_net_pnl,
+        "max_consecutive_losses": metrics.max_consecutive_losses,
+        "payoff_ratio": metrics.payoff_ratio,
     }
 
 
@@ -1600,6 +1844,7 @@ def build_hard_gate_report(
     min_positive_test_fold_ratio: float = 0.6,
     min_avg_trade_cost_multiple: float = 1.5,
     max_sharpe_decay: float = 0.5,
+    cost_stress_survives: bool | None = None,
 ) -> list[dict]:
     fold_sharpes = [metric.sharpe for metric in fold_test_metrics if metric.sharpe is not None]
     median_fold_sharpe = median(fold_sharpes) if fold_sharpes else None
@@ -1624,6 +1869,7 @@ def build_hard_gate_report(
         hard_gate_row("validation_to_test_sharpe_decay", validation_to_test_decay, f"<= {max_sharpe_decay}", "validation_to_test_sharpe_decay" not in reason_set),
         hard_gate_row("final_holdout_sharpe_decay", final_holdout_metrics.sharpe, ">= 0.7 * test sharpe", "final_holdout_sharpe_decay" not in reason_set),
         hard_gate_row("test_to_holdout_sharpe_decay", test_to_holdout_decay, f"<= {max_sharpe_decay}", "test_to_holdout_sharpe_decay" not in reason_set),
+        hard_gate_row("cost_stress_survival", cost_stress_survives, "worst stress scenario survives", "cost_stress_survival" not in reason_set),
     ]
 
 
@@ -1776,16 +2022,48 @@ def _data_files_for_range(
     raise ValueError(f"Unsupported execution_mode: {execution_mode}")
 
 
-def write_research_result(path: Path, result: ResearchRunResult) -> None:
+def write_research_result(
+    path: Path,
+    result: ResearchRunResult,
+    *,
+    quote_reports: Sequence[Path] = (),
+    paper_reports: Sequence[Path] = (),
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    write_research_artifacts(path.parent, result, leaderboard_path=path)
+    payload = result.to_dict()
+    payload["execution_evidence"] = build_execution_evidence(
+        experiment_dir=path.parent,
+        symbol=payload.get("strategy_spec", {}).get("symbol", PRIMARY_RESEARCH_SYMBOL),
+        execution_validation=payload.get("execution_validation", {}),
+        quote_reports=quote_reports,
+        paper_reports=paper_reports,
+    )
+    payload["candidate_stage"] = build_candidate_stage(
+        gates=payload.get("gates", {}),
+        pre_screen_report=payload.get("pre_screen_report"),
+        execution_validation=payload.get("execution_validation", {}),
+        final_holdout_policy=payload.get("final_holdout_policy", {}),
+        execution_evidence=payload["execution_evidence"],
+    )
+    payload.setdefault("strategy_card", {})["candidate_stage"] = payload["candidate_stage"]
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_research_artifacts(
+        path.parent,
+        result,
+        leaderboard_path=path,
+        persisted_payload=payload,
+        quote_reports=quote_reports,
+        paper_reports=paper_reports,
+    )
 
 
 def write_research_artifacts(
     experiment_dir: Path,
     result: ResearchRunResult,
     leaderboard_path: Path | None = None,
+    persisted_payload: dict[str, Any] | None = None,
+    quote_reports: Sequence[Path] = (),
+    paper_reports: Sequence[Path] = (),
 ) -> None:
     experiment_dir.mkdir(parents=True, exist_ok=True)
     artifact_paths = {
@@ -1793,6 +2071,7 @@ def write_research_artifacts(
         "equity": experiment_dir / "equity.parquet",
         "fold_metrics": experiment_dir / "fold_metrics.parquet",
         "strategy_spec": experiment_dir / "strategy_spec.json",
+        "research_ledger": experiment_dir / "research_ledger.json",
         "run_manifest": experiment_dir / "run_manifest.json",
     }
     row_counts = {
@@ -1800,8 +2079,17 @@ def write_research_artifacts(
         "equity": _write_research_equity(artifact_paths["equity"], result),
         "fold_metrics": _write_research_fold_metrics(artifact_paths["fold_metrics"], result),
         "strategy_spec": 1,
+        "research_ledger": 1,
         "run_manifest": 1,
     }
+    payload = persisted_payload or result.to_dict()
+    ledger = build_research_ledger(
+        result=result,
+        persisted_payload=payload,
+        quote_reports=quote_reports,
+        paper_reports=paper_reports,
+        execution_validation_required=requires_execution_validation(result.strategy_spec.get("symbol")),
+    )
     manifest = {
         "schema_version": 2,
         "experiment_id": result.experiment_id,
@@ -1823,6 +2111,7 @@ def write_research_artifacts(
             "non_overlap_test_metrics": result.non_overlap_test_metrics.to_dict(),
         },
         "pre_screen_report": result.pre_screen_report,
+        "research_ledger_hash": ledger["ledger_hash"],
         "reproducibility": {
             "code_version": result.snapshot.get("code_version"),
             "config_snapshot_hash": result.snapshot.get("config_snapshot_hash"),
@@ -1848,6 +2137,10 @@ def write_research_artifacts(
     }
     artifact_paths["strategy_spec"].write_text(
         json.dumps(result.strategy_spec, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    artifact_paths["research_ledger"].write_text(
+        json.dumps(ledger, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     write_module_performance_memory(
@@ -1888,6 +2181,8 @@ def load_research_artifacts(
     if not manifest_path.exists():
         raise FileNotFoundError(f"Artifact manifest not found for experiment: {experiment_id}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    ledger_path = experiment_dir / "research_ledger.json"
+    research_ledger = json.loads(ledger_path.read_text(encoding="utf-8")) if ledger_path.exists() else {}
     trades = _read_parquet_dicts(
         experiment_dir / "trades.parquet",
         "ORDER BY exit_time, split, fold_index, trade_index",
@@ -1906,6 +2201,7 @@ def load_research_artifacts(
     return {
         "experiment_id": experiment_id,
         "manifest": manifest,
+        "research_ledger": research_ledger,
         "trades": [_json_ready_row(row) for row in trades],
         "equity": [_json_ready_row(row) for row in equity],
         "fold_metrics": [_json_ready_row(row) for row in fold_metrics],
@@ -2196,6 +2492,17 @@ def _write_research_fold_metrics(path: Path, result: ResearchRunResult) -> int:
                 metrics.max_drawdown,
                 metrics.annual_trades,
                 metrics.avg_trade_net_pnl,
+                metrics.winning_trade_count,
+                metrics.losing_trade_count,
+                metrics.win_rate,
+                metrics.avg_win_net_pnl,
+                metrics.avg_loss_net_pnl,
+                metrics.largest_win_net_pnl,
+                metrics.largest_loss_net_pnl,
+                metrics.payoff_ratio,
+                metrics.max_consecutive_losses,
+                metrics.max_drawdown_pct,
+                metrics.net_pnl_to_max_drawdown,
             )
         )
     _write_parquet_rows(
@@ -2205,9 +2512,13 @@ def _write_research_fold_metrics(path: Path, result: ResearchRunResult) -> int:
             "experiment_id VARCHAR, execution_mode VARCHAR, split VARCHAR, fold_index INTEGER, "
             "start_date DATE, end_date DATE, data_version_hash VARCHAR, trade_count INTEGER, "
             "net_pnl DOUBLE, gross_profit DOUBLE, gross_loss DOUBLE, profit_factor DOUBLE, "
-            "sharpe DOUBLE, max_drawdown DOUBLE, annual_trades DOUBLE, avg_trade_net_pnl DOUBLE"
+            "sharpe DOUBLE, max_drawdown DOUBLE, annual_trades DOUBLE, avg_trade_net_pnl DOUBLE, "
+            "winning_trade_count INTEGER, losing_trade_count INTEGER, win_rate DOUBLE, "
+            "avg_win_net_pnl DOUBLE, avg_loss_net_pnl DOUBLE, largest_win_net_pnl DOUBLE, "
+            "largest_loss_net_pnl DOUBLE, payoff_ratio DOUBLE, max_consecutive_losses INTEGER, "
+            "max_drawdown_pct DOUBLE, net_pnl_to_max_drawdown DOUBLE"
         ),
-        "INSERT INTO research_fold_metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO research_fold_metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     return len(rows)
@@ -2231,6 +2542,78 @@ def _write_parquet_rows(
         con.close()
 
 
+def _sort_desc_nullable(value: float | int | None) -> float:
+    if value is None:
+        return float("inf")
+    return -float(value)
+
+
+def _pre_screen_field(report: dict[str, Any], name: str) -> Any:
+    if name in report:
+        return report[name]
+    return report.get("metrics", {}).get(name)
+
+
+def build_execution_stress_summary(
+    cost_sensitivity_report: dict[str, Any] | None,
+    execution_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cost_sensitivity_report = cost_sensitivity_report or {}
+    execution_evidence = execution_evidence or {}
+    scenarios = {
+        scenario.get("name"): scenario
+        for scenario in cost_sensitivity_report.get("stress_scenarios", [])
+    }
+
+    def survives(name: str) -> bool | None:
+        scenario = scenarios.get(name)
+        return None if scenario is None else bool(scenario.get("survives"))
+
+    quote_replay = execution_evidence.get("quote_replay") or {}
+    paper_shadow = execution_evidence.get("paper_shadow") or {}
+    return {
+        "baseline_survives": survives("baseline"),
+        "plus_1_round_trip_tick_survives": survives("plus_1_round_trip_tick"),
+        "plus_2_round_trip_ticks_survives": survives("plus_2_round_trip_ticks"),
+        "worst_case_survives": cost_sensitivity_report.get("worst_case_survives"),
+        "max_extra_round_trip_cost_before_test_pnl_zero": cost_sensitivity_report.get(
+            "max_extra_round_trip_cost_before_test_pnl_zero"
+        ),
+        "quote_replay_status": quote_replay.get("status"),
+        "paper_shadow_status": paper_shadow.get("status"),
+        "promotion_ready": (execution_evidence.get("promotion_gate") or {}).get("ready_for_promotion"),
+        "missing_requirements": execution_evidence.get("missing_requirements", []),
+    }
+
+
+def enforce_pre_screen_gate(gates_payload: dict[str, Any], pre_screen_report: dict | None) -> dict[str, Any]:
+    if (
+        not pre_screen_report
+        or not pre_screen_report.get("hard_gate_enforced", False)
+        or pre_screen_report.get("passed", True)
+    ):
+        return gates_payload
+    reasons = list(dict.fromkeys(list(gates_payload.get("reasons", [])) + list(pre_screen_report.get("reasons", []))))
+    return {
+        **gates_payload,
+        "passed": False,
+        "reasons": reasons,
+        "pre_screen_stage": "hard_reject",
+    }
+
+
+def enforce_cost_stress_gate(gates_payload: dict[str, Any], cost_sensitivity_report: dict[str, Any] | None) -> dict[str, Any]:
+    if not cost_sensitivity_report or cost_sensitivity_report.get("worst_case_survives") is not False:
+        return gates_payload
+    reasons = list(dict.fromkeys(list(gates_payload.get("reasons", [])) + ["cost_stress_survival"]))
+    return {
+        **gates_payload,
+        "passed": False,
+        "reasons": reasons,
+        "cost_stress_stage": "hard_reject",
+    }
+
+
 def load_leaderboard(experiments_root: Path) -> list[dict]:
     rows = []
     for result_path in sorted(experiments_root.glob("*/leaderboard.json")):
@@ -2238,6 +2621,7 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
         rows.append(
             {
                 "experiment_id": payload["experiment_id"],
+                "experiment_dir": str(result_path.parent),
                 "execution_mode": payload.get("execution_mode", "bar"),
                 "data_version_hash": payload.get("data_version_hash"),
                 "snapshot": payload.get("snapshot", {}),
@@ -2266,69 +2650,219 @@ def load_leaderboard(experiments_root: Path) -> list[dict]:
                 "strategy_card": payload.get("strategy_card", {}),
                 "hard_gate_report": payload.get("hard_gate_report", []),
                 "signal_similarity_report": payload.get("signal_similarity_report", {}),
+                "execution_validation": payload.get("execution_validation", {}),
+                "execution_evidence": payload.get("execution_evidence", {}),
+                "execution_stress_summary": build_execution_stress_summary(
+                    payload.get("cost_sensitivity_report", {}),
+                    payload.get("execution_evidence", {}),
+                ),
+                "candidate_stage": payload.get("candidate_stage")
+                or payload.get("strategy_card", {}).get("candidate_stage"),
                 "next_round_suggestions": payload.get("next_round_suggestions", []),
                 "final_holdout_policy": payload.get("final_holdout_policy", {}),
                 "pre_screen_report": payload.get("pre_screen_report", {}),
+                "pre_screen_passed": payload.get("pre_screen_report", {}).get("passed"),
+                "prescreen_stage": _pre_screen_field(payload.get("pre_screen_report", {}), "prescreen_stage")
+                or payload.get("pre_screen_report", {}).get("stage"),
+                "trades_per_day": _pre_screen_field(payload.get("pre_screen_report", {}), "trades_per_day"),
+                "validation_avg_mid_trade": _pre_screen_field(
+                    payload.get("pre_screen_report", {}),
+                    "validation_avg_mid_trade",
+                ),
+                "validation_cost_coverage": _pre_screen_field(
+                    payload.get("pre_screen_report", {}),
+                    "validation_cost_coverage",
+                ),
+                "stress_survival_flag": _pre_screen_field(
+                    payload.get("pre_screen_report", {}),
+                    "stress_survival_flag",
+                ),
                 "overlapping_test_folds": payload.get("overlapping_test_folds", False),
                 "non_overlap_test_fold_indexes": payload.get("non_overlap_test_fold_indexes", []),
                 "passed": payload["gates"]["passed"],
                 "robustness_score": payload["robustness_score"],
                 "net_pnl_validation": payload.get("aggregate_validation_metrics", {}).get("net_pnl"),
                 "sharpe_validation": payload.get("aggregate_validation_metrics", {}).get("sharpe"),
+                "avg_trade_net_pnl_validation": payload.get("aggregate_validation_metrics", {}).get("avg_trade_net_pnl"),
                 "net_pnl_test": payload["aggregate_test_metrics"]["net_pnl"],
                 "sharpe_test": payload["aggregate_test_metrics"]["sharpe"],
                 "annual_trades_test": payload["aggregate_test_metrics"]["annual_trades"],
+                "avg_trade_net_pnl_test": payload["aggregate_test_metrics"].get("avg_trade_net_pnl"),
                 "win_probability_test": payload.get("win_probability_test"),
                 "net_pnl_non_overlap_test": payload.get("non_overlap_test_metrics", {}).get("net_pnl"),
                 "sharpe_non_overlap_test": payload.get("non_overlap_test_metrics", {}).get("sharpe"),
                 "annual_trades_non_overlap_test": (
                     payload.get("non_overlap_test_metrics", {}).get("annual_trades")
                 ),
+                "symbol": payload.get("strategy_spec", {}).get("symbol", PRIMARY_RESEARCH_SYMBOL),
+                "primary_conclusion_eligible": payload.get("strategy_spec", {}).get("symbol", PRIMARY_RESEARCH_SYMBOL)
+                == PRIMARY_RESEARCH_SYMBOL,
                 "net_pnl_holdout": payload["final_holdout_metrics"]["net_pnl"],
+                "avg_trade_net_pnl_holdout": payload["final_holdout_metrics"].get("avg_trade_net_pnl"),
                 "reasons": payload["gates"]["reasons"],
             }
+        )
+    for row in rows:
+        if not row.get("execution_validation"):
+            row["execution_validation"] = build_execution_validation_status(
+                symbol=row.get("symbol"),
+                execution_mode=row.get("execution_mode", "bar"),
+                promotion_report=row.get("promotion_report", {}),
+            )
+        if not row.get("candidate_stage"):
+            row["candidate_stage"] = ""
+        if not row.get("execution_evidence"):
+            row["execution_evidence"] = build_execution_evidence(
+                experiment_dir=Path(row["experiment_dir"]),
+                symbol=row.get("symbol"),
+                execution_validation=row["execution_validation"],
+            )
+        row["candidate_stage"] = build_candidate_stage(
+            gates={"passed": row.get("passed", False), "reasons": row.get("reasons", [])},
+            pre_screen_report=row.get("pre_screen_report"),
+            execution_validation=row["execution_validation"],
+            final_holdout_policy=row.get("final_holdout_policy", {}),
+            execution_evidence=row["execution_evidence"],
         )
     return sorted(
         rows,
         key=lambda item: (
             not item["passed"],
+            _sort_desc_nullable(item["avg_trade_net_pnl_test"]),
+            _sort_desc_nullable(item.get("avg_trade_net_pnl_validation")),
             -(item["robustness_score"] or -1),
             -item["net_pnl_test"],
         ),
     )
 
 
-def load_leaderboard_report(experiments_root: Path) -> dict:
-    rows = load_leaderboard(experiments_root)
+def build_execution_validation_summary(
+    rows: Sequence[dict],
+    candidate_leaderboard: Sequence[dict],
+    freeze_confirmed_leaderboard: Sequence[dict],
+) -> dict[str, Any]:
+    statuses = (
+        "validated",
+        "pending_execution_validation",
+        "blocked_before_execution",
+        "not_required",
+    )
+
+    def summarize(collection: Sequence[dict]) -> dict[str, int]:
+        summary = {status: 0 for status in statuses}
+        required = 0
+        for row in collection:
+            validation = row.get("execution_validation", {})
+            status = validation.get("status")
+            if status in summary:
+                summary[status] += 1
+            if validation.get("required"):
+                required += 1
+        summary["required"] = required
+        summary["total"] = len(collection)
+        return summary
+
+    primary_rows = [row for row in rows if requires_execution_validation(row.get("symbol"))]
+    primary_candidates = [row for row in candidate_leaderboard if requires_execution_validation(row.get("symbol"))]
+    return {
+        "overall": summarize(rows),
+        "candidate": summarize(candidate_leaderboard),
+        "primary_research_track": summarize(primary_rows),
+        "primary_candidate": summarize(primary_candidates),
+        "freeze_confirmed": len(freeze_confirmed_leaderboard),
+        "requires_execution_validation": any(
+            row.get("execution_validation", {}).get("required") for row in rows
+        ),
+    }
+
+
+def build_execution_evidence_summary(rows: Sequence[dict]) -> dict[str, Any]:
+    statuses = (
+        "ready_for_promotion",
+        "incomplete_evidence",
+        "awaiting_execution_validation",
+        "blocked_before_execution",
+        "not_required",
+    )
+    summary = {status: 0 for status in statuses}
+    missing_requirements: dict[str, int] = {}
+    for row in rows:
+        evidence = row.get("execution_evidence", {})
+        status = evidence.get("status")
+        if status in summary:
+            summary[status] += 1
+        if row.get("passed"):
+            for requirement in evidence.get("missing_requirements", []):
+                missing_requirements[requirement] = missing_requirements.get(requirement, 0) + 1
+    summary["total"] = len(rows)
+    return {
+        "statuses": summary,
+        "missing_requirements": missing_requirements,
+    }
+
+
+def build_leaderboard_report_payload(rows: Sequence[dict]) -> dict[str, Any]:
     candidate_leaderboard = sorted(
         [row for row in rows if row["passed"]],
-        key=lambda item: (-(item["robustness_score"] or -1), -item["net_pnl_test"]),
+        key=lambda item: (
+            item.get("symbol") != PRIMARY_RESEARCH_SYMBOL,
+            _sort_desc_nullable(item["avg_trade_net_pnl_test"]),
+            _sort_desc_nullable(item.get("avg_trade_net_pnl_validation")),
+            -(item["robustness_score"] or -1),
+            -item["net_pnl_test"],
+        ),
     )
     freeze_confirmed_leaderboard = [
         row
         for row in candidate_leaderboard
-        if row.get("final_holdout_policy", {}).get("strict_freeze_task_implemented") is True
+        if row.get("primary_conclusion_eligible") is True
+        and row.get("final_holdout_policy", {}).get("strict_freeze_task_implemented") is True
+        and (row.get("final_holdout_policy", {}).get("freeze_gate") or {}).get("passed", True) is not False
+        and row.get("execution_validation", {}).get("status") in {"validated", "not_required"}
+        and row.get("execution_evidence", {}).get("status") in {"ready_for_promotion", "not_required"}
     ]
     rejected = sorted(
         [row for row in rows if not row["passed"]],
         key=lambda item: (-item["net_pnl_test"], item["experiment_id"]),
     )
+    execution_validation_summary = build_execution_validation_summary(
+        rows,
+        candidate_leaderboard,
+        freeze_confirmed_leaderboard,
+    )
+    execution_evidence_summary = build_execution_evidence_summary(rows)
+    candidate_stage_summary: dict[str, int] = {}
+    for row in rows:
+        stage = row.get("candidate_stage", "unknown")
+        candidate_stage_summary[stage] = candidate_stage_summary.get(stage, 0) + 1
+    pending_candidates = execution_validation_summary["candidate"]["pending_execution_validation"]
+    blocked_primary_runs = execution_validation_summary["primary_research_track"]["blocked_before_execution"]
+    incomplete_execution_evidence = execution_evidence_summary["statuses"]["incomplete_evidence"]
+    if freeze_confirmed_leaderboard:
+        message = f"Found {len(freeze_confirmed_leaderboard)} freeze-confirmed qualified strategies."
+    else:
+        message = "No qualified strategies found under the current out-of-sample gates."
+    if pending_candidates:
+        message = f"{message} {pending_candidates} passed candidates still await execution validation."
+    if blocked_primary_runs:
+        message = f"{message} {blocked_primary_runs} primary-track runs were blocked before execution validation."
+    if incomplete_execution_evidence:
+        message = f"{message} {incomplete_execution_evidence} validated runs still lack complete quote/paper execution evidence."
     return {
         "leaderboard": freeze_confirmed_leaderboard,
         "candidate_leaderboard": candidate_leaderboard,
         "freeze_confirmed_leaderboard": freeze_confirmed_leaderboard,
         "rejected": rejected,
         "rows": rows,
+        "execution_validation_summary": execution_validation_summary,
+        "execution_evidence_summary": execution_evidence_summary,
+        "candidate_stage_summary": candidate_stage_summary,
         "conclusion": (
             "qualified_strategies_found"
             if freeze_confirmed_leaderboard
             else "no_qualified_strategies_found"
         ),
-        "message": (
-            f"Found {len(freeze_confirmed_leaderboard)} freeze-confirmed qualified strategies."
-            if freeze_confirmed_leaderboard
-            else "No qualified strategies found under the current out-of-sample gates."
-        ),
+        "message": message,
         "summary": {
             "passed": len(freeze_confirmed_leaderboard),
             "candidate": len(candidate_leaderboard),
@@ -2337,6 +2871,11 @@ def load_leaderboard_report(experiments_root: Path) -> dict:
             "total": len(rows),
         },
     }
+
+
+def load_leaderboard_report(experiments_root: Path) -> dict:
+    rows = load_leaderboard(experiments_root)
+    return build_leaderboard_report_payload(rows)
 
 
 def summarize_yearly_trades(trades: Sequence[Trade]) -> list[dict]:
@@ -2667,7 +3206,7 @@ def build_cost_sensitivity_report(
     test_days: int,
     holdout_days: int,
 ) -> dict:
-    extra_slippage_round_trip = 2 * cost_model.tick_size * cost_model.point_value
+    tick_value = cost_model.tick_size * cost_model.point_value
     baseline_round_trip_cost = calculate_round_trip_cost(cost_model)
     scenarios = [
         {
@@ -2675,16 +3214,20 @@ def build_cost_sensitivity_report(
             "extra_round_trip_cost": 0.0,
         },
         {
-            "name": "plus_1_tick_slippage_per_side",
-            "extra_round_trip_cost": extra_slippage_round_trip,
+            "name": "plus_1_round_trip_tick",
+            "extra_round_trip_cost": tick_value,
+        },
+        {
+            "name": "plus_2_round_trip_ticks",
+            "extra_round_trip_cost": tick_value * 2,
         },
         {
             "name": "double_fees",
             "extra_round_trip_cost": cost_model.round_trip_fees_usd,
         },
         {
-            "name": "plus_1_tick_slippage_per_side_and_double_fees",
-            "extra_round_trip_cost": extra_slippage_round_trip + cost_model.round_trip_fees_usd,
+            "name": "plus_2_round_trip_ticks_and_double_fees",
+            "extra_round_trip_cost": tick_value * 2 + cost_model.round_trip_fees_usd,
         },
     ]
     scenario_reports = []

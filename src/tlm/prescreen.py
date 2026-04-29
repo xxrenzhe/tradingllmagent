@@ -17,6 +17,8 @@ def build_pre_screen_report(
     min_trade_count: int = 30,
     min_cost_coverage: float = 2.0,
     min_avg_mid_trade: float = 15.0,
+    min_trades_per_day: float = 2.0,
+    max_trades_per_day: float = 12.0,
     max_stop_loss_ratio: float = 0.65,
     max_top_day_pnl_share: float = 0.4,
 ) -> dict:
@@ -40,6 +42,8 @@ def build_pre_screen_report(
         for trade in trades
     ]
     avg_holding_minutes = sum(holding_minutes) / len(holding_minutes) if holding_minutes else None
+    trading_days = {trade.entry_time.date().isoformat() for trade in trades}
+    trades_per_day = trade_count / len(trading_days) if trading_days else None
     for trade in trades:
         by_day[trade.entry_time.date().isoformat()] += trade.net_pnl
     top_day_pnl = max(by_day.values(), default=0.0)
@@ -53,20 +57,33 @@ def build_pre_screen_report(
         reasons.append("insufficient_cost_coverage")
     if avg_mid_trade is not None and avg_mid_trade < min_avg_mid_trade:
         reasons.append("insufficient_mid_price_edge")
+    if trades_per_day is None or trades_per_day < min_trades_per_day:
+        reasons.append("trades_per_day_below_prescreen_minimum")
+    if trades_per_day is not None and trades_per_day > max_trades_per_day:
+        reasons.append("trades_per_day_above_prescreen_maximum")
     if stop_loss_ratio is not None and stop_loss_ratio > max_stop_loss_ratio:
         reasons.append("stop_loss_ratio_above_limit")
     if top_day_pnl_share is not None and top_day_pnl_share > max_top_day_pnl_share:
         reasons.append("top_day_pnl_concentration")
     if inverse_metrics is not None and inverse_metrics.net_pnl > metrics.net_pnl:
         reasons.append("inverse_signal_better")
+    stress_survival_flag = cost_coverage is not None and cost_coverage >= min_cost_coverage
+    prescreen_stage = "pre_screen_passed" if not reasons else "pre_screen_rejected"
     return {
         "artifact": "cheap_pre_screen_report",
         "passed": not reasons,
         "reasons": reasons,
+        "prescreen_stage": prescreen_stage,
+        "trades_per_day": trades_per_day,
+        "validation_avg_mid_trade": avg_mid_trade,
+        "validation_cost_coverage": cost_coverage,
+        "stress_survival_flag": stress_survival_flag,
         "thresholds": {
             "min_trade_count": min_trade_count,
             "min_cost_coverage": min_cost_coverage,
             "min_avg_mid_trade": min_avg_mid_trade,
+            "min_trades_per_day": min_trades_per_day,
+            "max_trades_per_day": max_trades_per_day,
             "max_stop_loss_ratio": max_stop_loss_ratio,
             "max_top_day_pnl_share": max_top_day_pnl_share,
         },
@@ -79,6 +96,10 @@ def build_pre_screen_report(
             "avg_explicit_cost_trade": avg_explicit_cost_trade,
             "avg_mid_trade": avg_mid_trade,
             "cost_coverage": cost_coverage,
+            "trades_per_day": trades_per_day,
+            "validation_avg_mid_trade": avg_mid_trade,
+            "validation_cost_coverage": cost_coverage,
+            "stress_survival_flag": stress_survival_flag,
             "top_day_pnl": top_day_pnl,
             "top_day_pnl_share": top_day_pnl_share,
             "stop_loss_ratio": stop_loss_ratio,

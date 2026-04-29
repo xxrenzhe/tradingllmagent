@@ -98,6 +98,7 @@ export default function App() {
   const [readinessDecision, setReadinessDecision] = useState(null);
   const [externalValidation, setExternalValidation] = useState(null);
   const [gatewayOverview, setGatewayOverview] = useState(null);
+  const [ibkrOverview, setIbkrOverview] = useState(null);
   const [approvalQueue, setApprovalQueue] = useState(null);
   const [costCalibration, setCostCalibration] = useState(null);
   const [costSampleJson, setCostSampleJson] = useState("[]");
@@ -323,6 +324,57 @@ export default function App() {
     setGatewayOverview({ health, reconciliation, incidents, orderUpdates });
     setApprovalQueue(approval);
     return { task_id: "gateway overview refreshed" };
+  }
+
+  async function refreshIbkrOverview() {
+    const [health, readiness, contracts, marketData, bracketOrders, ledger, incidents, report] = await Promise.all([
+      apiRequest(apiBase, API_PATHS.ibkrHealth),
+      apiRequest(apiBase, API_PATHS.ibkrReadiness),
+      apiRequest(apiBase, API_PATHS.ibkrContracts),
+      apiRequest(apiBase, API_PATHS.ibkrMarketData),
+      apiRequest(apiBase, API_PATHS.ibkrBracketOrders),
+      apiRequest(apiBase, API_PATHS.ibkrExecutionLedger),
+      apiRequest(apiBase, API_PATHS.ibkrIncidents),
+      apiRequest(apiBase, API_PATHS.ibkrPaperReport())
+    ]);
+    const review = await apiRequest(apiBase, API_PATHS.ibkrReviews, {
+      method: "POST",
+      body: JSON.stringify({
+        execution_ledger: ledger,
+        risk_context: { data_stale: marketData.status !== "ready" },
+        strategy_state: {
+          tick_size: contracts.contract?.expected_tick_size ?? 0.25,
+          stop_loss_ticks: 20,
+          take_profit_ticks: 40,
+          max_holding_minutes: 20
+        }
+      })
+    });
+    const optimizer = await apiRequest(apiBase, API_PATHS.ibkrFastPathOptimizer, {
+      method: "POST",
+      body: JSON.stringify({
+        control_state: {
+          mode: "paper",
+          min_confidence: 0.55,
+          max_spread_ticks: 3,
+          daily_trade_cap: 6,
+          strategies: {},
+          trade_session: { start: "09:30", end: "15:55" }
+        },
+        review_result: review.review_result
+      })
+    });
+    setIbkrOverview({ health, readiness, contracts, marketData, bracketOrders, ledger, incidents, report, review, optimizer });
+    return { task_id: "ibkr paper overview refreshed" };
+  }
+
+  async function triggerIbkrKillSwitch() {
+    const killSwitch = await apiRequest(apiBase, API_PATHS.ibkrKillSwitch, {
+      method: "POST",
+      body: JSON.stringify({ reason: "webui_manual" })
+    });
+    await refreshIbkrOverview();
+    return { task_id: killSwitch.event_type ?? "ibkr kill switch triggered" };
   }
 
   async function buildCostCalibration() {
@@ -977,10 +1029,17 @@ export default function App() {
             <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("Gateway", refreshGatewayOverview)}>
               Refresh Gateway State
             </ActionButton>
+            <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("IBKR Paper", refreshIbkrOverview)}>
+              Refresh IBKR Paper
+            </ActionButton>
+            <ActionButton variant="secondary" disabled={isPending} onClick={() => runAction("IBKR Kill Switch", triggerIbkrKillSwitch)}>
+              IBKR Kill Switch
+            </ActionButton>
           </div>
           {readinessDecision ? <ReadinessSummary decision={readinessDecision} /> : <EmptyState title="No readiness decision" text="Evaluate evidence before enabling any execution stage." />}
           {externalValidation ? <JsonBlock payload={externalValidation} /> : null}
           {gatewayOverview ? <GatewayReadinessSummary overview={gatewayOverview} approvalQueue={approvalQueue} /> : null}
+          {ibkrOverview ? <IbkrPaperSummary overview={ibkrOverview} /> : null}
         </Panel>
       </section>
 
@@ -2025,6 +2084,48 @@ function GatewayReadinessSummary({ overview, approvalQueue }) {
         <Metric label="Order Updates" value={orderUpdates.event_count ?? 0} detail="append-only gateway stream" />
       </div>
       <JsonBlock payload={{ overview, approvalQueue }} />
+    </div>
+  );
+}
+
+function IbkrPaperSummary({ overview }) {
+  const health = overview.health ?? {};
+  const readiness = overview.readiness ?? {};
+  const contracts = overview.contracts ?? {};
+  const marketData = overview.marketData ?? {};
+  const bracketOrders = overview.bracketOrders ?? {};
+  const ledger = overview.ledger ?? {};
+  const incidents = overview.incidents ?? {};
+  const report = overview.report ?? {};
+  const metrics = report.metrics ?? {};
+  const reviewResult = overview.review?.review_result ?? {};
+  const optimizer = overview.optimizer ?? {};
+  const latestAccount = ledger.latest_account_snapshot ?? {};
+  const openPositionQuantity = (ledger.positions ?? []).reduce((total, position) => total + (Number(position.quantity) || 0), 0);
+  const realizedPnl = latestAccount.realized_pnl ?? ledger.net_realized_pnl;
+  const dailyPnl = latestAccount.daily_pnl ?? realizedPnl;
+  return (
+    <div className="readiness-grid">
+      <div className="readiness-banner">
+        <span className={`status-pill ${readiness.status === "ready" ? "completed" : "blocked"}`}>{readiness.status ?? "unknown"}</span>
+        <strong>IBKR Paper</strong>
+        <small>{(readiness.missing_requirements ?? []).slice(0, 4).join(", ") || "paper gateway ready"}</small>
+      </div>
+      <div className="strict-validation-grid">
+        <Metric label="Gateway" value={health.status ?? "-"} detail={health.paper_account_verified ? "paper account verified" : "paper account not verified"} />
+        <Metric label="Contract" value={contracts.status ?? "-"} detail={contracts.contract?.localSymbol ?? contracts.contract?.symbol ?? "MNQ"} />
+        <Metric label="Market Data" value={marketData.status ?? "-"} detail={marketData.snapshot ? `${formatNumber(marketData.snapshot.spread)} spread, ${formatNumber(marketData.snapshot.age_seconds, 1)}s old` : "no real-time quote"} />
+        <Metric label="Open Brackets" value={formatCompact(bracketOrders.open_bracket_order_count ?? 0)} detail={`${formatCompact(bracketOrders.order_event_count ?? 0)} order events`} />
+        <Metric label="Fills" value={formatCompact(ledger.fill_count ?? 0)} detail={`${formatNumber(ledger.total_commission ?? 0)} commission`} />
+        <Metric label="Real PnL" value={formatNumber(realizedPnl ?? 0)} detail={`${formatNumber(dailyPnl ?? 0)} daily PnL`} />
+        <Metric label="Net PnL" value={formatNumber(metrics.net_pnl_after_commission ?? 0)} detail={`${formatNumber(metrics.expectancy ?? 0)} expectancy`} />
+        <Metric label="Position" value={formatCompact(openPositionQuantity)} detail={`${formatCompact(ledger.position_count ?? 0)} position snapshots`} />
+        <Metric label="LLM Review" value={reviewResult.action ?? "-"} detail={`${reviewResult.confidence ?? "-"} confidence, 5m cadence`} />
+        <Metric label="Fast Path" value={optimizer.status ?? "-"} detail={`${formatCompact((optimizer.applied ?? []).length)} applied, ${formatCompact((optimizer.rejected ?? []).length)} rejected`} />
+        <Metric label="Promotion" value={formatCompact((report.promotion_blockers ?? []).length)} detail={(report.promotion_blockers ?? []).slice(0, 2).join(", ") || "no blockers"} />
+        <Metric label="Incidents" value={formatCompact(incidents.count ?? 0)} detail={health.safe_mode ? "safe mode active" : "normal paper mode"} />
+      </div>
+      <JsonBlock payload={overview} />
     </div>
   );
 }

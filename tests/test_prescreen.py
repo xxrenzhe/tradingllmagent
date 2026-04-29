@@ -75,6 +75,12 @@ class CheapPreScreenTests(unittest.TestCase):
         self.assertTrue(report["passed"])
         self.assertGreater(report["metrics"]["cost_coverage"], 2)
         self.assertEqual(report["metrics"]["stop_loss_ratio"], 0.0)
+        self.assertEqual(report["prescreen_stage"], "pre_screen_passed")
+        self.assertEqual(report["trades_per_day"], 4.0)
+        self.assertEqual(report["metrics"]["trades_per_day"], 4.0)
+        self.assertIsNone(report["validation_avg_mid_trade"])
+        self.assertGreater(report["validation_cost_coverage"], 2)
+        self.assertTrue(report["stress_survival_flag"])
         self.assertEqual(report["exit_reason_counts"]["take_profit"], 40)
 
     def test_prescreen_rejects_insufficient_mid_price_edge_when_provided(self) -> None:
@@ -113,7 +119,77 @@ class CheapPreScreenTests(unittest.TestCase):
 
         self.assertFalse(report["passed"])
         self.assertIn("insufficient_mid_price_edge", report["reasons"])
+        self.assertEqual(report["prescreen_stage"], "pre_screen_rejected")
+        self.assertEqual(report["validation_avg_mid_trade"], 2.0)
         self.assertEqual(report["metrics"]["avg_mid_trade"], 2.0)
+
+    def test_prescreen_rejects_too_few_trades_per_day(self) -> None:
+        start = datetime(2025, 1, 2, 13, 30)
+        trades = []
+        equity = [100000]
+        pnls = []
+        for index in range(30):
+            trades.append(
+                Trade(
+                    symbol="NQ_CME",
+                    side="long",
+                    entry_time=start + timedelta(days=index, minutes=1),
+                    exit_time=start + timedelta(days=index, minutes=2),
+                    entry_price=100,
+                    exit_price=102,
+                    contracts=1,
+                    gross_pnl=35,
+                    fees=5,
+                    slippage_cost=10,
+                    net_pnl=20,
+                    entry_reason="feature_signal",
+                    exit_reason="take_profit",
+                )
+            )
+            pnls.append(20)
+            equity.append(equity[-1] + 20)
+        metrics = calculate_metrics(pnls, equity, 100000, 30)
+
+        report = build_pre_screen_report(trades, metrics, round_trip_cost=15)
+
+        self.assertFalse(report["passed"])
+        self.assertEqual(report["trades_per_day"], 1.0)
+        self.assertIn("trades_per_day_below_prescreen_minimum", report["reasons"])
+        self.assertEqual(report["thresholds"]["min_trades_per_day"], 2.0)
+
+    def test_prescreen_rejects_over_frequency_candidates(self) -> None:
+        start = datetime(2025, 1, 2, 13, 30)
+        trades = []
+        equity = [100000]
+        pnls = []
+        for index in range(39):
+            trades.append(
+                Trade(
+                    symbol="NQ_CME",
+                    side="long",
+                    entry_time=start + timedelta(days=index % 3, minutes=index),
+                    exit_time=start + timedelta(days=index % 3, minutes=index + 1),
+                    entry_price=100,
+                    exit_price=102,
+                    contracts=1,
+                    gross_pnl=35,
+                    fees=5,
+                    slippage_cost=10,
+                    net_pnl=20,
+                    entry_reason="feature_signal",
+                    exit_reason="take_profit",
+                )
+            )
+            pnls.append(20)
+            equity.append(equity[-1] + 20)
+        metrics = calculate_metrics(pnls, equity, 100000, 3)
+
+        report = build_pre_screen_report(trades, metrics, round_trip_cost=15)
+
+        self.assertFalse(report["passed"])
+        self.assertEqual(report["trades_per_day"], 13.0)
+        self.assertIn("trades_per_day_above_prescreen_maximum", report["reasons"])
+        self.assertEqual(report["thresholds"]["max_trades_per_day"], 12.0)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,10 @@ from .events import (
 )
 from .experiments import load_experiment_audit_logs, load_experiment_summary
 from .feature_catalog import FEATURE_CATALOG, feature_readiness_report
+from .ibkr_gateway import IbkrPaperGateway
+from .ibkr_optimizer import apply_fast_path_control_diff
+from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
+from .ibkr_review import build_five_minute_review_request, deterministic_fallback_review
 from .execution import (
     build_execution_intent_response_with_registry,
     build_execution_intent_response,
@@ -42,7 +46,7 @@ from .paper import (
     replay_trades,
 )
 from .readiness import build_external_validation_artifact
-from .research import load_leaderboard_report, load_research_artifacts
+from .research import build_leaderboard_report_payload, load_leaderboard_report, load_research_artifacts
 from .storage import bar_path
 from .strategy import StrategySpecError, load_strategy_spec
 from .tasks import (
@@ -88,12 +92,25 @@ def build_paper_replay_response(payload: dict) -> dict:
 def build_feature_readiness_response() -> dict:
     report = feature_readiness_report()
     report["features"] = [feature.to_dict() for feature in FEATURE_CATALOG]
-    manifest_path = Path("strategies/generated/feature_combo_manifest.json")
-    if manifest_path.exists():
+    manifest_path = next(
+        (
+            path
+            for path in (
+                Path("strategies/generated/primary_nq_manifest.json"),
+                Path("strategies/generated/feature_combo_manifest.json"),
+            )
+            if path.exists()
+        ),
+        None,
+    )
+    if manifest_path is not None:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         report["generated_strategy_manifest"] = manifest
         report["generated_strategy_summary"] = {
             "method": manifest.get("method"),
+            "manifest_path": str(manifest_path),
+            "primary_research_track": manifest.get("primary_research_track", False),
+            "candidate_family_set": manifest.get("candidate_family_set", []),
             "strategy_count": len(manifest.get("strategies", [])),
             "complexity_limit": manifest.get("complexity_limit"),
             "max_complexity_score": manifest.get("max_complexity_score"),
@@ -103,6 +120,9 @@ def build_feature_readiness_response() -> dict:
         report["generated_strategy_manifest"] = {}
         report["generated_strategy_summary"] = {
             "method": "none",
+            "manifest_path": None,
+            "primary_research_track": False,
+            "candidate_family_set": [],
             "strategy_count": 0,
             "complexity_limit": None,
             "max_complexity_score": None,
@@ -143,35 +163,13 @@ def build_nt_export_signal_response(payload: dict) -> dict:
 def build_leaderboard_response(experiments_root: Path, experiment_id: str | None = None) -> dict:
     report = load_leaderboard_report(experiments_root)
     if experiment_id:
-        for key in [
-            "leaderboard",
-            "candidate_leaderboard",
-            "freeze_confirmed_leaderboard",
-            "rejected",
-            "rows",
-        ]:
-            report[key] = [
+        report = build_leaderboard_report_payload(
+            [
                 row
-                for row in report[key]
+                for row in report["rows"]
                 if row["experiment_id"] == experiment_id
                 or row["experiment_id"].startswith(f"{experiment_id}_")
             ]
-        report["summary"] = {
-            "passed": len(report["leaderboard"]),
-            "candidate": len(report["candidate_leaderboard"]),
-            "freeze_confirmed": len(report["freeze_confirmed_leaderboard"]),
-            "rejected": len(report["rejected"]),
-            "total": len(report["rows"]),
-        }
-        report["conclusion"] = (
-            "qualified_strategies_found"
-            if report["leaderboard"]
-            else "no_qualified_strategies_found"
-        )
-        report["message"] = (
-            f"Found {len(report['leaderboard'])} freeze-confirmed qualified strategies."
-            if report["leaderboard"]
-            else "No qualified strategies found under the current out-of-sample gates."
         )
     return report
 
@@ -415,6 +413,9 @@ def create_app():
         ) from exc
 
     nt8_gateway = Nt8SimGateway()
+    ibkr_gateway = IbkrPaperGateway()
+    ibkr_review_history: list[dict] = []
+    ibkr_optimizer_history: list[dict] = []
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -624,6 +625,10 @@ def create_app():
     @app.post("/api/experiments/research-runs")
     def experiments_research_runs(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
         return create_task(Path(task_db), "research.run", payload)
+
+    @app.post("/api/experiments/primary-research-runs")
+    def experiments_primary_research_runs(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
+        return create_task(Path(task_db), "research.primary_run", payload)
 
     @app.post("/api/experiments/proposals")
     def experiments_proposals(payload: dict = Body(...), task_db: str = "experiments/tasks.sqlite3") -> dict:
@@ -844,6 +849,175 @@ def create_app():
     @app.get("/api/gateways/nt8/incidents")
     def nt8_incidents() -> dict:
         return {"incidents": nt8_gateway.incident_events, "count": len(nt8_gateway.incident_events)}
+
+    @app.get("/api/gateways/ibkr/health")
+    def ibkr_health() -> dict:
+        return ibkr_gateway.health()
+
+    @app.get("/api/gateways/ibkr/readiness")
+    def ibkr_readiness(symbol: str = "MNQ", max_stale_seconds: int = 5) -> dict:
+        return ibkr_gateway.readiness(symbol=symbol, max_stale_seconds=max_stale_seconds)
+
+    @app.get("/api/gateways/ibkr/contracts")
+    def ibkr_contracts(symbol: str = "MNQ") -> dict:
+        return ibkr_gateway.contract_readiness(symbol)
+
+    @app.post("/api/gateways/ibkr/contracts")
+    def ibkr_contracts_post(payload: dict = Body(...)) -> dict:
+        return ibkr_gateway.record_contract_details(payload)
+
+    @app.get("/api/gateways/ibkr/market-data")
+    def ibkr_market_data(symbol: str = "MNQ", max_stale_seconds: int = 5) -> dict:
+        return ibkr_gateway.market_data_readiness(symbol, max_stale_seconds=max_stale_seconds)
+
+    @app.post("/api/gateways/ibkr/market-data")
+    def ibkr_market_data_post(payload: dict = Body(...)) -> dict:
+        return ibkr_gateway.record_market_data(payload)
+
+    @app.post("/api/gateways/ibkr/connect")
+    def ibkr_connect(payload: dict = Body(default={})) -> dict:
+        return ibkr_gateway.connect(payload)
+
+    @app.post("/api/gateways/ibkr/disconnect")
+    def ibkr_disconnect(payload: dict = Body(default={})) -> dict:
+        return ibkr_gateway.disconnect(str(payload.get("reason", "manual")))
+
+    @app.post("/api/gateways/ibkr/safe-mode")
+    def ibkr_safe_mode(payload: dict = Body(default={})) -> dict:
+        return ibkr_gateway.enter_safe_mode(str(payload.get("reason", "manual")))
+
+    @app.post("/api/gateways/ibkr/bracket-orders")
+    def ibkr_bracket_orders(payload: dict = Body(...)) -> dict:
+        return ibkr_gateway.build_bracket_order(payload)
+
+    @app.get("/api/gateways/ibkr/bracket-orders")
+    def ibkr_bracket_orders_report() -> dict:
+        return ibkr_gateway.bracket_order_report()
+
+    @app.post("/api/gateways/ibkr/cancel-orders")
+    def ibkr_cancel_orders(payload: dict = Body(default={})) -> dict:
+        return ibkr_gateway.cancel_open_orders(str(payload.get("reason", "manual")))
+
+    @app.post("/api/gateways/ibkr/flatten")
+    def ibkr_flatten(payload: dict = Body(default={})) -> dict:
+        return ibkr_gateway.flatten_paper_position(str(payload.get("reason", "manual")))
+
+    @app.post("/api/gateways/ibkr/kill-switch")
+    def ibkr_kill_switch(payload: dict = Body(default={})) -> dict:
+        return ibkr_gateway.kill_switch(str(payload.get("reason", "manual")))
+
+    @app.get("/api/gateways/ibkr/execution-ledger")
+    def ibkr_execution_ledger() -> dict:
+        return ibkr_gateway.execution_ledger()
+
+    @app.get("/api/gateways/ibkr/orders")
+    def ibkr_orders() -> dict:
+        return ibkr_gateway.orders_report()
+
+    @app.get("/api/gateways/ibkr/executions")
+    def ibkr_executions_get() -> dict:
+        return ibkr_gateway.executions_report()
+
+    @app.post("/api/gateways/ibkr/order-status")
+    def ibkr_order_status(payload: dict = Body(...)) -> dict:
+        return ibkr_gateway.record_order_status(payload)
+
+    @app.post("/api/gateways/ibkr/executions")
+    def ibkr_executions(payload: dict = Body(...)) -> dict:
+        return ibkr_gateway.record_execution_fill(payload)
+
+    @app.post("/api/gateways/ibkr/positions")
+    def ibkr_positions(payload: dict = Body(...)) -> dict:
+        return ibkr_gateway.record_position_snapshot(payload)
+
+    @app.get("/api/gateways/ibkr/positions")
+    def ibkr_positions_get() -> dict:
+        return ibkr_gateway.positions_report()
+
+    @app.post("/api/gateways/ibkr/account-snapshots")
+    def ibkr_account_snapshots(payload: dict = Body(...)) -> dict:
+        return ibkr_gateway.record_account_snapshot(payload)
+
+    @app.get("/api/gateways/ibkr/account-snapshots")
+    def ibkr_account_snapshots_get() -> dict:
+        return ibkr_gateway.account_snapshots_report()
+
+    @app.post("/api/gateways/ibkr/reconciliation")
+    def ibkr_reconciliation(payload: dict = Body(default={})) -> dict:
+        return ibkr_gateway.reconcile_position(
+            symbol=str(payload.get("symbol", "MNQ")),
+            expected_quantity=payload.get("expected_quantity"),
+        )
+
+    @app.post("/api/gateways/ibkr/reviews")
+    def ibkr_reviews(payload: dict = Body(default={})) -> dict:
+        request = build_five_minute_review_request(
+            bars_1m=payload.get("bars_1m", []),
+            signals=payload.get("signals", []),
+            execution_ledger=payload.get("execution_ledger", ibkr_gateway.execution_ledger()),
+            risk_context=payload.get("risk_context", {}),
+            strategy_state=payload.get("strategy_state", {}),
+            previous_reviews=payload.get("previous_reviews", []),
+        )
+        result = {"review_request": request, "review_result": deterministic_fallback_review(request)}
+        ibkr_review_history.append(result)
+        return result
+
+    @app.post("/api/gateways/ibkr/fast-path-optimizer")
+    def ibkr_fast_path_optimizer(payload: dict = Body(...)) -> dict:
+        result = apply_fast_path_control_diff(
+            payload.get("control_state", {}),
+            payload.get("review_result", {}),
+        )
+        ibkr_optimizer_history.append(result)
+        return result
+
+    @app.get("/api/gateways/ibkr/incidents")
+    def ibkr_incidents() -> dict:
+        return {"incidents": ibkr_gateway.incident_events, "count": len(ibkr_gateway.incident_events)}
+
+    def ibkr_runtime_report(run_id: str = "current") -> dict:
+        return build_ibkr_paper_report(
+            run_id=run_id,
+            health=ibkr_gateway.health(),
+            readiness=ibkr_gateway.readiness(),
+            contracts=ibkr_gateway.contract_readiness(),
+            market_data=ibkr_gateway.market_data_readiness(),
+            bracket_orders=ibkr_gateway.bracket_order_report(),
+            execution_ledger=ibkr_gateway.execution_ledger(),
+            incidents={"incidents": ibkr_gateway.incident_events, "count": len(ibkr_gateway.incident_events)},
+            reviews=ibkr_review_history[-50:],
+            optimizer_reports=ibkr_optimizer_history[-50:],
+        )
+
+    @app.post("/api/ibkr-paper/runs")
+    def ibkr_paper_runs(payload: dict = Body(default={})) -> dict:
+        report = ibkr_runtime_report(run_id=str(payload.get("run_id") or "pending"))
+        return create_ibkr_paper_run_artifacts(
+            run_id=payload.get("run_id"),
+            root=Path(payload.get("root", "experiments/ibkr_paper")),
+            report=report,
+        )
+
+    @app.get("/api/ibkr-paper/runs/{run_id}")
+    def ibkr_paper_run_get(run_id: str, root: str = "experiments/ibkr_paper") -> dict:
+        try:
+            return load_ibkr_paper_report(Path(root), run_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/ibkr-paper/reviews")
+    def ibkr_paper_reviews(limit: int = 50) -> dict:
+        return {"reviews": ibkr_review_history[-limit:], "count": len(ibkr_review_history)}
+
+    @app.get("/api/ibkr-paper/reports/{run_id}")
+    def ibkr_paper_reports(run_id: str, root: str = "experiments/ibkr_paper") -> dict:
+        if run_id == "current":
+            return ibkr_runtime_report(run_id="current")
+        try:
+            return load_ibkr_paper_report(Path(root), run_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/api/incidents")
     def nt8_incident(payload: dict = Body(...)) -> dict:

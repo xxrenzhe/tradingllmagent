@@ -8,10 +8,11 @@ from pathlib import Path
 
 from tlm.config import get_cost_model, get_symbol
 from tlm.storage import bar_path, write_bars_parquet
-from tlm.strategy_generation import generate_vol_strategy_specs, write_vol_strategy_specs
+from tlm.strategy_generation import VOL_EXECUTION_AWARE_FAMILIES, generate_vol_strategy_specs, write_vol_strategy_specs
 from tlm.vol import (
     VOL_ARTIFACT_FILENAMES,
     build_vol_cost_stress_report,
+    build_vol_execution_evidence,
     build_vol_feature_readiness,
     build_vol_llm_trigger_audit,
     build_vol_mutation_memory,
@@ -40,7 +41,7 @@ class VolResearchArtifactTests(unittest.TestCase):
         memory = build_vol_mutation_memory(leaderboard)
         audit = build_vol_llm_trigger_audit(leaderboard, memory)
 
-        self.assertEqual(leaderboard["summary"]["generated_seed_count"], 5)
+        self.assertEqual(leaderboard["summary"]["generated_seed_count"], len(VOL_EXECUTION_AWARE_FAMILIES))
         self.assertEqual(cost["candidate_count"], 0)
         self.assertEqual(quote["status"], "blocked")
         self.assertEqual(paper["status"], "blocked")
@@ -180,6 +181,68 @@ class VolResearchArtifactTests(unittest.TestCase):
             self.assertEqual(report["summary"]["trading_day_count"], 3)
             self.assertEqual(report["summary"]["simulated_fill_count"], 3)
             self.assertEqual(report["records"][0]["actual_fill_mode"], "simulated_market")
+
+    def test_vol_execution_evidence_combines_quote_and_paper_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            quote_path = root / "quote_replay.json"
+            paper_path = root / "paper_shadow.jsonl"
+            quote_path.write_text(
+                json.dumps(
+                    {
+                        "artifact": "quote_execution_validation",
+                        "trade_count": 2,
+                        "validated_trade_count": 2,
+                        "avg_bid_ask_cost_usd": 10.0,
+                        "execution_models": {
+                            "market_order_bid_ask_replay": {},
+                            "fixed_conservative": {},
+                            "limit_missed_fill": {"fill_rate": 0.5},
+                            "adverse_selection": {"5m": {"avg_ticks": 1.25}},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            paper_events = []
+            for index, day in enumerate(("2026-04-27", "2026-04-28", "2026-04-29")):
+                paper_events.append(
+                    {
+                        "event_type": "paper_shadow_intent",
+                        "intent": {
+                            "intent_id": f"signal_{index}",
+                            "source_strategy": {"strategy_spec_hash": "hash", "regime": "trend"},
+                            "expected_edge": 12.5,
+                        },
+                        "market_snapshot": {
+                            "snapshot_time": f"{day}T13:30:00",
+                            "spread_ticks": 2,
+                            "adverse_selection_ticks_5m": -1,
+                        },
+                        "paper_shadow_run": {
+                            "paper_shadow_run_id": f"ps_{index}",
+                            "intent_id": f"signal_{index}",
+                            "blocked": False,
+                            "created_at": f"{day}T13:30:00Z",
+                            "hypothetical_fill": {"fill_price": 19000 + index},
+                        },
+                        "llm_diagnosis": {"summary": "ok"},
+                        "mutation_proposal": {"allowed_mutations": ["tighten_time_window"], "blocked_mutations": []},
+                    }
+                )
+            paper_path.write_text("\n".join(json.dumps(event) for event in paper_events), encoding="utf-8")
+
+            report = build_vol_execution_evidence(
+                quote_reports=[quote_path],
+                paper_reports=[paper_path],
+            )
+
+        self.assertEqual(report["artifact"], "vol_execution_evidence")
+        self.assertEqual(report["status"], "ready_for_promotion")
+        self.assertEqual(report["missing_requirements"], [])
+        self.assertTrue(report["promotion_gate"]["ready_for_promotion"])
+        self.assertEqual(report["quote_replay"]["status"], "ready_for_review")
+        self.assertEqual(report["paper_shadow"]["status"], "ready_for_review")
 
     def test_run_vol_prescreen_writes_populated_leaderboard(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

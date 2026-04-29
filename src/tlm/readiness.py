@@ -6,7 +6,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .config import get_cost_model, get_symbol
 from .execution import evaluate_live_readiness
+from .research_config import PRIMARY_COST_MODEL, PRIMARY_RESEARCH_SYMBOL
+from .snapshot import cost_model_hash
 
 
 REQUIRED_COVERAGE_WINDOWS = {"open", "midday", "close", "high_volatility", "high_impact_event"}
@@ -108,6 +111,119 @@ def build_external_validation_artifact(stage: str, evidence: dict[str, Any]) -> 
 def write_external_validation_artifact(path: Path, artifact: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(artifact, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+
+
+def build_primary_nq_external_readiness(
+    *,
+    data_root: Path,
+    experiments_root: Path,
+    config_dir: Path = Path("configs"),
+    symbol: str = PRIMARY_RESEARCH_SYMBOL,
+    cost_model_name: str = PRIMARY_COST_MODEL,
+    require_mbp1: bool = False,
+    institutional_acceptance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    symbol_config = get_symbol(symbol, config_dir)
+    cost_model = get_cost_model(cost_model_name, config_dir)
+    quote_files = sorted((data_root / "normalized" / "quotes" / symbol).glob("date=*/*.parquet"))
+    mbp1_files = sorted((data_root / "normalized" / "mbp1" / symbol).glob("date=*/*.parquet"))
+    freeze_status = _final_holdout_freeze_status(experiments_root)
+    acceptance = institutional_acceptance or {}
+    missing = []
+    if symbol_config.provider != "databento" or symbol_config.instrument != "NQ":
+        missing.append("nq_cme_databento_symbol_config")
+    if not quote_files:
+        missing.append("representative_nq_cme_quote_data")
+    if require_mbp1 and not mbp1_files:
+        missing.append("mbp1_depth_data")
+    if not freeze_status["freeze_confirmed"]:
+        missing.append("final_holdout_freeze_confirmed_strategy")
+    if acceptance.get("reduced_candidate_volume_accepted") is not True:
+        missing.append("institutional_acceptance_reduced_candidate_volume")
+    payload = {
+        "schema_version": 1,
+        "artifact": "primary_nq_external_readiness",
+        "symbol": {
+            "alias": symbol_config.alias,
+            "provider": symbol_config.provider,
+            "instrument": symbol_config.instrument,
+            "tick_size": symbol_config.tick_size,
+            "point_value": symbol_config.point_value,
+        },
+        "quote_coverage": {
+            "status": "ready" if quote_files else "missing",
+            "file_count": len(quote_files),
+            "dates": _partition_dates(quote_files),
+            "files": [str(path) for path in quote_files],
+            "required": True,
+        },
+        "mbp1_coverage": {
+            "status": "ready" if mbp1_files else "missing",
+            "file_count": len(mbp1_files),
+            "dates": _partition_dates(mbp1_files),
+            "files": [str(path) for path in mbp1_files],
+            "required": require_mbp1,
+        },
+        "cost_model": {
+            "name": cost_model.name,
+            "hash": cost_model_hash(cost_model),
+            "tick_size": cost_model.tick_size,
+            "point_value": cost_model.point_value,
+            "tick_value": cost_model.tick_value,
+            "slippage_ticks_per_side": cost_model.slippage_ticks_per_side,
+            "round_trip_fees_usd": cost_model.round_trip_fees_usd,
+            "status": "frozen_conservative",
+        },
+        "final_holdout_freeze": freeze_status,
+        "institutional_acceptance": {
+            "reduced_candidate_volume_accepted": acceptance.get("reduced_candidate_volume_accepted") is True,
+            "accepted_by": acceptance.get("accepted_by"),
+            "accepted_at": acceptance.get("accepted_at"),
+            "notes": acceptance.get("notes"),
+        },
+        "missing_external_blockers": sorted(set(missing)),
+        "decision": "ready" if not missing else "blocked",
+        "checked_at": datetime.now(UTC).isoformat(),
+    }
+    payload["artifact_hash"] = stable_hash({key: value for key, value in payload.items() if key != "artifact_hash"})
+    return payload
+
+
+def write_primary_nq_external_readiness_artifact(path: Path, artifact: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(artifact, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+
+
+def _final_holdout_freeze_status(experiments_root: Path) -> dict[str, Any]:
+    try:
+        from .research import load_leaderboard_report
+
+        report = load_leaderboard_report(experiments_root)
+    except Exception as exc:
+        return {
+            "status": "blocked",
+            "freeze_confirmed": False,
+            "freeze_confirmed_count": 0,
+            "error": str(exc),
+        }
+    freeze_rows = report.get("freeze_confirmed_leaderboard", [])
+    return {
+        "status": "ready" if freeze_rows else "missing",
+        "freeze_confirmed": bool(freeze_rows),
+        "freeze_confirmed_count": len(freeze_rows),
+        "experiment_ids": [str(row.get("experiment_id")) for row in freeze_rows],
+        "summary": report.get("summary", {}),
+    }
+
+
+def _partition_dates(paths: list[Path]) -> list[str]:
+    dates = []
+    for path in paths:
+        for parent in path.parents:
+            if parent.name.startswith("date="):
+                dates.append(parent.name.removeprefix("date="))
+                break
+    return sorted(set(dates))
 
 
 def stable_hash(payload: dict[str, Any]) -> str:

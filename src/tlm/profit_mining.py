@@ -1562,19 +1562,23 @@ def _dominant_counter_label(counter: Counter[str]) -> str:
 
 def _signal_metrics(signals: Sequence[dict[str, Any]], day_count: int) -> dict[str, Any]:
     trades = len(signals)
-    net_pnl = sum(float(signal["pnl"]) for signal in signals)
-    wins = [float(signal["pnl"]) for signal in signals if float(signal["pnl"]) > 0]
-    losses = [float(signal["pnl"]) for signal in signals if float(signal["pnl"]) < 0]
+    pnls = [float(signal["pnl"]) for signal in signals]
+    net_pnl = sum(pnls)
+    wins = [value for value in pnls if value > 0]
+    losses = [value for value in pnls if value < 0]
     equity = 0.0
     peak = 0.0
     max_drawdown = 0.0
-    for signal in signals:
-        equity += float(signal["pnl"])
+    for pnl in pnls:
+        equity += pnl
         peak = max(peak, equity)
         max_drawdown = max(max_drawdown, peak - equity)
     annual_trades = trades / day_count * 365 if day_count else 0.0
     win_probability = len(wins) / trades if trades else 0.0
     profit_factor = sum(wins) / abs(sum(losses)) if losses else None
+    avg_win = sum(wins) / len(wins) if wins else None
+    avg_loss = sum(losses) / len(losses) if losses else None
+    payoff_ratio = avg_win / abs(avg_loss) if avg_win is not None and avg_loss is not None and avg_loss < 0 else None
     return {
         "trades": trades,
         "annual_trades": annual_trades,
@@ -1584,7 +1588,27 @@ def _signal_metrics(signals: Sequence[dict[str, Any]], day_count: int) -> dict[s
         "profit_factor": profit_factor,
         "max_drawdown": max_drawdown,
         "return_to_drawdown": net_pnl / max_drawdown if max_drawdown else None,
+        "winning_trade_count": len(wins),
+        "losing_trade_count": len(losses),
+        "avg_win_net_pnl": avg_win,
+        "avg_loss_net_pnl": avg_loss,
+        "largest_win_net_pnl": max(wins) if wins else None,
+        "largest_loss_net_pnl": min(losses) if losses else None,
+        "payoff_ratio": payoff_ratio,
+        "max_consecutive_losses": _max_consecutive_losses(pnls),
     }
+
+
+def _max_consecutive_losses(pnls: Sequence[float]) -> int:
+    worst = 0
+    current = 0
+    for pnl in pnls:
+        if pnl < 0:
+            current += 1
+            worst = max(worst, current)
+        else:
+            current = 0
+    return worst
 
 
 def _yearly_signal_results(signals: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:

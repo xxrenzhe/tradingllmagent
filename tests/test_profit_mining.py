@@ -12,6 +12,7 @@ from tlm.profit_mining import (
     _horizon_spec_dicts,
     _optimized_regime_basket_subsets,
     _replay_metrics,
+    _signal_metrics,
     _yearly_profitable_candidates,
     mine_databento_nq_profitable_strategies,
 )
@@ -19,6 +20,25 @@ from tlm.storage import bar_path, write_bars_parquet
 
 
 class ProfitMiningTests(unittest.TestCase):
+    def test_signal_metrics_include_loss_and_drawdown_detail(self) -> None:
+        signals = [
+            {"timestamp": datetime(2025, 1, 2, 13, 30), "pnl": 100.0},
+            {"timestamp": datetime(2025, 1, 2, 13, 31), "pnl": -50.0},
+            {"timestamp": datetime(2025, 1, 2, 13, 32), "pnl": -25.0},
+            {"timestamp": datetime(2025, 1, 2, 13, 33), "pnl": 75.0},
+            {"timestamp": datetime(2025, 1, 2, 13, 34), "pnl": -10.0},
+        ]
+
+        metrics = _signal_metrics(signals, day_count=1)
+
+        self.assertEqual(metrics["winning_trade_count"], 2)
+        self.assertEqual(metrics["losing_trade_count"], 3)
+        self.assertEqual(metrics["avg_win_net_pnl"], 87.5)
+        self.assertAlmostEqual(metrics["avg_loss_net_pnl"], -85 / 3)
+        self.assertEqual(metrics["largest_loss_net_pnl"], -50.0)
+        self.assertEqual(metrics["max_consecutive_losses"], 2)
+        self.assertAlmostEqual(metrics["payoff_ratio"], 87.5 / (85 / 3))
+
     def test_mine_databento_nq_profitable_strategies_finds_synthetic_edge(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

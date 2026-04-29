@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 import json
@@ -9,6 +10,7 @@ from pathlib import Path
 import duckdb
 
 from tlm.api import (
+    build_leaderboard_response,
     build_cost_calibration_response,
     build_experiment_artifacts_response,
     build_feature_readiness_response,
@@ -191,6 +193,16 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(failed["status"], "failed")
         self.assertIn("Unsupported task_type", failed["error"])
         self.assertTrue(any(log["level"] == "error" for log in logs))
+
+    def test_worker_supports_primary_research_task_type(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "tasks.sqlite3"
+            create_task(db_path, "research.primary_run", {}, task_id="task_primary_missing_spec")
+            failed = run_task(db_path, "task_primary_missing_spec")
+
+        self.assertEqual(failed["status"], "failed")
+        self.assertIn("spec", failed["error"])
+        self.assertNotIn("Unsupported task_type", failed["error"])
 
     def test_run_task_builds_bars_from_local_tick_parquet(self) -> None:
         day = datetime(2025, 3, 19, 13, tzinfo=UTC)
@@ -848,6 +860,100 @@ class APIImportTests(unittest.TestCase):
             len(readiness["generated_strategy_manifest"]["strategies"]),
         )
 
+    def test_feature_readiness_prefers_primary_nq_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            generated = Path(temp_dir) / "strategies" / "generated"
+            generated.mkdir(parents=True)
+            (generated / "feature_combo_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "method": "deterministic_random_feature_combo",
+                        "strategies": [{"name": "legacy"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (generated / "primary_nq_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "method": "primary_nq_futures_seed",
+                        "primary_research_track": True,
+                        "candidate_family_set": ["vol_breakout_trend"],
+                        "strategies": [{"name": "primary"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(temp_dir)
+                readiness = build_feature_readiness_response()
+            finally:
+                os.chdir(previous_cwd)
+
+        self.assertEqual(readiness["generated_strategy_summary"]["method"], "primary_nq_futures_seed")
+        self.assertEqual(
+            readiness["generated_strategy_summary"]["manifest_path"],
+            "strategies/generated/primary_nq_manifest.json",
+        )
+        self.assertTrue(readiness["generated_strategy_summary"]["primary_research_track"])
+        self.assertEqual(readiness["generated_strategy_manifest"]["strategies"][0]["name"], "primary")
+
+    def test_build_leaderboard_response_rebuilds_execution_validation_summary_after_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            experiments_root = Path(temp_dir) / "experiments"
+            experiments_root.mkdir(parents=True)
+
+            bar_only_payload = {
+                "experiment_id": "nq_cme_bar_only",
+                "strategy_name": "bar_only_candidate",
+                "execution_mode": "bar",
+                "gates": {"passed": True, "reasons": []},
+                "robustness_score": 0.6,
+                "aggregate_validation_metrics": {"net_pnl": 100.0, "sharpe": 1.1},
+                "aggregate_test_metrics": {
+                    "net_pnl": 600.0,
+                    "sharpe": 1.5,
+                    "annual_trades": 1200.0,
+                    "avg_trade_net_pnl": 1.0,
+                },
+                "non_overlap_test_metrics": {"net_pnl": 500.0, "sharpe": 1.3, "annual_trades": 1000.0},
+                "final_holdout_metrics": {"net_pnl": 320.0},
+                "final_holdout_policy": {"strict_freeze_task_implemented": True},
+                "promotion_report": {"mode": "bar", "stage": "direct_bar", "promoted": False, "reasons": []},
+                "strategy_spec": {"symbol": "NQ_CME"},
+            }
+            tick_validated_payload = {
+                **bar_only_payload,
+                "experiment_id": "nq_cme_tick_validated",
+                "strategy_name": "tick_validated_candidate",
+                "execution_mode": "tick",
+                "promotion_report": {"mode": "tick", "stage": "direct_tick", "promoted": True, "reasons": []},
+            }
+            for payload in (bar_only_payload, tick_validated_payload):
+                experiment_dir = experiments_root / payload["experiment_id"]
+                experiment_dir.mkdir(parents=True)
+                (experiment_dir / "leaderboard.json").write_text(json.dumps(payload), encoding="utf-8")
+
+            filtered = build_leaderboard_response(experiments_root, experiment_id="nq_cme_bar_only")
+
+        self.assertEqual(
+            filtered["summary"],
+            {"passed": 0, "candidate": 1, "freeze_confirmed": 0, "rejected": 0, "total": 1},
+        )
+        self.assertEqual(
+            filtered["execution_validation_summary"]["overall"],
+            {
+                "validated": 0,
+                "pending_execution_validation": 1,
+                "blocked_before_execution": 0,
+                "not_required": 0,
+                "required": 1,
+                "total": 1,
+            },
+        )
+        self.assertIn("1 passed candidates still await execution validation", filtered["message"])
+
     def test_vol_overview_api_helper_exposes_blocked_execution_stages(self) -> None:
         overview = build_vol_overview_response(Path("missing-experiments"))
 
@@ -872,6 +978,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/data/import-databento-ohlcv", paths)
         self.assertIn("/api/data/quote-replay", paths)
         self.assertIn("/api/backtests/tick", paths)
+        self.assertIn("/api/experiments/primary-research-runs", paths)
         self.assertIn("/api/experiments/proposals", paths)
         self.assertIn("/api/experiments/iterations", paths)
         self.assertIn("/api/experiments/{experiment_id}/audit-logs", paths)
@@ -897,6 +1004,25 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/trigger-gate/outcomes", paths)
         self.assertIn("/api/gateways/nt8/order-updates", paths)
         self.assertIn("/api/gateways/nt8/incidents", paths)
+        self.assertIn("/api/gateways/ibkr/health", paths)
+        self.assertIn("/api/gateways/ibkr/readiness", paths)
+        self.assertIn("/api/gateways/ibkr/contracts", paths)
+        self.assertIn("/api/gateways/ibkr/market-data", paths)
+        self.assertIn("/api/gateways/ibkr/connect", paths)
+        self.assertIn("/api/gateways/ibkr/safe-mode", paths)
+        self.assertIn("/api/gateways/ibkr/bracket-orders", paths)
+        self.assertIn("/api/gateways/ibkr/kill-switch", paths)
+        self.assertIn("/api/gateways/ibkr/execution-ledger", paths)
+        self.assertIn("/api/gateways/ibkr/orders", paths)
+        self.assertIn("/api/gateways/ibkr/executions", paths)
+        self.assertIn("/api/gateways/ibkr/positions", paths)
+        self.assertIn("/api/gateways/ibkr/account-snapshots", paths)
+        self.assertIn("/api/gateways/ibkr/reviews", paths)
+        self.assertIn("/api/gateways/ibkr/fast-path-optimizer", paths)
+        self.assertIn("/api/ibkr-paper/runs", paths)
+        self.assertIn("/api/ibkr-paper/runs/{run_id}", paths)
+        self.assertIn("/api/ibkr-paper/reviews", paths)
+        self.assertIn("/api/ibkr-paper/reports/{run_id}", paths)
 
     def test_trigger_gate_api_helper_writes_simulation_artifacts_without_fastapi(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1049,6 +1175,25 @@ class APIImportTests(unittest.TestCase):
             "/api/gateways/nt8/commands",
             "/api/gateways/nt8/order-updates",
             "/api/gateways/nt8/incidents",
+            "/api/gateways/ibkr/health",
+            "/api/gateways/ibkr/readiness",
+            "/api/gateways/ibkr/contracts",
+            "/api/gateways/ibkr/market-data",
+            "/api/gateways/ibkr/connect",
+            "/api/gateways/ibkr/safe-mode",
+            "/api/gateways/ibkr/bracket-orders",
+            "/api/gateways/ibkr/kill-switch",
+            "/api/gateways/ibkr/execution-ledger",
+            "/api/gateways/ibkr/orders",
+            "/api/gateways/ibkr/executions",
+            "/api/gateways/ibkr/positions",
+            "/api/gateways/ibkr/account-snapshots",
+            "/api/gateways/ibkr/reviews",
+            "/api/gateways/ibkr/fast-path-optimizer",
+            "/api/ibkr-paper/runs",
+            "/api/ibkr-paper/runs/{run_id}",
+            "/api/ibkr-paper/reviews",
+            "/api/ibkr-paper/reports/{run_id}",
         ]
 
         for path in required_paths:

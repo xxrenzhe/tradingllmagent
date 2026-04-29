@@ -15,6 +15,7 @@ ALLOWED_FAMILIES = {
     "time_of_day_edge",
     "gap_fade_or_continuation",
     "vol_breakout_trend",
+    "vol_compression_expansion",
     "ma_pullback_volume_confirm",
     "volume_absorption_reversion",
     "macd_ma_volume_confirm",

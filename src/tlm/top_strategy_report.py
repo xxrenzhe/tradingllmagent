@@ -22,6 +22,10 @@ from .profit_mining import (
     _signals_covered_days,
     _yearly_signal_results,
 )
+from .research_config import (
+    PRIMARY_TOP_STRATEGY_COMPARISON_OBJECTIVES,
+    PRIMARY_TOP_STRATEGY_OBJECTIVE,
+)
 from .storage import write_json
 from .variants import stable_hash
 
@@ -34,7 +38,7 @@ def generate_top_strategy_html_report(
     output_html: Path,
     top_n: int = 3,
     sample_trade_count: int = 3,
-    objective: str = "annualized_quality",
+    objective: str = PRIMARY_TOP_STRATEGY_OBJECTIVE,
     comparison_objectives: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     report_paths = [Path(path) for path in (mining_report_paths or ([] if mining_report_path is None else [mining_report_path]))]
@@ -85,6 +89,13 @@ def generate_top_strategy_html_report(
                     "total_excess_net_pnl": sum(float(item["excess_summary"].get("excess_net_pnl") or 0.0) for item in enriched),
                 }
             )
+        top1_comparison = _build_top1_objective_comparison(
+            con=con,
+            mining_reports=mining_reports,
+            data_root=data_root,
+            strategy_sets=strategy_sets,
+            capital_base_usd=capital_base_usd,
+        )
     finally:
         con.close()
 
@@ -109,6 +120,7 @@ def generate_top_strategy_html_report(
         "strategy_count": len(strategy_sets[0]["strategies"]) if strategy_sets else 0,
         "strategies": strategy_sets[0]["strategies"] if strategy_sets else [],
         "strategy_sets": strategy_sets,
+        "top1_comparison": top1_comparison,
     }
     payload["report_hash"] = stable_hash(_json_ready(payload))
 
@@ -165,7 +177,7 @@ def generate_top_strategy_comparison_html(
             date_to_values.append(str(report.get("date_to")))
         round_trip_cost_usd = max(round_trip_cost_usd, float(report.get("round_trip_cost_usd") or 0.0))
         capital_base_usd = float(report.get("capital_base_usd") or capital_base_usd)
-    primary = strategy_sets[0] if strategy_sets else {"objective": "annualized_quality", "selection_policy": _selection_policy("annualized_quality"), "strategies": []}
+    primary = strategy_sets[0] if strategy_sets else {"objective": PRIMARY_TOP_STRATEGY_OBJECTIVE, "selection_policy": _selection_policy(PRIMARY_TOP_STRATEGY_OBJECTIVE), "strategies": []}
     payload = {
         "artifact": "top_strategy_html_report",
         "source_report": None,
@@ -200,7 +212,7 @@ def _objective_order(primary_objective: str, comparison_objectives: Sequence[str
     if comparison_objectives:
         preferred.extend(str(objective) for objective in comparison_objectives)
     else:
-        preferred.extend(["net_pnl", "stability_first"])
+        preferred.extend(PRIMARY_TOP_STRATEGY_COMPARISON_OBJECTIVES)
     ordered = []
     seen = set()
     for objective in preferred:
@@ -214,7 +226,7 @@ def _objective_order(primary_objective: str, comparison_objectives: Sequence[str
 def _select_top_yearly_strategies(
     report: dict[str, Any] | Sequence[dict[str, Any]],
     top_n: int,
-    objective: str = "annualized_quality",
+    objective: str = PRIMARY_TOP_STRATEGY_OBJECTIVE,
 ) -> list[dict[str, Any]]:
     candidates = []
     reports = [report] if isinstance(report, dict) else list(report)
@@ -253,6 +265,129 @@ def _select_top_yearly_strategies(
     return selected
 
 
+def _build_top1_objective_comparison(
+    *,
+    con: duckdb.DuckDBPyConnection,
+    mining_reports: Sequence[dict[str, Any]],
+    data_root: Path,
+    strategy_sets: Sequence[dict[str, Any]],
+    capital_base_usd: float,
+) -> dict[str, Any]:
+    top_strategies = [
+        {
+            "objective": str(strategy_set.get("objective")),
+            "selection_policy": str(strategy_set.get("selection_policy")),
+            "strategy": (strategy_set.get("strategies") or [])[0],
+        }
+        for strategy_set in strategy_sets
+        if strategy_set.get("strategies")
+    ]
+    if len(top_strategies) < 2:
+        return {
+            "status": "insufficient_strategies",
+            "common_activation_year": None,
+            "strategies": [],
+            "merged_equity_curve": {"series": [], "points": []},
+        }
+    common_activation_year = max(int(item["strategy"]["activation_start_year"]) for item in top_strategies)
+    comparison_strategies = []
+    curve_inputs = []
+    for index, item in enumerate(top_strategies, start=1):
+        strategy = item["strategy"]
+        source_report = mining_reports[int(strategy["source_report_index"])]
+        context = _replay_context(source_report, data_root)
+        round_trip_cost_usd = float(source_report.get("round_trip_cost_usd") or 0.0)
+        bar_minutes = int(source_report.get("timeframe_minutes") or timeframe_minutes(str(source_report["timeframe"])))
+        adjusted = {
+            **strategy,
+            "display_id": f"C{index}",
+            "activation_start_year_original": strategy.get("activation_start_year"),
+            "activation_start_year": common_activation_year,
+        }
+        signals = _replay_strategy_signals(con, context, adjusted, round_trip_cost_usd)
+        enriched = _enrich_strategy(
+            con=con,
+            context=context,
+            strategy=adjusted,
+            signals=signals,
+            sample_trades=[],
+            bar_minutes=bar_minutes,
+            capital_base_usd=capital_base_usd,
+        )
+        series_id = f"objective_{index}"
+        label = _objective_label(item["objective"])
+        comparison_strategies.append(
+            {
+                "series_id": series_id,
+                "label": label,
+                "objective": item["objective"],
+                "selection_policy": item["selection_policy"],
+                "selection_rule": enriched.get("selection_rule"),
+                "source_timeframe": enriched.get("source_timeframe"),
+                "original_activation_year": adjusted.get("activation_start_year_original"),
+                "common_activation_year": common_activation_year,
+                "replayed_metrics": enriched.get("replayed_metrics", {}),
+                "strategy_signature": enriched.get("strategy_signature"),
+            }
+        )
+        curve_inputs.append(
+            {
+                "series_id": series_id,
+                "label": label,
+                "points": enriched.get("equity_curve") or [],
+            }
+        )
+    return {
+        "status": "ready",
+        "common_activation_year": common_activation_year,
+        "strategies": comparison_strategies,
+        "merged_equity_curve": _merged_strategy_equity_curves(curve_inputs),
+    }
+
+
+def _merged_strategy_equity_curves(
+    curves: Sequence[dict[str, Any]],
+    *,
+    max_points: int = 1200,
+) -> dict[str, Any]:
+    series = [
+        {
+            "id": str(curve["series_id"]),
+            "label": str(curve.get("label") or curve["series_id"]),
+        }
+        for curve in curves
+    ]
+    if not series:
+        return {"series": [], "points": []}
+    ordered_curves = [
+        sorted(curve.get("points") or [], key=lambda row: str(row.get("timestamp")))
+        for curve in curves
+    ]
+    timestamps = sorted(
+        {
+            str(point.get("timestamp"))
+            for points in ordered_curves
+            for point in points
+            if point.get("timestamp") is not None
+        }
+    )
+    indexes = [0 for _ in ordered_curves]
+    latest = [0.0 for _ in ordered_curves]
+    merged = []
+    for timestamp in timestamps:
+        values = {}
+        for series_index, points in enumerate(ordered_curves):
+            while indexes[series_index] < len(points) and str(points[indexes[series_index]].get("timestamp")) <= timestamp:
+                latest[series_index] = float(points[indexes[series_index]].get("equity") or 0.0)
+                indexes[series_index] += 1
+            values[series[series_index]["id"]] = latest[series_index]
+        merged.append({"timestamp": timestamp, "values": values})
+    return {
+        "series": series,
+        "points": _sample_series(merged, max_points=max_points),
+    }
+
+
 def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, ...]:
     full = candidate.get("full_after_activation") or {}
     test = candidate.get("test") or {}
@@ -262,6 +397,8 @@ def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, ..
     test_pf = float(test.get("profit_factor") or 0.0)
     full_net = float(full.get("net_pnl") or 0.0)
     test_net = float(test.get("net_pnl") or 0.0)
+    full_expectancy = float(full.get("avg_trade_net_pnl") or 0.0)
+    test_expectancy = float(test.get("avg_trade_net_pnl") or 0.0)
     annual_trades = float(full.get("annual_trades") or 0.0)
     covered_days = max(1.0, float(train_period.get("covered_days") or 0.0) + float(test_period.get("covered_days") or 0.0))
     annualized_net = full_net / covered_days * 365.0
@@ -280,6 +417,19 @@ def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, ..
         return (annualized_net, min(full_pf, test_pf), full_net, annual_trades)
     if objective == "stability_first":
         return (fully_qualified, positive_year_ratio, return_to_drawdown, min_pf, test_net, annualized_net, -max_drawdown, annual_trades, full_net)
+    if objective == "expectancy_first":
+        return (
+            fully_qualified,
+            test_expectancy,
+            full_expectancy,
+            positive_year_ratio,
+            return_to_drawdown,
+            min_pf,
+            annualized_net,
+            -max_drawdown,
+            annual_trades,
+            full_net,
+        )
     if objective == "annualized_quality":
         return (fully_qualified, annualized_net, gate_pass_count, positive_year_ratio, min_pf, test_net, return_to_drawdown, annual_trades, full_net)
     if objective == "net_pnl":
@@ -291,6 +441,7 @@ def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, ..
 
 def _selection_policy(objective: str) -> str:
     policies = {
+        "expectancy_first": "top yearly-profitable strategies by post-cost test expectancy per trade first, then full-period expectancy, stability, and cost-quality tiebreakers",
         "net_pnl": "top yearly-profitable strategies by net PnL, de-duplicated by edge composition",
         "annualized_net_pnl": "top yearly-profitable strategies by annualized net PnL per 1 contract, de-duplicated by edge composition",
         "annualized_quality": "top yearly-profitable strategies by hard-gate qualification first, then annualized net PnL with stability/cost-quality tiebreakers, de-duplicated by edge composition",
@@ -299,11 +450,12 @@ def _selection_policy(objective: str) -> str:
         "test_profit_factor": "top yearly-profitable strategies by recent test-period profit factor, de-duplicated by edge composition",
         "balanced": "top yearly-profitable strategies by annualized net PnL, then the weaker of full-period and test-period profit factor",
     }
-    return policies.get(objective, policies["annualized_quality"])
+    return policies.get(objective, policies[PRIMARY_TOP_STRATEGY_OBJECTIVE])
 
 
 def _objective_label(objective: str) -> str:
     labels = {
+        "expectancy_first": "单笔期望优先",
         "annualized_quality": "年化质量优先",
         "annualized_net_pnl": "年化净收益优先",
         "net_pnl": "总净收益优先",
@@ -358,6 +510,15 @@ def _report_summary(report: dict[str, Any]) -> dict[str, Any]:
 def _evaluation_summary(candidate: dict[str, Any]) -> dict[str, Any]:
     full = candidate.get("full_after_activation") or {}
     test = candidate.get("test") or {}
+    execution_validation = candidate.get("execution_validation") or {}
+    execution_evidence = candidate.get("execution_evidence") or {}
+    quote_replay = execution_evidence.get("quote_replay") or {}
+    paper_shadow = execution_evidence.get("paper_shadow") or {}
+    execution_evidence_present = bool(execution_evidence)
+    execution_evidence_ready = (
+        not execution_evidence_present
+        or execution_evidence.get("status") in {"ready_for_promotion", "not_required"}
+    )
     full_net = float(full.get("net_pnl") or 0.0)
     test_net = float(test.get("net_pnl") or 0.0)
     annual_trades = float(full.get("annual_trades") or 0.0)
@@ -376,6 +537,8 @@ def _evaluation_summary(candidate: dict[str, Any]) -> dict[str, Any]:
         ("positive_year_ratio_ge_75pct", positive_year_ratio >= 0.75),
         ("return_to_drawdown_gt_1", return_to_drawdown > 1.0),
     ]
+    if execution_evidence_present:
+        gates.append(("execution_evidence_ready", execution_evidence_ready))
     return {
         "passed_gates": [name for name, passed in gates if passed],
         "failed_gates": [name for name, passed in gates if not passed],
@@ -383,6 +546,16 @@ def _evaluation_summary(candidate: dict[str, Any]) -> dict[str, Any]:
         "total_gate_count": len(gates),
         "positive_year_ratio": positive_year_ratio,
         "fully_qualified": all(passed for _, passed in gates),
+        "candidate_stage": candidate.get("candidate_stage"),
+        "execution_validation_status": execution_validation.get("status"),
+        "paper_shadow_allowed": execution_validation.get("paper_shadow_allowed"),
+        "execution_evidence_status": execution_evidence.get("status"),
+        "execution_evidence_missing_requirements": execution_evidence.get("missing_requirements", []),
+        "quote_replay_status": quote_replay.get("status"),
+        "quote_replay_summary": quote_replay.get("execution_report_summaries", []),
+        "paper_shadow_status": paper_shadow.get("status"),
+        "paper_shadow_summary": paper_shadow.get("summary", {}),
+        "execution_stress_survival_score": _stress_survival_score(full),
     }
 
 
@@ -398,6 +571,14 @@ def _stress_metric(metrics: dict[str, Any], label: str, field: str) -> float:
         if str(row.get("label")) == label:
             return float(row.get(field) or 0.0)
     return 0.0
+
+
+def _stress_survival_score(metrics: dict[str, Any]) -> float:
+    rows = metrics.get("cost_stress") or []
+    if not rows:
+        return 0.0
+    survived = sum(1 for row in rows if float(row.get("net_pnl") or 0.0) > 0.0)
+    return survived / len(rows)
 
 
 def _replay_strategy_signals(
@@ -586,14 +767,35 @@ def _benchmark_bundle(
 
 def _benchmark_metrics(curve: Sequence[dict[str, Any]]) -> dict[str, Any]:
     if not curve:
-        return {"trades": 0, "annual_trades": 0.0, "net_pnl": 0.0, "win_probability": None, "avg_pnl": None, "profit_factor": None, "max_drawdown": 0.0, "return_to_drawdown": None}
+        return {
+            "trades": 0,
+            "annual_trades": 0.0,
+            "net_pnl": 0.0,
+            "win_probability": None,
+            "avg_pnl": None,
+            "profit_factor": None,
+            "max_drawdown": 0.0,
+            "return_to_drawdown": None,
+            "avg_loss_net_pnl": None,
+            "largest_loss_net_pnl": None,
+            "payoff_ratio": None,
+            "max_consecutive_losses": 0,
+        }
     net_pnl = float(curve[-1]["equity"])
     peak = float("-inf")
     max_drawdown = 0.0
+    previous_equity = 0.0
+    period_pnls = []
     for row in curve:
         equity = float(row["equity"])
+        period_pnls.append(equity - previous_equity)
+        previous_equity = equity
         peak = max(peak, equity)
         max_drawdown = max(max_drawdown, peak - equity)
+    losses = [value for value in period_pnls if value < 0]
+    wins = [value for value in period_pnls if value > 0]
+    avg_win = sum(wins) / len(wins) if wins else None
+    avg_loss = sum(losses) / len(losses) if losses else None
     first_ts = datetime.fromisoformat(str(curve[0]["timestamp"]))
     last_ts = datetime.fromisoformat(str(curve[-1]["timestamp"]))
     covered_days = max(1, (last_ts.date() - first_ts.date()).days + 1)
@@ -607,6 +809,14 @@ def _benchmark_metrics(curve: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "profit_factor": None,
         "max_drawdown": max_drawdown,
         "return_to_drawdown": net_pnl / max_drawdown if max_drawdown else None,
+        "winning_trade_count": len(wins),
+        "losing_trade_count": len(losses),
+        "avg_win_net_pnl": avg_win,
+        "avg_loss_net_pnl": avg_loss,
+        "largest_win_net_pnl": max(wins) if wins else None,
+        "largest_loss_net_pnl": min(losses) if losses else None,
+        "payoff_ratio": avg_win / abs(avg_loss) if avg_win is not None and avg_loss is not None and avg_loss < 0 else None,
+        "max_consecutive_losses": _max_consecutive_losses(period_pnls),
     }
 
 
@@ -801,6 +1011,7 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
         }
     ]
     objective_rows = "\n".join(_objective_overview_row(report) for report in strategy_sets)
+    top1_comparison_section = _top1_comparison_section(payload.get("top1_comparison") or {})
     overview_sections = "\n".join(_strategy_set_section(report) for report in strategy_sets)
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -896,6 +1107,7 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
       </table>
       <p class="note">配套结构化数据: {html.escape(data_filename)}</p>
     </section>
+    {top1_comparison_section}
     {overview_sections}
   </main>
   <script>
@@ -1050,6 +1262,35 @@ def _objective_overview_row(report: dict[str, Any]) -> str:
     )
 
 
+def _top1_comparison_section(comparison: dict[str, Any]) -> str:
+    if comparison.get("status") != "ready":
+        return ""
+    rows = []
+    for strategy in comparison.get("strategies") or []:
+        metrics = strategy.get("replayed_metrics") or {}
+        rows.append(
+            f"<tr><td>{html.escape(str(strategy.get('label')))}</td>"
+            f"<td>{html.escape(str(strategy.get('source_timeframe')))}</td>"
+            f"<td>{html.escape(str(strategy.get('original_activation_year')))}</td>"
+            f"<td>{html.escape(str(strategy.get('common_activation_year')))}</td>"
+            f"<td>{fmt_usd(metrics.get('net_pnl'))}</td>"
+            f"<td>{fmt_usd(metrics.get('annualized_net_pnl'))}</td>"
+            f"<td>{fmt_num(metrics.get('profit_factor'), 3)}</td>"
+            f"<td>{fmt_usd(metrics.get('max_drawdown'))}</td></tr>"
+        )
+    return f"""
+    <section class="section">
+      <h2>Top1 统一激活年份对比</h2>
+      <p class="note">共同激活年份: {html.escape(str(comparison.get("common_activation_year")))}。不同选择口径的 Top1 策略会用同一起点重新重放，便于直接比较收益曲线。</p>
+      <div class="chart" data-interactive-chart="true">{_multi_strategy_line_svg(comparison.get("merged_equity_curve") or {})}</div>
+      <table>
+        <thead><tr><th>口径</th><th>周期</th><th>原激活年份</th><th>共同激活年份</th><th>净收益</th><th>年化净收益</th><th>PF</th><th>最大回撤</th></tr></thead>
+        <tbody>{''.join(rows)}</tbody>
+      </table>
+    </section>
+    """
+
+
 def _strategy_set_section(report: dict[str, Any]) -> str:
     strategies = report.get("strategies") or []
     overview_rows = "\n".join(_overview_row(strategy) for strategy in strategies)
@@ -1060,7 +1301,7 @@ def _strategy_set_section(report: dict[str, Any]) -> str:
       <h2>{html.escape(_objective_label(objective))}</h2>
       <p class="note">选择目标: {html.escape(objective)} | 选择规则: {html.escape(str(report.get("selection_policy")))}</p>
       <table>
-        <thead><tr><th>策略</th><th>周期</th><th>激活年份</th><th>边数量</th><th>净收益</th><th>收益率(10万)</th><th>收益率(1手名义)</th><th>年化净收益</th><th>年化收益率(10万)</th><th>年化收益率(1手名义)</th><th>PF</th><th>胜率</th><th>门槛</th></tr></thead>
+        <thead><tr><th>策略</th><th>周期</th><th>激活年份</th><th>边数量</th><th>净收益</th><th>收益率(10万)</th><th>收益率(1手名义)</th><th>年化净收益</th><th>年化收益率(10万)</th><th>年化收益率(1手名义)</th><th>PF</th><th>胜率</th><th>门槛</th><th>执行证据</th></tr></thead>
         <tbody>{overview_rows}</tbody>
       </table>
     </section>
@@ -1076,13 +1317,21 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
     analysis = strategy.get("strategy_analysis") or {}
     profile = analysis.get("strategy_profile") or {}
     evaluation = strategy.get("evaluation_summary") or {}
+    execution_evidence_status = evaluation.get("execution_evidence_status") or "not_supplied"
+    execution_validation_status = evaluation.get("execution_validation_status") or "not_supplied"
+    candidate_stage = evaluation.get("candidate_stage") or strategy.get("candidate_stage") or "unknown"
+    missing_execution_requirements = evaluation.get("execution_evidence_missing_requirements") or []
     strategy_curve = strategy.get("equity_curve") or strategy.get("equity_curve_sampled") or []
     benchmark_curve = benchmark.get("equity_curve") or benchmark.get("equity_curve_sampled") or []
     return f"""
     <section class="section">
       <h2>{html.escape(strategy["display_id"])} · {html.escape(str(strategy["selection_rule"]))}</h2>
-      <p class="note">来源: {html.escape(str(strategy.get("source_timeframe")))} | 激活年份: {html.escape(str(strategy.get("activation_start_year")))} | 候选来源: {html.escape(str(strategy.get("source_report_path")))} | 硬门槛通过: {evaluation.get("passed_gate_count", 0)}/{evaluation.get("total_gate_count", 0)} | 年度盈利占比: {fmt_pct(evaluation.get("positive_year_ratio"))}</p>
+      <p class="note">来源: {html.escape(str(strategy.get("source_timeframe")))} | 激活年份: {html.escape(str(strategy.get("activation_start_year")))} | 候选来源: {html.escape(str(strategy.get("source_report_path")))} | 阶段: {html.escape(str(candidate_stage))} | 执行验证: {html.escape(str(execution_validation_status))} | 执行证据: {html.escape(str(execution_evidence_status))} | 硬门槛通过: {evaluation.get("passed_gate_count", 0)}/{evaluation.get("total_gate_count", 0)} | 年度盈利占比: {fmt_pct(evaluation.get("positive_year_ratio"))}</p>
       <div class="grid">
+        {_metric("候选阶段", str(candidate_stage))}
+        {_metric("执行验证", str(execution_validation_status))}
+        {_metric("执行证据", str(execution_evidence_status))}
+        {_metric("缺失执行证据", ", ".join(str(item) for item in missing_execution_requirements) if missing_execution_requirements else "none")}
         {_metric("净收益", fmt_usd(metrics["net_pnl"]))}
         {_metric("净收益率(10万资金)", fmt_pct(metrics.get("net_return")))}
         {_metric("净收益率(1手名义)", fmt_pct(metrics.get("net_return_on_notional")))}
@@ -1093,6 +1342,11 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
         {_metric("年化收益率(10万资金)", fmt_pct(metrics.get("annualized_net_return")))}
         {_metric("年化收益率(1手名义)", fmt_pct(metrics.get("annualized_net_return_on_notional")))}
         {_metric("最大回撤", fmt_usd(metrics["max_drawdown"]))}
+        {_metric("收益/最大回撤", fmt_num(metrics.get("return_to_drawdown"), 3))}
+        {_metric("平均亏损", fmt_usd(metrics.get("avg_loss_net_pnl")))}
+        {_metric("最大单笔亏损", fmt_usd(metrics.get("largest_loss_net_pnl")))}
+        {_metric("连续亏损上限", fmt_int(metrics.get("max_consecutive_losses")))}
+        {_metric("盈亏比", fmt_num(metrics.get("payoff_ratio"), 3))}
         {_metric("最大回撤率(10万资金)", fmt_pct(metrics.get("max_drawdown_return")))}
         {_metric("最大回撤率(1手名义)", fmt_pct(metrics.get("max_drawdown_return_on_notional")))}
         {_metric("交易数", fmt_int(metrics["trades"]))}
@@ -1151,6 +1405,7 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
 def _overview_row(strategy: dict[str, Any]) -> str:
     metrics = strategy["replayed_metrics"]
     evaluation = strategy.get("evaluation_summary") or {}
+    execution_evidence_status = evaluation.get("execution_evidence_status") or "not_supplied"
     return (
         f"<tr><td>{html.escape(strategy['display_id'])}</td>"
         f"<td>{html.escape(str(strategy.get('source_timeframe')))}</td>"
@@ -1164,8 +1419,21 @@ def _overview_row(strategy: dict[str, Any]) -> str:
         f"<td>{fmt_pct(metrics.get('annualized_net_return_on_notional'))}</td>"
         f"<td>{fmt_num(metrics['profit_factor'], 3)}</td>"
         f"<td>{fmt_pct(metrics['win_probability'])}</td>"
-        f"<td>{int(evaluation.get('passed_gate_count') or 0)}/{int(evaluation.get('total_gate_count') or 0)}</td></tr>"
+        f"<td>{int(evaluation.get('passed_gate_count') or 0)}/{int(evaluation.get('total_gate_count') or 0)}</td>"
+        f"<td>{html.escape(str(execution_evidence_status))}</td></tr>"
     )
+
+
+def _max_consecutive_losses(pnls: Sequence[float]) -> int:
+    worst = 0
+    current = 0
+    for pnl in pnls:
+        if pnl < 0:
+            current += 1
+            worst = max(worst, current)
+        else:
+            current = 0
+    return worst
 
 
 def _metric(label: str, value: str) -> str:
@@ -1374,6 +1642,69 @@ def _comparison_line_svg(strategy_points: Sequence[dict[str, Any]], benchmark_po
         f"<text x=\"{pad}\" y=\"{height-8}\" fill=\"#1769aa\" font-size=\"12\">策略</text>"
         f"<text x=\"{pad+48}\" y=\"{height-8}\" fill=\"#a15c00\" font-size=\"12\">基准</text>"
         f"</svg>"
+    )
+
+
+def _multi_strategy_line_svg(merged_curve: dict[str, Any]) -> str:
+    width, height = 900, 280
+    pad = 38
+    series = merged_curve.get("series") or []
+    points = merged_curve.get("points") or []
+    if not series or not points:
+        return f"<svg viewBox=\"0 0 {width} {height}\"></svg>"
+    values = [
+        float(point.get("values", {}).get(row["id"], 0.0))
+        for point in points
+        for row in series
+    ]
+    low, high = min(values), max(values)
+    if high == low:
+        high += 1.0
+        low -= 1.0
+    colors = ["#1769aa", "#117a4c", "#a15c00", "#7a3db8", "#b42318"]
+
+    def xy(index: int, value: float) -> tuple[float, float]:
+        x = pad + index / max(1, len(points) - 1) * (width - pad * 2)
+        y = height - pad - (value - low) / (high - low) * (height - pad * 2)
+        return x, y
+
+    polylines = []
+    legend = []
+    for series_index, row in enumerate(series):
+        series_id = row["id"]
+        color = colors[series_index % len(colors)]
+        poly = " ".join(
+            f"{x:.1f},{y:.1f}"
+            for x, y in (
+                xy(point_index, float(point.get("values", {}).get(series_id, 0.0)))
+                for point_index, point in enumerate(points)
+            )
+        )
+        polylines.append(f"<polyline fill=\"none\" stroke=\"{color}\" stroke-width=\"2.2\" points=\"{poly}\"/>")
+        legend.append(
+            f"<text x=\"{pad + series_index * 150}\" y=\"{height-8}\" fill=\"{color}\" font-size=\"12\">{html.escape(str(row.get('label')))}</text>"
+        )
+    hover_targets = _hover_targets_svg(
+        width=width,
+        height=height,
+        pad=pad,
+        point_count=len(points),
+        labels=[
+            f"{point['timestamp']} | "
+            + " | ".join(
+                f"{series_row['label']} {fmt_usd(point.get('values', {}).get(series_row['id']))}"
+                for series_row in series
+            )
+            for point in points
+        ],
+    )
+    zero_y = xy(0, 0.0)[1] if low <= 0 <= high else height - pad
+    return (
+        f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"Top1 多口径累计收益曲线\">"
+        f"<text x=\"{pad}\" y=\"22\" fill=\"#667085\" font-size=\"13\">Top1 多口径累计收益曲线</text>"
+        f"<line x1=\"{pad}\" y1=\"{zero_y:.1f}\" x2=\"{width-pad}\" y2=\"{zero_y:.1f}\" stroke=\"#d9e0ea\"/>"
+        f"<line class=\"chart-hover-line\" x1=\"{pad}\" y1=\"{pad}\" x2=\"{pad}\" y2=\"{height-pad}\"/>"
+        f"{''.join(polylines)}{hover_targets}{''.join(legend)}</svg>"
     )
 
 

@@ -31,6 +31,7 @@ def evaluate_hard_gates(
     round_trip_cost: float = 0,
     min_avg_trade_cost_multiple: float = 1.5,
     max_sharpe_decay: float = 0.5,
+    include_final_holdout: bool = True,
 ) -> GateResult:
     reasons: list[str] = []
     if test_metrics.annual_trades <= min_annual_trades:
@@ -42,7 +43,7 @@ def evaluate_hard_gates(
         reasons.append("median_sharpe_test_fold")
     if test_metrics.net_pnl <= 0:
         reasons.append("net_pnl_test")
-    if holdout_metrics.net_pnl <= 0:
+    if include_final_holdout and holdout_metrics.net_pnl <= 0:
         reasons.append("net_pnl_final_holdout")
     if test_metrics.max_drawdown > max_drawdown_limit:
         reasons.append("max_drawdown_test")
@@ -65,15 +66,16 @@ def evaluate_hard_gates(
             reasons.append("validation_sharpe")
         elif validation_to_test_decay is None or validation_to_test_decay > max_sharpe_decay:
             reasons.append("validation_to_test_sharpe_decay")
-    if (
+    if include_final_holdout and (
         test_metrics.sharpe is not None
         and holdout_metrics.sharpe is not None
         and holdout_metrics.sharpe < 0.7 * test_metrics.sharpe
     ):
         reasons.append("final_holdout_sharpe_decay")
-    test_to_holdout_decay = calculate_sharpe_decay(test_metrics.sharpe, holdout_metrics.sharpe)
-    if test_to_holdout_decay is not None and test_to_holdout_decay > max_sharpe_decay:
-        reasons.append("test_to_holdout_sharpe_decay")
+    if include_final_holdout:
+        test_to_holdout_decay = calculate_sharpe_decay(test_metrics.sharpe, holdout_metrics.sharpe)
+        if test_to_holdout_decay is not None and test_to_holdout_decay > max_sharpe_decay:
+            reasons.append("test_to_holdout_sharpe_decay")
     return GateResult(passed=not reasons, reasons=reasons)
 
 
@@ -87,6 +89,7 @@ def robustness_score(
     default_parameter_budget: int = DEFAULT_PARAMETER_BUDGET,
     positive_year_ratio: float | None = None,
     round_trip_cost: float = 0,
+    include_final_holdout: bool = True,
 ) -> float | None:
     gates = evaluate_hard_gates(
         test_metrics,
@@ -95,10 +98,15 @@ def robustness_score(
         validation_metrics=validation_metrics,
         positive_year_ratio=positive_year_ratio,
         round_trip_cost=round_trip_cost,
+        include_final_holdout=include_final_holdout,
     )
     if not gates.passed:
         return None
-    sharpe_basis = min(test_metrics.sharpe or 0, holdout_metrics.sharpe or 0)
+    sharpe_basis = (
+        min(test_metrics.sharpe or 0, holdout_metrics.sharpe or 0)
+        if include_final_holdout
+        else test_metrics.sharpe or 0
+    )
     sharpe_score = min(sharpe_basis / 4, 1)
     pnl_score = min(max(test_metrics.net_pnl, 0) / 100_000, 1)
     positive_folds = sum(1 for metric in fold_test_metrics if metric.net_pnl > 0)
