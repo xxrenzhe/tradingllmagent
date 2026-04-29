@@ -136,6 +136,7 @@ def mine_databento_nq_profitable_strategies(
         for replay in regime_basket_replays
         for subset in replay.get("optimized_subsets", [])
     ]
+    optimized_regime_basket_subsets = _dedupe_payloads_by_hash(optimized_regime_basket_subsets, "subset_hash")
     optimized_regime_basket_subsets = sorted(
         optimized_regime_basket_subsets,
         key=lambda row: (
@@ -153,6 +154,7 @@ def mine_databento_nq_profitable_strategies(
         for replay in regime_basket_replays
         for candidate in replay.get("adaptive_recent_regime_candidates", [])
     ]
+    adaptive_recent_regime_candidates = _dedupe_payloads_by_hash(adaptive_recent_regime_candidates, "candidate_hash")
     adaptive_recent_regime_candidates = sorted(
         adaptive_recent_regime_candidates,
         key=lambda row: (
@@ -171,6 +173,7 @@ def mine_databento_nq_profitable_strategies(
         for replay in regime_basket_replays
         for candidate in replay.get("yearly_profitable_candidates", [])
     ]
+    yearly_profitable_candidates = _dedupe_payloads_by_hash(yearly_profitable_candidates, "candidate_hash")
     yearly_profitable_candidates = sorted(
         yearly_profitable_candidates,
         key=lambda row: (
@@ -519,6 +522,17 @@ def _build_regime_edge_baskets(
         key=lambda row: (float(row["cost_adjusted_net_pnl"]), float(row["annual_trades"])),
         reverse=True,
     )
+
+
+def _dedupe_payloads_by_hash(rows: Sequence[dict[str, Any]], hash_key: str) -> list[dict[str, Any]]:
+    by_hash = {}
+    for row in rows:
+        row_hash = row.get(hash_key)
+        if row_hash is None:
+            by_hash[id(row)] = row
+        else:
+            by_hash.setdefault(row_hash, row)
+    return list(by_hash.values())
 
 
 def _regime_basket(
