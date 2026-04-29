@@ -4,7 +4,9 @@ import unittest
 from datetime import datetime
 
 from tlm.top_strategy_report import (
+    _benchmark_metrics,
     _candlestick_svg,
+    _merge_period_results,
     _monthly_signal_results,
     _select_top_yearly_strategies,
 )
@@ -113,6 +115,57 @@ class TopStrategyReportTests(unittest.TestCase):
         self.assertEqual(selected[0]["basket_id"], "high_pf")
         self.assertEqual(selected[1]["basket_id"], "high_net")
 
+    def test_select_top_yearly_strategies_can_rank_by_annualized_net_pnl(self) -> None:
+        edge = {
+            "scan_type": "low_volume_drift",
+            "horizon_minutes": 120,
+            "session_bucket": "utc_1200_1659",
+            "dow": 1,
+            "direction_label": "long",
+            "trend_bin": 1,
+            "volume_bin": -1,
+            "range_bin": -1,
+        }
+        report = {
+            "regime_basket_replays": [
+                {
+                    "basket_id": "slow_big",
+                    "basket_hash": "a",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "all_edges",
+                            "activation_start_year": 2019,
+                            "constituent_edges": [edge],
+                            "train_period": {"covered_days": 1000},
+                            "test_period": {"covered_days": 1000},
+                            "full_after_activation": {"net_pnl": 1000, "annual_trades": 1200, "profit_factor": 1.2},
+                            "test": {"net_pnl": 500, "profit_factor": 1.1},
+                        }
+                    ],
+                },
+                {
+                    "basket_id": "fast_smaller",
+                    "basket_hash": "b",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "fast_edges",
+                            "activation_start_year": 2023,
+                            "constituent_edges": [{**edge, "dow": 2}],
+                            "train_period": {"covered_days": 100},
+                            "test_period": {"covered_days": 100},
+                            "full_after_activation": {"net_pnl": 800, "annual_trades": 1200, "profit_factor": 1.1},
+                            "test": {"net_pnl": 400, "profit_factor": 1.0},
+                        }
+                    ],
+                },
+            ]
+        }
+
+        selected = _select_top_yearly_strategies(report, top_n=2, objective="annualized_net_pnl")
+
+        self.assertEqual(selected[0]["basket_id"], "fast_smaller")
+        self.assertEqual(selected[1]["basket_id"], "slow_big")
+
     def test_monthly_signal_results_groups_by_calendar_month(self) -> None:
         rows = _monthly_signal_results(
             [
@@ -125,6 +178,24 @@ class TopStrategyReportTests(unittest.TestCase):
         self.assertEqual([row["period"] for row in rows], ["2025-01", "2025-02"])
         self.assertEqual(rows[0]["net_pnl"], 15)
         self.assertEqual(rows[1]["trades"], 1)
+
+    def test_benchmark_metrics_and_excess_merge(self) -> None:
+        curve = [
+            {"timestamp": "2025-01-02 10:00:00", "close": 100.0, "equity": 0.0, "pnl": 0.0},
+            {"timestamp": "2025-01-03 10:00:00", "close": 110.0, "equity": 200.0, "pnl": 200.0},
+            {"timestamp": "2025-01-04 10:00:00", "close": 105.0, "equity": 100.0, "pnl": 100.0},
+        ]
+        metrics = _benchmark_metrics(curve)
+        merged = _merge_period_results(
+            [{"period": "2025-01", "net_pnl": 150.0, "profit_factor": 1.2, "win_probability": 0.6}],
+            [{"period": "2025-01", "net_pnl": 100.0}],
+            "period",
+        )
+
+        self.assertEqual(metrics["net_pnl"], 100.0)
+        self.assertGreater(metrics["annualized_net_pnl"], 0.0)
+        self.assertEqual(metrics["max_drawdown"], 100.0)
+        self.assertEqual(merged[0]["excess_net_pnl"], 50.0)
 
     def test_candlestick_svg_contains_entry_and_exit_markers(self) -> None:
         bars = [

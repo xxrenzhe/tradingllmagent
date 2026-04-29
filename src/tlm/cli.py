@@ -1467,8 +1467,8 @@ def build_parser() -> argparse.ArgumentParser:
     top_strategy_report.add_argument("--sample-trade-count", type=int, default=3)
     top_strategy_report.add_argument(
         "--objective",
-        choices=["net_pnl", "profit_factor", "test_profit_factor", "balanced"],
-        default="net_pnl",
+        choices=["annualized_net_pnl", "net_pnl", "profit_factor", "test_profit_factor", "balanced"],
+        default="annualized_net_pnl",
     )
     top_strategy_report.add_argument("--output", default="experiments/profit_mining/top3_strategy_report.html")
     top_strategy_report.set_defaults(func=cmd_research_top_strategy_report)

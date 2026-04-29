@@ -33,7 +33,7 @@ def generate_top_strategy_html_report(
     output_html: Path,
     top_n: int = 3,
     sample_trade_count: int = 3,
-    objective: str = "net_pnl",
+    objective: str = "annualized_net_pnl",
 ) -> dict[str, Any]:
     mining_report = json.loads(mining_report_path.read_text(encoding="utf-8"))
     strategies = _select_top_yearly_strategies(mining_report, top_n=top_n, objective=objective)
@@ -77,7 +77,7 @@ def generate_top_strategy_html_report(
 
     output_html.parent.mkdir(parents=True, exist_ok=True)
     data_path = output_html.with_suffix(".data.json")
-    write_json(data_path, _json_ready(payload))
+    write_json(data_path, _json_ready(_export_payload(payload)))
     output_html.write_text(_render_html(payload, data_path.name), encoding="utf-8")
     return {
         "html": str(output_html),
@@ -91,7 +91,7 @@ def generate_top_strategy_html_report(
 def _select_top_yearly_strategies(
     report: dict[str, Any],
     top_n: int,
-    objective: str = "net_pnl",
+    objective: str = "annualized_net_pnl",
 ) -> list[dict[str, Any]]:
     candidates = []
     for replay in report.get("regime_basket_replays", []):
@@ -125,28 +125,37 @@ def _select_top_yearly_strategies(
 def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, float, float, float]:
     full = candidate.get("full_after_activation") or {}
     test = candidate.get("test") or {}
+    train_period = candidate.get("train_period") or {}
+    test_period = candidate.get("test_period") or {}
     full_pf = float(full.get("profit_factor") or 0.0)
     test_pf = float(test.get("profit_factor") or 0.0)
     full_net = float(full.get("net_pnl") or 0.0)
     test_net = float(test.get("net_pnl") or 0.0)
     annual_trades = float(full.get("annual_trades") or 0.0)
+    covered_days = max(1.0, float(train_period.get("covered_days") or 0.0) + float(test_period.get("covered_days") or 0.0))
+    annualized_net = full_net / covered_days * 365.0
     if objective == "profit_factor":
         return (full_pf, test_pf, full_net, annual_trades)
     if objective == "test_profit_factor":
         return (test_pf, full_pf, test_net, annual_trades)
     if objective == "balanced":
-        return (min(full_pf, test_pf), full_net, test_net, annual_trades)
+        return (annualized_net, min(full_pf, test_pf), full_net, annual_trades)
+    if objective == "net_pnl":
+        return (full_net, test_net, annual_trades, full_pf)
+    if objective == "annualized_net_pnl":
+        return (annualized_net, full_net, test_net, full_pf)
     return (full_net, test_net, annual_trades, full_pf)
 
 
 def _selection_policy(objective: str) -> str:
     policies = {
         "net_pnl": "top yearly-profitable strategies by net PnL, de-duplicated by edge composition",
+        "annualized_net_pnl": "top yearly-profitable strategies by annualized net PnL per 1 contract, de-duplicated by edge composition",
         "profit_factor": "top yearly-profitable strategies by full-period profit factor, de-duplicated by edge composition",
         "test_profit_factor": "top yearly-profitable strategies by recent test-period profit factor, de-duplicated by edge composition",
-        "balanced": "top yearly-profitable strategies by the weaker of full-period and test-period profit factor, then net PnL",
+        "balanced": "top yearly-profitable strategies by annualized net PnL, then the weaker of full-period and test-period profit factor",
     }
-    return policies.get(objective, policies["net_pnl"])
+    return policies.get(objective, policies["annualized_net_pnl"])
 
 
 def _replay_context(report: dict[str, Any], data_root: Path) -> dict[str, Any]:
@@ -219,8 +228,13 @@ def _enrich_strategy(
 ) -> dict[str, Any]:
     day_count = _signals_covered_days(signals)
     replay_metrics = _period_replay_metrics(signals, context)
+    replay_metrics["annualized_net_pnl"] = float(replay_metrics.get("net_pnl") or 0.0) / max(1, day_count) * 365.0
     monthly = _monthly_signal_results(signals)
     equity_curve = _equity_curve(signals)
+    benchmark = _benchmark_bundle(con, context, signals)
+    excess_summary = _excess_summary(replay_metrics, benchmark["metrics"])
+    annual_excess = _merge_period_results(_yearly_signal_results(signals), benchmark["annual_results"], "year")
+    monthly_excess = _merge_period_results(monthly, benchmark["monthly_results"], "period")
     samples = []
     for sample in sample_trades:
         bars = _load_trade_window_bars(con, context, sample, bar_minutes=bar_minutes)
@@ -239,6 +253,10 @@ def _enrich_strategy(
         "monthly_results": monthly,
         "equity_curve": equity_curve,
         "equity_curve_sampled": _sample_series(equity_curve, max_points=1200),
+        "benchmark": benchmark,
+        "excess_summary": excess_summary,
+        "annual_excess_results": annual_excess,
+        "monthly_excess_results": monthly_excess,
         "cost_stress": _cost_stress_metrics(signals, day_count, context),
         "trade_markers": [_trade_marker(signal) for signal in signals],
         "sample_trade_charts": samples,
@@ -284,6 +302,157 @@ def _equity_curve(signals: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _benchmark_bundle(
+    con: duckdb.DuckDBPyConnection,
+    context: dict[str, Any],
+    signals: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    if not signals:
+        return {
+            "metrics": {"net_pnl": 0.0, "annual_trades": 0.0},
+            "equity_curve": [],
+            "equity_curve_sampled": [],
+            "annual_results": [],
+            "monthly_results": [],
+        }
+    start_ts = _signal_timestamp(signals[0])
+    end_ts = _signal_timestamp(signals[-1])
+    bars = _fetch_dicts(
+        con,
+        f"""
+        SELECT timestamp, close
+        FROM read_parquet('{context["parquet_glob"]}')
+        WHERE timestamp >= '{start_ts.isoformat(sep=" ")}'
+          AND timestamp <= '{end_ts.isoformat(sep=" ")}'
+        ORDER BY timestamp
+        """,
+    )
+    if not bars:
+        return {
+            "metrics": {"net_pnl": 0.0, "annual_trades": 0.0},
+            "equity_curve": [],
+            "equity_curve_sampled": [],
+            "annual_results": [],
+            "monthly_results": [],
+        }
+    start_close = float(bars[0]["close"])
+    point_value = float(context["point_value"])
+    curve = []
+    for index, bar in enumerate(bars, start=1):
+        pnl = (float(bar["close"]) - start_close) * point_value
+        curve.append(
+            {
+                "trade": index,
+                "timestamp": _to_iso(bar["timestamp"]),
+                "close": float(bar["close"]),
+                "equity": pnl,
+                "pnl": pnl,
+            }
+        )
+    metrics = _benchmark_metrics(curve)
+    return {
+        "metrics": metrics,
+        "equity_curve": curve,
+        "equity_curve_sampled": _sample_series(curve, max_points=1200),
+        "annual_results": _benchmark_period_results(curve, "year", point_value),
+        "monthly_results": _benchmark_period_results(curve, "month", point_value),
+    }
+
+
+def _benchmark_metrics(curve: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    if not curve:
+        return {"trades": 0, "annual_trades": 0.0, "net_pnl": 0.0, "win_probability": None, "avg_pnl": None, "profit_factor": None, "max_drawdown": 0.0, "return_to_drawdown": None}
+    net_pnl = float(curve[-1]["equity"])
+    peak = float("-inf")
+    max_drawdown = 0.0
+    for row in curve:
+        equity = float(row["equity"])
+        peak = max(peak, equity)
+        max_drawdown = max(max_drawdown, peak - equity)
+    first_ts = datetime.fromisoformat(str(curve[0]["timestamp"]))
+    last_ts = datetime.fromisoformat(str(curve[-1]["timestamp"]))
+    covered_days = max(1, (last_ts.date() - first_ts.date()).days + 1)
+    return {
+        "trades": len(curve),
+        "annual_trades": len(curve) / covered_days * 365,
+        "net_pnl": net_pnl,
+        "annualized_net_pnl": net_pnl / covered_days * 365,
+        "win_probability": None,
+        "avg_pnl": net_pnl / len(curve),
+        "profit_factor": None,
+        "max_drawdown": max_drawdown,
+        "return_to_drawdown": net_pnl / max_drawdown if max_drawdown else None,
+    }
+
+
+def _benchmark_period_results(curve: Sequence[dict[str, Any]], mode: str, point_value: float) -> list[dict[str, Any]]:
+    grouped: dict[tuple[int, int] | int, list[dict[str, Any]]] = defaultdict(list)
+    for row in curve:
+        ts = datetime.fromisoformat(str(row["timestamp"]))
+        key = ts.year if mode == "year" else (ts.year, ts.month)
+        grouped[key].append(row)
+    results = []
+    for key, rows in sorted(grouped.items()):
+        first = rows[0]
+        last = rows[-1]
+        first_ts = datetime.fromisoformat(str(first["timestamp"]))
+        last_ts = datetime.fromisoformat(str(last["timestamp"]))
+        period_pnl = (float(last["close"]) - float(first["close"])) * point_value
+        payload = {
+            "period_from": first_ts.date().isoformat(),
+            "period_to": last_ts.date().isoformat(),
+            "net_pnl": period_pnl,
+            "profit_factor": None,
+            "win_probability": None,
+            "max_drawdown": None,
+            "trades": len(rows),
+            "annual_trades": 0.0,
+        }
+        if mode == "year":
+            payload["year"] = int(key)
+        else:
+            year, month = key
+            payload["year"] = year
+            payload["month"] = month
+            payload["period"] = f"{year}-{month:02d}"
+        results.append(payload)
+    return results
+
+
+def _merge_period_results(
+    strategy_rows: Sequence[dict[str, Any]],
+    benchmark_rows: Sequence[dict[str, Any]],
+    label_key: str,
+) -> list[dict[str, Any]]:
+    bench_by_key = {row[label_key]: row for row in benchmark_rows if label_key in row}
+    merged = []
+    for row in strategy_rows:
+        bench = bench_by_key.get(row[label_key], {})
+        merged.append(
+            {
+                **row,
+                "benchmark_net_pnl": float(bench.get("net_pnl") or 0.0),
+                "excess_net_pnl": float(row.get("net_pnl") or 0.0) - float(bench.get("net_pnl") or 0.0),
+            }
+        )
+    return merged
+
+
+def _excess_summary(strategy_metrics: dict[str, Any], benchmark_metrics: dict[str, Any]) -> dict[str, Any]:
+    strategy_net = float(strategy_metrics.get("net_pnl") or 0.0)
+    strategy_annualized = float(strategy_metrics.get("annualized_net_pnl") or 0.0)
+    benchmark_net = float(benchmark_metrics.get("net_pnl") or 0.0)
+    benchmark_annualized = float(benchmark_metrics.get("annualized_net_pnl") or 0.0)
+    return {
+        "strategy_net_pnl": strategy_net,
+        "strategy_annualized_net_pnl": strategy_annualized,
+        "benchmark_net_pnl": benchmark_net,
+        "benchmark_annualized_net_pnl": benchmark_annualized,
+        "excess_net_pnl": strategy_net - benchmark_net,
+        "excess_annualized_net_pnl": strategy_annualized - benchmark_annualized,
+    }
 
 
 def _sample_trades(signals: Sequence[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -442,6 +611,9 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
 
 def _strategy_section(strategy: dict[str, Any]) -> str:
     metrics = strategy["replayed_metrics"]
+    benchmark = strategy["benchmark"]
+    benchmark_metrics = benchmark["metrics"]
+    excess = strategy["excess_summary"]
     analysis = strategy.get("strategy_analysis") or {}
     profile = analysis.get("strategy_profile") or {}
     return f"""
@@ -452,20 +624,34 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
         {_metric("Profit Factor", fmt_num(metrics["profit_factor"], 3))}
         {_metric("胜率", fmt_pct(metrics["win_probability"]))}
         {_metric("年化交易", fmt_num(metrics["annual_trades"], 1))}
+        {_metric("年化净收益", fmt_usd(metrics.get("annualized_net_pnl")))}
         {_metric("最大回撤", fmt_usd(metrics["max_drawdown"]))}
         {_metric("交易数", fmt_int(metrics["trades"]))}
+      </div>
+      <h3>基准与超额收益</h3>
+      <div class="grid">
+        {_metric("策略净收益", fmt_usd(excess["strategy_net_pnl"]))}
+        {_metric("策略年化净收益", fmt_usd(excess["strategy_annualized_net_pnl"]))}
+        {_metric("NQ 持有净收益", fmt_usd(excess["benchmark_net_pnl"]))}
+        {_metric("NQ 持有年化净收益", fmt_usd(excess["benchmark_annualized_net_pnl"]))}
+        {_metric("超额收益", fmt_usd(excess["excess_net_pnl"]))}
+        {_metric("年化超额收益", fmt_usd(excess["excess_annualized_net_pnl"]))}
+        {_metric("基准最大回撤", fmt_usd(benchmark_metrics["max_drawdown"]))}
       </div>
       <h3>策略构成</h3>
       <p>{_profile_pills(profile)}</p>
       <table>{_edge_rows(strategy.get("constituent_edges") or [])}</table>
       <h3>资金曲线</h3>
       <div class="chart">{_line_svg(strategy["equity_curve_sampled"], title="累计净收益")}</div>
+      <div class="chart">{_comparison_line_svg(strategy["equity_curve_sampled"], benchmark["equity_curve_sampled"])}</div>
       <h3>年度表现</h3>
       <div class="chart">{_bar_svg(strategy["annual_results"], "year", "net_pnl")}</div>
       <table>{_period_rows(strategy["annual_results"], ["year"])}</table>
+      <details><summary>展开年度基准与超额收益</summary><table>{_excess_period_rows(strategy["annual_excess_results"], ["year"])}</table></details>
       <h3>月度表现</h3>
       {_monthly_heatmap(strategy["monthly_results"])}
       <details><summary>展开月度明细</summary><table>{_period_rows(strategy["monthly_results"], ["period"])}</table></details>
+      <details><summary>展开月度基准与超额收益</summary><table>{_excess_period_rows(strategy["monthly_excess_results"], ["period"])}</table></details>
       <h3>进场/出场 K 线位置</h3>
       <div class="kline-grid">{''.join(_sample_chart(sample) for sample in strategy["sample_trade_charts"])}</div>
       <h3>优点与缺点</h3>
@@ -556,6 +742,23 @@ def _cost_stress_rows(rows: Sequence[dict[str, Any]]) -> str:
     return "".join(out)
 
 
+def _excess_period_rows(rows: Sequence[dict[str, Any]], label_keys: Sequence[str]) -> str:
+    out = ["<thead><tr><th>周期</th><th>策略净收益</th><th>基准净收益</th><th>超额收益</th><th>策略PF</th><th>策略胜率</th></tr></thead><tbody>"]
+    for row in rows:
+        label = " ".join(str(row.get(key)) for key in label_keys)
+        excess_css = "good" if float(row.get("excess_net_pnl") or 0) >= 0 else "bad"
+        out.append(
+            f"<tr><td>{html.escape(label)}</td>"
+            f"<td>{fmt_usd(row.get('net_pnl'))}</td>"
+            f"<td>{fmt_usd(row.get('benchmark_net_pnl'))}</td>"
+            f"<td class=\"{excess_css}\">{fmt_usd(row.get('excess_net_pnl'))}</td>"
+            f"<td>{fmt_num(row.get('profit_factor'), 3)}</td>"
+            f"<td>{fmt_pct(row.get('win_probability'))}</td></tr>"
+        )
+    out.append("</tbody>")
+    return "".join(out)
+
+
 def _monthly_heatmap(rows: Sequence[dict[str, Any]]) -> str:
     by_year_month = {(row["year"], row["month"]): row for row in rows}
     years = sorted({row["year"] for row in rows})
@@ -619,6 +822,42 @@ def _line_svg(points: Sequence[dict[str, Any]], *, title: str) -> str:
         f"<text x=\"{pad}\" y=\"{height-8}\" fill=\"#667085\" font-size=\"12\">{html.escape(str(points[0]['timestamp'])[:10])}</text>"
         f"<text x=\"{width-pad-86}\" y=\"{height-8}\" fill=\"#667085\" font-size=\"12\">{html.escape(str(points[-1]['timestamp'])[:10])}</text>"
         f"<text x=\"{width-pad-112}\" y=\"22\" fill=\"#172033\" font-size=\"12\">max {fmt_usd(high)}</text>"
+        f"</svg>"
+    )
+
+
+def _comparison_line_svg(strategy_points: Sequence[dict[str, Any]], benchmark_points: Sequence[dict[str, Any]]) -> str:
+    width, height = 900, 260
+    pad = 38
+    if not strategy_points or not benchmark_points:
+        return "<svg viewBox=\"0 0 900 260\"></svg>"
+    bench_by_ts = {str(point["timestamp"]): float(point["equity"]) for point in benchmark_points}
+    aligned = [
+        {
+            "timestamp": point["timestamp"],
+            "strategy": float(point["equity"]),
+            "benchmark": bench_by_ts.get(str(point["timestamp"]), 0.0),
+        }
+        for point in strategy_points
+    ]
+    values = [row["strategy"] for row in aligned] + [row["benchmark"] for row in aligned]
+    low, high = min(values), max(values)
+    if high == low:
+        high += 1.0
+        low -= 1.0
+    def xy(index: int, value: float) -> tuple[float, float]:
+        x = pad + index / max(1, len(aligned) - 1) * (width - pad * 2)
+        y = height - pad - (value - low) / (high - low) * (height - pad * 2)
+        return x, y
+    strategy_poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in (xy(i, row["strategy"]) for i, row in enumerate(aligned)))
+    benchmark_poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in (xy(i, row["benchmark"]) for i, row in enumerate(aligned)))
+    return (
+        f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"策略与基准对比曲线\">"
+        f"<text x=\"{pad}\" y=\"22\" fill=\"#667085\" font-size=\"13\">策略 vs NQ 持有累计收益</text>"
+        f"<polyline fill=\"none\" stroke=\"#1769aa\" stroke-width=\"2.2\" points=\"{strategy_poly}\"/>"
+        f"<polyline fill=\"none\" stroke=\"#a15c00\" stroke-width=\"2.2\" points=\"{benchmark_poly}\"/>"
+        f"<text x=\"{pad}\" y=\"{height-8}\" fill=\"#1769aa\" font-size=\"12\">策略</text>"
+        f"<text x=\"{pad+48}\" y=\"{height-8}\" fill=\"#a15c00\" font-size=\"12\">基准</text>"
         f"</svg>"
     )
 
@@ -720,6 +959,21 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, date):
         return value.isoformat()
     return value
+
+
+def _export_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    exported = {**payload}
+    exported["strategies"] = [_export_strategy(strategy) for strategy in payload.get("strategies", [])]
+    return exported
+
+
+def _export_strategy(strategy: dict[str, Any]) -> dict[str, Any]:
+    exported = dict(strategy)
+    exported.pop("equity_curve", None)
+    benchmark = dict(exported.get("benchmark") or {})
+    benchmark.pop("equity_curve", None)
+    exported["benchmark"] = benchmark
+    return exported
 
 
 def _to_iso(value: Any) -> str | None:
