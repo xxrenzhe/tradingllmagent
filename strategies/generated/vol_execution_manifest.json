@@ -1,0 +1,468 @@
+{
+  "method": "deterministic_vol_execution_seed",
+  "prefix": "vol_execution",
+  "required_next_artifacts": [
+    "vol_feature_readiness.json",
+    "vol_strategy_leaderboard.json",
+    "vol_cost_stress_report.json",
+    "vol_quote_replay_report.json",
+    "vol_paper_shadow_review.json",
+    "vol_mutation_memory.json"
+  ],
+  "strategies": [
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "de5521785ae15bd9",
+      "name": "nq_vol_execution_vol_breakout_01",
+      "path": "strategies/nq_vol_execution_vol_breakout_01.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "a038f7b9fde08b87",
+      "name": "nq_vol_execution_vol_pullback_01",
+      "path": "strategies/nq_vol_execution_vol_pullback_01.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "41f8d5d694fbddeb",
+      "name": "nq_vol_execution_vol_absorb_01",
+      "path": "strategies/nq_vol_execution_vol_absorb_01.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "e68d912d3dfeff6b",
+      "name": "nq_vol_execution_vol_macd_01",
+      "path": "strategies/nq_vol_execution_vol_macd_01.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "e6b4db549a4f6975",
+      "name": "nq_vol_execution_vol_revert_01",
+      "path": "strategies/nq_vol_execution_vol_revert_01.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "3980a2687938fb47",
+      "name": "nq_vol_execution_vol_breakout_02",
+      "path": "strategies/nq_vol_execution_vol_breakout_02.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "f27e01c83d0110a5",
+      "name": "nq_vol_execution_vol_pullback_02",
+      "path": "strategies/nq_vol_execution_vol_pullback_02.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "ec5992b4119a83ce",
+      "name": "nq_vol_execution_vol_absorb_02",
+      "path": "strategies/nq_vol_execution_vol_absorb_02.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "41d81a483b8ac33a",
+      "name": "nq_vol_execution_vol_macd_02",
+      "path": "strategies/nq_vol_execution_vol_macd_02.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "31ef568c723c2174",
+      "name": "nq_vol_execution_vol_revert_02",
+      "path": "strategies/nq_vol_execution_vol_revert_02.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "2297e7069f6a48be",
+      "name": "nq_vol_execution_vol_breakout_03",
+      "path": "strategies/nq_vol_execution_vol_breakout_03.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "e569d745f56a1ddb",
+      "name": "nq_vol_execution_vol_pullback_03",
+      "path": "strategies/nq_vol_execution_vol_pullback_03.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "4554f84caef0dbfe",
+      "name": "nq_vol_execution_vol_absorb_03",
+      "path": "strategies/nq_vol_execution_vol_absorb_03.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "b72225db6712356b",
+      "name": "nq_vol_execution_vol_macd_03",
+      "path": "strategies/nq_vol_execution_vol_macd_03.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "b3ad32654a91d3f2",
+      "name": "nq_vol_execution_vol_revert_03",
+      "path": "strategies/nq_vol_execution_vol_revert_03.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "44c2dbbd62700fb3",
+      "name": "nq_vol_execution_vol_breakout_04",
+      "path": "strategies/nq_vol_execution_vol_breakout_04.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "155c07ad5d10aba6",
+      "name": "nq_vol_execution_vol_pullback_04",
+      "path": "strategies/nq_vol_execution_vol_pullback_04.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "606391d0853117e7",
+      "name": "nq_vol_execution_vol_absorb_04",
+      "path": "strategies/nq_vol_execution_vol_absorb_04.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "8939078300fc46f7",
+      "name": "nq_vol_execution_vol_macd_04",
+      "path": "strategies/nq_vol_execution_vol_macd_04.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "295b0ca051a1e0ab",
+      "name": "nq_vol_execution_vol_revert_04",
+      "path": "strategies/nq_vol_execution_vol_revert_04.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "39e5cef26120f6b4",
+      "name": "nq_vol_execution_vol_breakout_05",
+      "path": "strategies/nq_vol_execution_vol_breakout_05.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "0722a47845278bda",
+      "name": "nq_vol_execution_vol_pullback_05",
+      "path": "strategies/nq_vol_execution_vol_pullback_05.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "6b1373f51d257df6",
+      "name": "nq_vol_execution_vol_absorb_05",
+      "path": "strategies/nq_vol_execution_vol_absorb_05.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "fbf3edf5cfc15200",
+      "name": "nq_vol_execution_vol_macd_05",
+      "path": "strategies/nq_vol_execution_vol_macd_05.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "9e9c8e77418c86a7",
+      "name": "nq_vol_execution_vol_revert_05",
+      "path": "strategies/nq_vol_execution_vol_revert_05.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "a766cbea19d8da36",
+      "name": "nq_vol_execution_vol_breakout_06",
+      "path": "strategies/nq_vol_execution_vol_breakout_06.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "4da0859dd52ad50e",
+      "name": "nq_vol_execution_vol_pullback_06",
+      "path": "strategies/nq_vol_execution_vol_pullback_06.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "6c57cd2baf8e1cb9",
+      "name": "nq_vol_execution_vol_absorb_06",
+      "path": "strategies/nq_vol_execution_vol_absorb_06.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "97a1bce7b34931ca",
+      "name": "nq_vol_execution_vol_macd_06",
+      "path": "strategies/nq_vol_execution_vol_macd_06.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "b7b7eb0cba9b3e42",
+      "name": "nq_vol_execution_vol_revert_06",
+      "path": "strategies/nq_vol_execution_vol_revert_06.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "867a2f51e66486a5",
+      "name": "nq_vol_execution_vol_breakout_07",
+      "path": "strategies/nq_vol_execution_vol_breakout_07.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "70f41c2358d28d25",
+      "name": "nq_vol_execution_vol_pullback_07",
+      "path": "strategies/nq_vol_execution_vol_pullback_07.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "60aab9aed699ac78",
+      "name": "nq_vol_execution_vol_absorb_07",
+      "path": "strategies/nq_vol_execution_vol_absorb_07.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "24dbed504fd3a20e",
+      "name": "nq_vol_execution_vol_macd_07",
+      "path": "strategies/nq_vol_execution_vol_macd_07.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "66a1152f19eeaa00",
+      "name": "nq_vol_execution_vol_revert_07",
+      "path": "strategies/nq_vol_execution_vol_revert_07.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "c197548314734c69",
+      "name": "nq_vol_execution_vol_breakout_08",
+      "path": "strategies/nq_vol_execution_vol_breakout_08.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "b7a28aeeec8f991d",
+      "name": "nq_vol_execution_vol_pullback_08",
+      "path": "strategies/nq_vol_execution_vol_pullback_08.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "d566a1abb2a3b6ce",
+      "name": "nq_vol_execution_vol_absorb_08",
+      "path": "strategies/nq_vol_execution_vol_absorb_08.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "bc70534062bdd5dd",
+      "name": "nq_vol_execution_vol_macd_08",
+      "path": "strategies/nq_vol_execution_vol_macd_08.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "6d638f58c0547156",
+      "name": "nq_vol_execution_vol_revert_08",
+      "path": "strategies/nq_vol_execution_vol_revert_08.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "635c3acf0756ced9",
+      "name": "nq_vol_execution_vol_breakout_09",
+      "path": "strategies/nq_vol_execution_vol_breakout_09.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "b81b3bc706874bc4",
+      "name": "nq_vol_execution_vol_pullback_09",
+      "path": "strategies/nq_vol_execution_vol_pullback_09.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "1c69edc8cd2afb77",
+      "name": "nq_vol_execution_vol_absorb_09",
+      "path": "strategies/nq_vol_execution_vol_absorb_09.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "01e4170e29c4cd19",
+      "name": "nq_vol_execution_vol_macd_09",
+      "path": "strategies/nq_vol_execution_vol_macd_09.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "c170ef42aeac75d7",
+      "name": "nq_vol_execution_vol_revert_09",
+      "path": "strategies/nq_vol_execution_vol_revert_09.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "2d0623e223f3c136",
+      "name": "nq_vol_execution_vol_breakout_10",
+      "path": "strategies/nq_vol_execution_vol_breakout_10.yaml",
+      "strategy_family": "vol_breakout_trend"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "1e8f45bfc0f6f74f",
+      "name": "nq_vol_execution_vol_pullback_10",
+      "path": "strategies/nq_vol_execution_vol_pullback_10.yaml",
+      "strategy_family": "ma_pullback_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "02c0c3dca0946b0b",
+      "name": "nq_vol_execution_vol_absorb_10",
+      "path": "strategies/nq_vol_execution_vol_absorb_10.yaml",
+      "strategy_family": "volume_absorption_reversion"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "824ac7416773a563",
+      "name": "nq_vol_execution_vol_macd_10",
+      "path": "strategies/nq_vol_execution_vol_macd_10.yaml",
+      "strategy_family": "macd_ma_volume_confirm"
+    },
+    {
+      "event_window_policy": "avoid_high_impact_event_windows",
+      "execution_assumption": "ohlcv_pre_screen_requires_quote_replay_before_paper_shadow",
+      "feature_combo_hash": "0bdd1b5953f8281743cc0e65697466f9578700e6238b21386dfc886460c52431",
+      "generation_id": "cfab55b374782980",
+      "name": "nq_vol_execution_vol_revert_10",
+      "path": "strategies/nq_vol_execution_vol_revert_10.yaml",
+      "strategy_family": "rsi_reversion_low_volume"
+    }
+  ],
+  "strategy_count": 50,
+  "strategy_manifest_hash": "5dcb21834ab925d37e9804a1767790cefe35d382e04c07aadbc539ec70ab3efd",
+  "symbol": "NQ_CME",
+  "timeframe": "1m"
+}

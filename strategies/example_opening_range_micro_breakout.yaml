@@ -1,0 +1,41 @@
+{
+  "schema_version": 0,
+  "name": "nq_opening_range_micro_breakout_v1",
+  "strategy_family": "opening_range_breakout",
+  "market_hypothesis": "Very short opening ranges can capture early NQ directional imbalance when exits are tight and daily trade count is bounded.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {"timezone": "UTC", "trade": "13:30-20:45", "flatten": "20:55"},
+  "regime_filter": {},
+  "indicators": {
+    "opening_range": {"type": "opening_range", "minutes": 3}
+  },
+  "entry": {
+    "long": {"all": [{"left": "close", "op": ">", "right": "opening_range.high"}]},
+    "short": {"all": [{"left": "close", "op": "<", "right": "opening_range.low"}]}
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 10},
+    "take_profit": {"type": "points", "value": 12},
+    "max_holding_minutes": 15
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 48,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "opening_range_minutes": {"values": [2, 3, 5]},
+    "stop_points": {"values": [6, 10, 14]},
+    "take_profit_points": {"values": [8, 12, 16]},
+    "max_holding_minutes": {"values": [8, 15, 25]}
+  },
+  "cost_model": "nq_conservative_v1"
+}

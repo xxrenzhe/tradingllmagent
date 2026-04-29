@@ -1,0 +1,940 @@
+openapi: 3.1.0
+info:
+  title: Trading LLM Agent System API
+  version: 0.2.0
+  description: Local research, monitor, paper-shadow, execution readiness, and NT8 sim gateway contract.
+paths:
+  /api/health:
+    get:
+      summary: API health check.
+      responses:
+        "200":
+          description: Health status.
+  /api/data/symbols:
+    get:
+      summary: List configured symbols.
+      responses:
+        "200":
+          description: Symbol configuration map.
+  /api/data/download:
+    post:
+      summary: Queue a data download task.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+  /api/data/build-bars:
+    post:
+      summary: Queue bar aggregation from normalized tick data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/import-firstrate:
+    post:
+      summary: Queue FirstRate NQ 1m CSV import into local bar partitions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/bar-quality:
+    post:
+      summary: Queue bar-level data quality checks for imported NQ data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/split-manifest:
+    post:
+      summary: Queue dataset split manifest generation with hidden final holdout policy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/import-databento-quotes:
+    post:
+      summary: Queue Databento TBBO or MBP-1 quote CSV import into local quote partitions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/import-databento-tbbo:
+    post:
+      summary: Queue Databento TBBO CSV import using the quote partition importer.
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/import-databento-ohlcv:
+    post:
+      summary: Queue Databento NQ.FUT OHLCV-1m import into continuous daily-volume bar partitions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/quote-replay:
+    post:
+      summary: Queue quote-level bid/ask execution replay for candidate backtest trades.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataTaskRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/data/quality:
+    get:
+      summary: Build a local data quality report.
+      parameters:
+        - $ref: "#/components/parameters/Symbol"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+      responses:
+        "200":
+          description: Data quality report.
+  /api/tasks:
+    get:
+      summary: List queued, running, and completed tasks.
+      responses:
+        "200":
+          description: Task list.
+  /api/tasks/{task_id}:
+    get:
+      summary: Get a task by id.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Task.
+  /api/tasks/{task_id}/cancel:
+    post:
+      summary: Cancel a non-terminal task.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Updated task.
+  /api/tasks/{task_id}/run:
+    post:
+      summary: Run a queued task synchronously.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Updated task.
+  /api/tasks/{task_id}/logs:
+    get:
+      summary: List task logs.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Task logs.
+  /api/tasks/{task_id}/events:
+    get:
+      summary: Stream task and log updates using SSE.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: SSE stream.
+  /api/strategies/validate:
+    post:
+      summary: Validate a local Strategy Spec.
+      responses:
+        "200":
+          description: Strategy validation result.
+  /api/backtests/bar:
+    post:
+      summary: Queue a bar backtest task.
+      responses:
+        "200":
+          description: Queued task.
+  /api/backtests/tick:
+    post:
+      summary: Queue a tick replay backtest task.
+      responses:
+        "200":
+          description: Queued task.
+  /api/experiments/research-runs:
+    post:
+      summary: Queue a research run.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResearchRunRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/experiments/proposals:
+    post:
+      summary: Queue an LLM strategy proposal task.
+      responses:
+        "200":
+          description: Queued task.
+  /api/experiments/iterations:
+    post:
+      summary: Queue proposal plus research iteration.
+      responses:
+        "200":
+          description: Queued task.
+  /api/experiments/target-discovery:
+    post:
+      summary: Queue repeated LLM strategy discovery against explicit performance targets.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TargetDiscoveryRequest"
+      responses:
+        "200":
+          description: Queued task.
+  /api/experiments/{experiment_id}:
+    get:
+      summary: Load experiment summary from SQLite.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: Experiment summary.
+  /api/experiments/{experiment_id}/audit-logs:
+    get:
+      summary: Load experiment audit logs.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: Audit log list.
+  /api/experiments/{experiment_id}/artifacts:
+    get:
+      summary: Load trades, equity, metrics, and artifacts for a research trial.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: Research artifact bundle.
+  /api/reports/leaderboard:
+    get:
+      summary: Load the hard-gated leaderboard report.
+      responses:
+        "200":
+          description: Leaderboard report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardReport"
+  /api/events/validate:
+    post:
+      summary: Validate an event calendar.
+      responses:
+        "200":
+          description: Event calendar validation.
+  /api/events:
+    get:
+      summary: List event calendar rows with optional symbol/date filters.
+      responses:
+        "200":
+          description: Event calendar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventCalendar"
+  /api/events/context:
+    post:
+      summary: Build point-in-time event contexts for bar data.
+      responses:
+        "200":
+          description: Event context rows.
+  /api/monitor/once:
+    post:
+      summary: Queue one runtime monitor scan.
+      responses:
+        "200":
+          description: Queued task.
+  /api/monitor/run:
+    post:
+      summary: Queue a continuous or scheduled monitor run.
+      responses:
+        "200":
+          description: Queued task.
+  /api/monitor/replay:
+    post:
+      summary: Queue monitor replay against historical snapshots.
+      responses:
+        "200":
+          description: Queued task.
+  /api/monitor/report:
+    post:
+      summary: Build a runtime monitor report immediately.
+      responses:
+        "200":
+          description: Monitor report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitorReport"
+  /api/execution/intents:
+    post:
+      summary: Build an execution intent and deterministic risk decision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutionIntentRequest"
+      responses:
+        "200":
+          description: Execution intent with risk result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionIntentResponse"
+  /api/execution/paper-shadow:
+    post:
+      summary: Persist a paper-shadow execution intent audit event.
+      responses:
+        "200":
+          description: Paper shadow audit result.
+  /api/execution/readiness:
+    post:
+      summary: Evaluate paper, sim, micro-live, or controlled-live readiness evidence.
+      responses:
+        "200":
+          description: Readiness decision.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessDecision"
+  /api/execution/approval-queue:
+    get:
+      summary: List execution intents pending human approval.
+      responses:
+        "200":
+          description: Approval queue.
+  /api/execution/risk-profiles:
+    get:
+      summary: List audited execution risk profiles.
+      responses:
+        "200":
+          description: Risk profile registry.
+    post:
+      summary: Write an audited execution risk profile registry.
+      responses:
+        "200":
+          description: Risk profile registry.
+  /api/readiness/external-validation:
+    post:
+      summary: Build an external validation evidence artifact.
+      responses:
+        "200":
+          description: External validation artifact.
+  /api/calibration/costs:
+    post:
+      summary: Build a cost model calibration artifact from runtime samples.
+      responses:
+        "200":
+          description: Cost calibration artifact.
+  /api/modules:
+    get:
+      summary: List strategy modules in the local catalog.
+      responses:
+        "200":
+          description: Module catalog.
+  /api/modules/memory:
+    get:
+      summary: Summarize module performance memory.
+      responses:
+        "200":
+          description: Module memory summary.
+  /api/features/readiness:
+    get:
+      summary: Load feature registry readiness and generated strategy audit manifest.
+      responses:
+        "200":
+          description: Feature readiness report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureReadinessReport"
+  /api/vol/overview:
+    get:
+      summary: Load VOL execution-aware optimization readiness, leaderboard, cost, quote, paper, and mutation reports.
+      responses:
+        "200":
+          description: VOL optimization overview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VolOverviewReport"
+  /api/vol/readiness:
+    post:
+      summary: Queue VOL feature readiness artifact generation.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/seed-search:
+    post:
+      summary: Queue deterministic VOL execution-aware seed strategy generation.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/pre-screen:
+    post:
+      summary: Queue NQ_CME OHLCV VOL seed pre-screen and leaderboard generation.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/cost-stress:
+    post:
+      summary: Queue VOL candidate execution cost stress report generation.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/artifacts:
+    post:
+      summary: Queue all VOL research artifacts in the optimization plan.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/quote-fill-replay:
+    post:
+      summary: Queue quote fill replay or blocked quote replay readiness artifact.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/paper-shadow-review:
+    post:
+      summary: Queue VOL paper shadow review artifact generation.
+      responses:
+        "200":
+          description: Queued task.
+  /api/vol/mutation-backfill:
+    post:
+      summary: Queue VOL mutation memory backfill from research outcomes.
+      responses:
+        "200":
+          description: Queued task.
+  /api/paper/replay:
+    post:
+      summary: Replay backtest trades into a paper equity curve.
+      responses:
+        "200":
+          description: Paper replay result.
+  /api/paper/nt-export-signal:
+    post:
+      summary: Export offline NinjaTrader CSV or OIF signals.
+      responses:
+        "200":
+          description: Offline export payload.
+  /api/gateways/nt8/health:
+    get:
+      summary: Check NT8 sim gateway health.
+      responses:
+        "200":
+          description: Gateway health.
+  /api/gateways/nt8/accounts:
+    get:
+      summary: List available NT8 sim accounts.
+      responses:
+        "200":
+          description: Account list.
+  /api/gateways/nt8/instruments:
+    get:
+      summary: List available NT8 sim instruments.
+      responses:
+        "200":
+          description: Instrument list.
+  /api/gateways/nt8/commands:
+    post:
+      summary: Submit an NT8 sim gateway command.
+      description: Supports marketOrder, marketBatch, cancelOrders, flatten, flattenBatch, closeQty, and bracket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GatewayCommand"
+      responses:
+        "200":
+          description: Gateway ACK/NACK.
+  /api/gateways/nt8/reconciliation:
+    get:
+      summary: Get reconciliation status.
+      responses:
+        "200":
+          description: Reconciliation report.
+    post:
+      summary: Reconcile expected positions against gateway state.
+      responses:
+        "200":
+          description: Reconciliation report.
+  /api/gateways/nt8/order-updates:
+    get:
+      summary: List append-only NT8 gateway order update events.
+      responses:
+        "200":
+          description: Order update event stream.
+  /api/gateways/nt8/incidents:
+    get:
+      summary: List NT8 gateway incidents and external interventions.
+      responses:
+        "200":
+          description: Incident timeline.
+  /api/incidents:
+    post:
+      summary: Record an incident or force gateway safety mode.
+      responses:
+        "200":
+          description: Incident response.
+components:
+  parameters:
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ExperimentId:
+      name: experiment_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Symbol:
+      name: symbol
+      in: query
+      required: true
+      schema:
+        type: string
+    DateFrom:
+      name: date_from
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date
+    DateTo:
+      name: date_to
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date
+  schemas:
+    Task:
+      type: object
+      required: [task_id, task_type, status, payload, created_at, updated_at]
+      properties:
+        task_id:
+          type: string
+        task_type:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed, cancelled]
+        payload:
+          type: object
+        result:
+          type: object
+        error:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    DataTaskRequest:
+      type: object
+      required: [symbol, date_from, date_to]
+      properties:
+        symbol:
+          type: string
+        date_from:
+          type: string
+          format: date
+        date_to:
+          type: string
+          format: date
+        timeframe:
+          type: string
+        granularity:
+          type: string
+    ResearchRunRequest:
+      type: object
+      required: [date_from, date_to]
+      properties:
+        spec:
+          type: string
+        specs:
+          type: array
+          items:
+            type: string
+        experiment_id:
+          type: string
+        execution_mode:
+          type: string
+          enum: [bar, tick, bar_then_tick]
+        max_trials:
+          type: integer
+        max_trials_per_family:
+          type: integer
+    TargetDiscoveryRequest:
+      type: object
+      required: [date_from, date_to]
+      properties:
+        spec:
+          type: string
+          description: Optional explicit seed spec. If omitted, the worker scans local seed strategies.
+        specs:
+          type: array
+          items:
+            type: string
+          description: Optional explicit seed spec list.
+        strategies_root:
+          type: string
+          default: strategies
+        symbol:
+          type: string
+        timeframe:
+          type: string
+        strategy_families:
+          type: array
+          items:
+            type: string
+        max_seed_strategies:
+          type: integer
+        experiment_id:
+          type: string
+        date_from:
+          type: string
+          format: date
+        date_to:
+          type: string
+          format: date
+        max_rounds:
+          type: integer
+          default: 10
+        trials_per_round:
+          type: integer
+          default: 1
+        target_count:
+          type: integer
+          default: 1
+        min_annual_trades:
+          type: number
+          default: 1000
+        min_sharpe:
+          type: number
+          default: 2
+        min_win_probability:
+          type: number
+          default: 0.53
+        execution_mode:
+          type: string
+          enum: [bar, tick, bar_then_tick]
+        llm_model:
+          type: string
+        llm_parameters:
+          type: object
+    LeaderboardReport:
+      type: object
+      properties:
+        summary:
+          type: object
+        leaderboard:
+          type: array
+          items:
+            type: object
+        candidate_leaderboard:
+          type: array
+          items:
+            type: object
+        freeze_confirmed_leaderboard:
+          type: array
+          items:
+            type: object
+        rejected:
+          type: array
+          items:
+            type: object
+        rows:
+          type: array
+          items:
+            type: object
+    FeatureReadinessReport:
+      type: object
+      required: [feature_count, features, by_status, generated_strategy_summary]
+      properties:
+        feature_count:
+          type: integer
+        by_status:
+          type: object
+        by_data_level:
+          type: object
+        by_leakage_risk:
+          type: object
+        by_category:
+          type: object
+        usable_for_bar_research_count:
+          type: integer
+        external_required_count:
+          type: integer
+        features:
+          type: array
+          items:
+            type: object
+        generated_strategy_summary:
+          type: object
+        generated_strategy_manifest:
+          type: object
+    VolOverviewReport:
+      type: object
+      properties:
+        feature_readiness:
+          type: object
+        strategy_leaderboard:
+          type: object
+        cost_stress:
+          type: object
+        quote_replay:
+          type: object
+        paper_shadow:
+          type: object
+        mutation_memory:
+          type: object
+    EventCalendar:
+      type: object
+      required: [calendar_id, event_calendar_hash, events, event_count]
+      properties:
+        calendar_id:
+          type: string
+        event_calendar_hash:
+          type: string
+        event_count:
+          type: integer
+        events:
+          type: array
+          items:
+            type: object
+    MonitorReport:
+      type: object
+      required: [monitor_run_id, snapshot, key_levels, event_context, signal]
+      properties:
+        monitor_run_id:
+          type: string
+        snapshot:
+          type: object
+        key_levels:
+          type: array
+          items:
+            type: object
+        event_context:
+          type: object
+        signal:
+          type: object
+    ExecutionIntentRequest:
+      type: object
+      required: [account, instrument, action, quantity, source_strategy]
+      properties:
+        mode:
+          type: string
+          enum: [offline_export, nt8_sim, paper_shadow, micro_live, live]
+          default: paper_shadow
+        account:
+          type: string
+        instrument:
+          type: string
+        action:
+          type: string
+          enum: [buy, sell, sell_short, buy_to_cover]
+        quantity:
+          type: integer
+          minimum: 1
+        order_type:
+          type: string
+          default: market
+        bracket:
+          type: object
+          properties:
+            stop:
+              type: number
+            limit:
+              type: number
+        source_strategy:
+          $ref: "#/components/schemas/SourceStrategy"
+        idempotency_key:
+          type: string
+        correlation_id:
+          type: string
+        schema_version:
+          type: integer
+          default: 1
+        protocol_version:
+          type: string
+          default: execution.v1
+        expected_spread_ticks:
+          type: number
+        expected_max_slippage_ticks:
+          type: number
+        risk_profile:
+          $ref: "#/components/schemas/RiskProfile"
+    SourceStrategy:
+      type: object
+      required: [strategy_spec_hash]
+      properties:
+        strategy_spec_hash:
+          type: string
+        strategy_freeze_id:
+          type: string
+        module_id:
+          type: string
+        module_version:
+          type: string
+    RiskProfile:
+      type: object
+      properties:
+        allowed_accounts:
+          type: array
+          items:
+            type: string
+        allowed_instruments:
+          type: array
+          items:
+            type: string
+        max_quantity:
+          type: integer
+          minimum: 1
+        live_enabled:
+          type: boolean
+        require_bracket:
+          type: boolean
+        kill_switch:
+          type: boolean
+        data_stale:
+          type: boolean
+        event_blackout:
+          type: boolean
+        daily_loss_limit_reached:
+          type: boolean
+        max_spread_ticks:
+          type: number
+        max_slippage_ticks:
+          type: number
+        max_position_after_fill:
+          type: integer
+    ExecutionIntentResponse:
+      type: object
+      required: [intent, risk]
+      properties:
+        intent:
+          type: object
+        risk:
+          type: object
+    ReadinessDecision:
+      type: object
+      required: [stage, passed, decision, reasons, evidence, checked_at]
+      properties:
+        stage:
+          type: string
+        passed:
+          type: boolean
+        decision:
+          type: string
+          enum: [ready, blocked]
+        reasons:
+          type: array
+          items:
+            type: string
+        evidence:
+          type: object
+        checked_at:
+          type: string
+    GatewayCommand:
+      type: object
+      required: [type, correlation_id, idempotency_key, mode]
+      properties:
+        command_id:
+          type: string
+        type:
+          type: string
+          enum: [marketOrder, marketBatch, cancelOrders, flatten, flattenBatch, closeQty, bracket]
+        correlation_id:
+          type: string
+        idempotency_key:
+          type: string
+        schema_version:
+          type: integer
+        protocol_version:
+          type: string
+        mode:
+          type: string
+        account:
+          type: string
+        instrument:
+          type: string
+        action:
+          type: string
+        qty:
+          type: integer
+        accounts:
+          type: array
+          items:
+            type: string
+        items:
+          type: array
+          items:
+            type: object
+        orderId:
+          type: string
+        namePrefix:
+          type: string
+        bracket:
+          type: object
+        strategy_freeze_id:
+          type: string
+        strategy_spec_hash:
+          type: string
+        risk_decision_id:
+          type: string

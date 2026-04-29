@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "tradingllmagent",
+  "project_id": "42589dd3-1f10-4a5c-8023-39456e8e714b"
+}

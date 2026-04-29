@@ -1,0 +1,31 @@
+{
+  "artifact": "vol_paper_shadow_review",
+  "missing_requirements": [
+    "paper_shadow_trade_log",
+    "three_trading_days"
+  ],
+  "paper_reports": [],
+  "records": [],
+  "required_fields": [
+    "signal_id",
+    "expected_edge",
+    "actual_fill_mode",
+    "spread_ticks",
+    "adverse_selection_ticks_5m",
+    "regime",
+    "llm_diagnosis",
+    "allowed_mutations",
+    "blocked_mutations"
+  ],
+  "schema_version": 1,
+  "status": "blocked",
+  "summary": {
+    "avg_adverse_selection_ticks_5m": null,
+    "avg_spread_ticks": null,
+    "blocked_count": 0,
+    "missed_limit_count": 0,
+    "record_count": 0,
+    "simulated_fill_count": 0,
+    "trading_day_count": 0
+  }
+}

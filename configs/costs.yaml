@@ -1,0 +1,18 @@
+{
+  "cost_models": {
+    "nq_conservative_v1": {
+      "tick_size": 0.25,
+      "point_value": 20,
+      "tick_value": 5,
+      "slippage_ticks_per_side": 1,
+      "round_trip_fees_usd": 5
+    },
+    "nq_futures_v1": {
+      "tick_size": 0.25,
+      "point_value": 20,
+      "tick_value": 5,
+      "slippage_ticks_per_side": 1,
+      "round_trip_fees_usd": 5
+    }
+  }
+}

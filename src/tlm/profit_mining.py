@@ -28,8 +28,8 @@ DEFAULT_TP_SL_PAIRS = (
 )
 
 OHLCV_FAMILY_HORIZONS = (5, 15, 30, 60, 120)
-REGIME_REPLAY_BASKET_LIMIT = 6
-REGIME_REPLAY_EDGE_LIMIT = 12
+REGIME_REPLAY_BASKET_LIMIT = 12
+REGIME_REPLAY_EDGE_LIMIT = 24
 
 
 def _minute_horizon_specs(requested_minutes: Sequence[int], bar_minutes: int) -> list[tuple[int, int]]:

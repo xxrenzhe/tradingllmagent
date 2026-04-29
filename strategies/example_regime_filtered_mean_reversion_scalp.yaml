@@ -1,0 +1,42 @@
+{
+  "schema_version": 0,
+  "name": "nq_regime_filtered_mean_reversion_scalp_v1",
+  "strategy_family": "regime_filtered_mean_reversion",
+  "market_hypothesis": "Small NQ z-score dislocations can revert quickly inside active sessions when trades exit before trend drift dominates.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {"timezone": "UTC", "trade": "13:45-20:30", "flatten": "20:55"},
+  "regime_filter": {},
+  "indicators": {
+    "z_close": {"type": "z_score", "window": 10, "entry_z": 1.1}
+  },
+  "entry": {
+    "long": {"all": [{"left": "z_close", "op": "<=", "right": "-1.1"}]},
+    "short": {"all": [{"left": "z_close", "op": ">=", "right": "1.1"}]}
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 10},
+    "take_profit": {"type": "points", "value": 12},
+    "max_holding_minutes": 18
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 54,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "mean_reversion_window": {"values": [8, 10, 14]},
+    "mean_reversion_entry_z": {"values": [0.9, 1.1, 1.3]},
+    "stop_points": {"values": [8, 10, 14]},
+    "take_profit_points": {"values": [10, 12, 16]},
+    "max_holding_minutes": {"values": [12, 18]}
+  },
+  "cost_model": "nq_conservative_v1"
+}

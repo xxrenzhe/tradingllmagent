@@ -1,0 +1,15 @@
+{
+  "calendar_id": "macro_events_v1",
+  "events": [
+    {
+      "event_id": "example_cpi_us_2026_05_12_1230",
+      "name": "US CPI example placeholder",
+      "timestamp_utc": "2026-05-12T12:30:00Z",
+      "importance": "high",
+      "affected_symbols": ["NQmain"],
+      "pre_event_minutes": 30,
+      "post_event_minutes": 30,
+      "policy_ref": "high_impact_macro_v1"
+    }
+  ]
+}

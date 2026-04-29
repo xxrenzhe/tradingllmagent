@@ -1,0 +1,59 @@
+
+# Project-local reference material
+docs/
+reference/
+
+# Beads / Dolt files
+.dolt/
+.beads-credential-key
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.next/
+.vite/
+coverage/
+
+# Editors and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs, databases, and runtime artifacts
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+data/
+experiments/
+tmp/
+temp/

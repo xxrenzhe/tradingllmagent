@@ -1,0 +1,53 @@
+{
+  "schema_version": 0,
+  "name": "nq_trend_pullback_fast_ema_v1",
+  "strategy_family": "trend_pullback",
+  "market_hypothesis": "Fast EMA pullback recaptures can catch NQ trend continuation earlier than slower trend filters when exits remain bounded.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {"timezone": "UTC", "trade": "13:45-20:30", "flatten": "20:55"},
+  "regime_filter": {},
+  "indicators": {
+    "ema_fast": {"type": "ema", "window": 5},
+    "ema_slow": {"type": "ema", "window": 13}
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {"left": "ema_fast", "op": ">", "right": "ema_slow"},
+        {"left": "close", "op": ">=", "right": "ema_fast"}
+      ]
+    },
+    "short": {
+      "all": [
+        {"left": "ema_fast", "op": "<", "right": "ema_slow"},
+        {"left": "close", "op": "<=", "right": "ema_fast"}
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 12},
+    "take_profit": {"type": "points", "value": 18},
+    "max_holding_minutes": 24
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 36,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "ema_fast_window": {"values": [4, 5, 8]},
+    "ema_slow_window": {"values": [13, 18, 21]},
+    "stop_points": {"values": [10, 12, 16]},
+    "take_profit_points": {"values": [16, 18, 24]},
+    "max_holding_minutes": {"values": [18, 24]}
+  },
+  "cost_model": "nq_conservative_v1"
+}

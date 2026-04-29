@@ -1,0 +1,1635 @@
+{
+  "artifact": "vol_mutation_memory",
+  "record_count": 50,
+  "records": [
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_01",
+      "strategy_name": "nq_vol_execution_vol_revert_01",
+      "strategy_spec_hash": "a1d29eb9fca0ae5fc279370d731e48990dc706d3cd6242c0f6290e0a9f8e209c"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_06",
+      "strategy_name": "nq_vol_execution_vol_revert_06",
+      "strategy_spec_hash": "45681c847b3cc149b196a11464c3ed0f947f6af99d32a4a7f27d2f8a2442741f"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_02",
+      "strategy_name": "nq_vol_execution_vol_revert_02",
+      "strategy_spec_hash": "44017f3c18848445f80e12938e5ae3af97ad8b5c1a648c6538afcd4b1e4467eb"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_07",
+      "strategy_name": "nq_vol_execution_vol_revert_07",
+      "strategy_spec_hash": "6e821e8e004a61c94f3d276c6db39c36e0c231ea693e2f1c1275d3312dca5eb5"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_04",
+      "strategy_name": "nq_vol_execution_vol_revert_04",
+      "strategy_spec_hash": "306ff38252927e2339d7f3fea6a2bf8c6daf7da1643737655823ee43b20798bb"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_09",
+      "strategy_name": "nq_vol_execution_vol_revert_09",
+      "strategy_spec_hash": "e447e190ee056445c18e5ead02c21c08c5578541ec6c1ce47b6e5532a158659f"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_03",
+      "strategy_name": "nq_vol_execution_vol_revert_03",
+      "strategy_spec_hash": "7401a6fd50970e0484b7f6a2cc0761e72c9a34de0d953d9795079695e23da4bb"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_08",
+      "strategy_name": "nq_vol_execution_vol_revert_08",
+      "strategy_spec_hash": "66eb96a608e9a700ea6b6c9309ad24d0419cf71262e7eec36d6659e31907a312"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_05",
+      "strategy_name": "nq_vol_execution_vol_revert_05",
+      "strategy_spec_hash": "c2fcf0a24af1e8ec12df0e789c8f94ce5be0b9e4a0bf5536f2f9e3e7879c65cf"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_revert_10",
+      "strategy_name": "nq_vol_execution_vol_revert_10",
+      "strategy_spec_hash": "a6a815a4b93f17bde7b169ae3ca6fc17f4c87a0e94b3f93f0e2a9bef6d64d412"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_01",
+      "strategy_name": "nq_vol_execution_vol_breakout_01",
+      "strategy_spec_hash": "368ba9ee819afe3fd4605ee5c691c9fb94427c54cd2ce152a6196c8d6288bd96"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_02",
+      "strategy_name": "nq_vol_execution_vol_breakout_02",
+      "strategy_spec_hash": "a2a10e850da2507078bc013b5f7eabfd70f6c9f6b9e613a6bcc614d733f09f73"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_06",
+      "strategy_name": "nq_vol_execution_vol_breakout_06",
+      "strategy_spec_hash": "814a1e135707ff421b90f324d7ae23cc7f7f541ee5d8a554f23a4794ab508214"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_07",
+      "strategy_name": "nq_vol_execution_vol_breakout_07",
+      "strategy_spec_hash": "675f2553a372e44e20093dbc548b2ed86871184537fdb83e578e9fe76f9a5ac5"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_01",
+      "strategy_name": "nq_vol_execution_vol_pullback_01",
+      "strategy_spec_hash": "c40fdc1e18102529c943c24b8207aea30cf61ab67ec53eace3ed6fce70096b61"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_06",
+      "strategy_name": "nq_vol_execution_vol_pullback_06",
+      "strategy_spec_hash": "2bd760f38b42890989c6b145fb9ff67ae3a0df06e14c421ceb96e7b2a295ec77"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_05",
+      "strategy_name": "nq_vol_execution_vol_breakout_05",
+      "strategy_spec_hash": "8e99b3a26b336cf5f79516d26b90f764ddc2e6049139b52edcb00ac9aafaa720"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_10",
+      "strategy_name": "nq_vol_execution_vol_breakout_10",
+      "strategy_spec_hash": "d3bc84056b35cbb82f01545872845e9ec2a56395ee9909a1eec7721520f82553"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_03",
+      "strategy_name": "nq_vol_execution_vol_breakout_03",
+      "strategy_spec_hash": "e46d2cda75913c90ddd678bb057564b90964b1f14b99ba1dd68a07396df286e6"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_08",
+      "strategy_name": "nq_vol_execution_vol_breakout_08",
+      "strategy_spec_hash": "84f728fc39ab4ec154a3fc83b258b8074affbdeb9298f6ef8e71d03dc2c92c18"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_01",
+      "strategy_name": "nq_vol_execution_vol_macd_01",
+      "strategy_spec_hash": "394bce7f0fb4ee01931fb99462b18f1558893cf94d48b7e2114e5a4987027320"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_06",
+      "strategy_name": "nq_vol_execution_vol_macd_06",
+      "strategy_spec_hash": "d808af6fb0229bbcf665e51908f94d6db98b6b664bfdcc1f410cbcaf731b565d"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_04",
+      "strategy_name": "nq_vol_execution_vol_macd_04",
+      "strategy_spec_hash": "2a2a722a2ee616f8abe405cc63f7854a47273f4fcb2293d7379dac5478a8ca09"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_09",
+      "strategy_name": "nq_vol_execution_vol_macd_09",
+      "strategy_spec_hash": "bcddcb6b46bc27df734a17a7445404553d44bd16296533e8a86f892da1a39b3b"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_02",
+      "strategy_name": "nq_vol_execution_vol_macd_02",
+      "strategy_spec_hash": "42c8d1d3a394c90070f6a593607d1f1858023776e6738cbd3557e6cb56da0129"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_07",
+      "strategy_name": "nq_vol_execution_vol_macd_07",
+      "strategy_spec_hash": "d68714c522868b80d995fd43ca2bb76f6576830c46f4e0334e4b15024a59a276"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_05",
+      "strategy_name": "nq_vol_execution_vol_macd_05",
+      "strategy_spec_hash": "198d02a9f05750e9bedd4912cdeb4d53383570bea276c4daf9dc514c6a7fbc15"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_10",
+      "strategy_name": "nq_vol_execution_vol_macd_10",
+      "strategy_spec_hash": "4d0cd8fcc22868d8161780ded1c595958a22eb8472156d453f70227175ab4dc8"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_03",
+      "strategy_name": "nq_vol_execution_vol_macd_03",
+      "strategy_spec_hash": "3331211b206d39d92b93c73a5917da098c8f7da9909689fcdd68b388dd8a8a7d"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_macd_08",
+      "strategy_name": "nq_vol_execution_vol_macd_08",
+      "strategy_spec_hash": "0cf54a453859de641647b9a89781234c31bfd4935c1082ec71345218164d726c"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_04",
+      "strategy_name": "nq_vol_execution_vol_breakout_04",
+      "strategy_spec_hash": "33259e81aa0d77ec3ce0ad61e203e54bffb6c33770bc381659edf6293f8c6717"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_breakout_09",
+      "strategy_name": "nq_vol_execution_vol_breakout_09",
+      "strategy_spec_hash": "36739d287864f7cd6f259e708a723d1249709551cb4452b010c9051836931272"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_02",
+      "strategy_name": "nq_vol_execution_vol_pullback_02",
+      "strategy_spec_hash": "3704f00e12836458e98947951a93b5bc7929196af57ce317360afa8f0aac7f95"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_07",
+      "strategy_name": "nq_vol_execution_vol_pullback_07",
+      "strategy_spec_hash": "99fd198c5a0f5dd733f253d070d0d6c52371a797b44f28b556c5f3441a0a6e9a"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_04",
+      "strategy_name": "nq_vol_execution_vol_pullback_04",
+      "strategy_spec_hash": "796d32dd78bb469bc1a22fed0b196eae9fa43d3a2842c7c63490c9217a1a1ab2"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_09",
+      "strategy_name": "nq_vol_execution_vol_pullback_09",
+      "strategy_spec_hash": "539b427c7bda5892f72882d8f2b495a6265a9b71ae2c0dc0204b3a38d02d7e4d"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_03",
+      "strategy_name": "nq_vol_execution_vol_pullback_03",
+      "strategy_spec_hash": "992480a0a33f5cace8444e8cce0825ca0a8fb9f2f1f6c67925b5bcdc51f836c9"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_08",
+      "strategy_name": "nq_vol_execution_vol_pullback_08",
+      "strategy_spec_hash": "45c0239bcec618e8a82aa318df4a1bc1bb2a77bc7ed4bdfa30ad3e4987cd339a"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_05",
+      "strategy_name": "nq_vol_execution_vol_absorb_05",
+      "strategy_spec_hash": "8618452882aa552b4403fe1aaa1d23d21515dcf1a4f3438b3866f81686d1d65e"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_10",
+      "strategy_name": "nq_vol_execution_vol_absorb_10",
+      "strategy_spec_hash": "1e2086e4fd2c7f129ae1bdce8aacc25089244807e0dac4d19b2bb7d15d6c253e"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_01",
+      "strategy_name": "nq_vol_execution_vol_absorb_01",
+      "strategy_spec_hash": "f84a155983297748692a40ca81cb6ea7dc2f01bede60f0da4bd23cd66d70b2d4"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_06",
+      "strategy_name": "nq_vol_execution_vol_absorb_06",
+      "strategy_spec_hash": "62477228eedb2fe408466c718100b2fd4367bab74c6d2d4f18bc06037c8012dc"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_05",
+      "strategy_name": "nq_vol_execution_vol_pullback_05",
+      "strategy_spec_hash": "d0fdd6a2e45e48f7f4d3bfdf878cd3861fa2c8deca90a84b2d6774108fd028cf"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_pullback_10",
+      "strategy_name": "nq_vol_execution_vol_pullback_10",
+      "strategy_spec_hash": "d4ee40e102ec58832347c15d6b185d00c478d82fcb76cef117b8671f0a5a78a4"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_04",
+      "strategy_name": "nq_vol_execution_vol_absorb_04",
+      "strategy_spec_hash": "f602c4a81390e920df40a6b576857a4ff8d3df488cd5dfa09c2cbb8f34bd714f"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_09",
+      "strategy_name": "nq_vol_execution_vol_absorb_09",
+      "strategy_spec_hash": "96585a109ab2e14ab08e33420688697bbe55ac46c55f7b5c56735de7b2507fa7"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_03",
+      "strategy_name": "nq_vol_execution_vol_absorb_03",
+      "strategy_spec_hash": "e779df35bd4081e6c8baeca25c4ac843ea5a1ed53da4a8a17e0504d4836f6743"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_08",
+      "strategy_name": "nq_vol_execution_vol_absorb_08",
+      "strategy_spec_hash": "a0e2643f86d1d60c827ca9453ed26917849696ba7c60afe1eda5002053bb666a"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_02",
+      "strategy_name": "nq_vol_execution_vol_absorb_02",
+      "strategy_spec_hash": "f6d18bfb8e187f2777b60762003fb4920db3bfd48a7c223817bc4677af834101"
+    },
+    {
+      "allowed_mutations": [
+        "adjust_volume_threshold",
+        "tighten_time_window",
+        "stress_extra_slippage",
+        "raise_min_expected_edge"
+      ],
+      "blocked_mutations": [
+        "read_final_holdout_before_freeze",
+        "remove_cost_model",
+        "promote_without_quote_replay",
+        "promote_without_paper_shadow"
+      ],
+      "diagnostic_inputs": {
+        "cost_sensitivity_report": {},
+        "next_round_suggestions": [
+          "Relax the most restrictive volume or time filter while keeping spread and low-volume gates.",
+          "Segment by session window and volatility regime before widening the strategy family.",
+          "Stress test inverse direction and tighten stop/take-profit asymmetry.",
+          "Reject or invert the hypothesis unless cost stress shows a clear execution-mode dependency."
+        ],
+        "reasons": [
+          "annual_trades_below_1000",
+          "sharpe_below_1",
+          "win_probability_or_profit_factor",
+          "net_pnl_not_positive",
+          "final_sharpe_below_2",
+          "final_win_probability_below_53pct"
+        ]
+      },
+      "experiment_id": "vol_prescreen_nq_vol_execution_vol_absorb_07",
+      "strategy_name": "nq_vol_execution_vol_absorb_07",
+      "strategy_spec_hash": "69d3e18c727938051d06489a996b7c8213193b9705f2b3ffea42e3d906602efe"
+    }
+  ],
+  "schema_version": 1
+}

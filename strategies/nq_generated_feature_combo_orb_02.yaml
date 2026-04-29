@@ -1,0 +1,145 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_orb_02",
+  "strategy_family": "opening_range_breakout",
+  "market_hypothesis": "opening range breakout candidate generated from random intraday feature combination atr_percentile_20d, return_30m, minutes_to_close, vwap_dist; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:45-20:45",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "atr_percentile_20d",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "ATR percentile over recent sessions."
+    },
+    {
+      "name": "return_30m",
+      "category": "return",
+      "data_level": "bar",
+      "description": "Thirty-minute close-to-close return."
+    },
+    {
+      "name": "minutes_to_close",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Remaining minutes before flatten time."
+    },
+    {
+      "name": "vwap_dist",
+      "category": "vwap",
+      "data_level": "bar",
+      "description": "Close distance from session VWAP."
+    },
+    {
+      "name": "typical_price_vwap_dist",
+      "category": "vwap",
+      "data_level": "bar",
+      "description": "Typical price distance from VWAP."
+    },
+    {
+      "name": "opening_range_high_dist",
+      "category": "opening_range",
+      "data_level": "bar",
+      "description": "Close distance from opening range high."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "generation_id": "90d141300093cee7",
+    "feature_combo_hash": "262d31f8fca549279f6908bf10cbb9d371e0d627348582780d367750b8147cb6",
+    "global_index": 8,
+    "feature_catalog_size": 112,
+    "parameter_grid_hash": "7c18705af9dfbf7109615134d877926b2dc9fed15387876c94a94ad364476f05",
+    "parameter_combinations": 54,
+    "complexity_score": 95,
+    "complexity_limit": 220
+  },
+  "regime_filter": {},
+  "indicators": {
+    "opening_range": {
+      "type": "opening_range",
+      "minutes": 15
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "close",
+          "op": ">",
+          "right": "opening_range.high"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "close",
+          "op": "<",
+          "right": "opening_range.low"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 14
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 22
+    },
+    "max_holding_minutes": 35
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 24,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "opening_range_minutes": {
+      "values": [
+        5,
+        10,
+        15
+      ]
+    },
+    "stop_points": {
+      "values": [
+        10,
+        14,
+        18
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        16,
+        22,
+        28
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        25,
+        35
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}

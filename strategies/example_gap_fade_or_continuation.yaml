@@ -1,0 +1,42 @@
+{
+  "schema_version": 0,
+  "name": "nq_gap_fade_or_continuation_v1",
+  "strategy_family": "gap_fade_or_continuation",
+  "market_hypothesis": "NQ opening gaps can either fade or continue depending on bounded gap size and strict intraday risk limits.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {"timezone": "UTC", "trade": "13:30-20:45", "flatten": "20:55"},
+  "regime_filter": {},
+  "indicators": {
+    "gap": {"type": "gap", "threshold_points": 15, "mode": "fade"}
+  },
+  "entry": {
+    "long": {"all": [{"left": "gap", "op": "<=", "right": "-15"}]},
+    "short": {"all": [{"left": "gap", "op": ">=", "right": "15"}]}
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 18},
+    "take_profit": {"type": "points", "value": 24},
+    "max_holding_minutes": 40
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 1,
+    "max_daily_loss_r": 2
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "gap_threshold_points": {"values": [10, 15]},
+    "gap_mode": {"values": ["fade", "continuation"]},
+    "stop_points": {"values": [14, 18]},
+    "take_profit_points": {"values": [20, 24]},
+    "max_holding_minutes": {"values": [25, 40]}
+  },
+  "cost_model": "nq_conservative_v1"
+}

@@ -1,0 +1,146 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_gap_01",
+  "strategy_family": "gap_fade_or_continuation",
+  "market_hypothesis": "gap fade or continuation candidate generated from random intraday feature combination rsi_14, natr_14, volume_spike_ratio, true_range; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:30-20:20",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "rsi_14",
+      "category": "oscillator",
+      "data_level": "bar",
+      "description": "Fourteen-bar relative strength index."
+    },
+    {
+      "name": "natr_14",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "Normalized average true range."
+    },
+    {
+      "name": "volume_spike_ratio",
+      "category": "volume",
+      "data_level": "bar",
+      "description": "Current volume divided by recent average volume."
+    },
+    {
+      "name": "true_range",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "Current true range."
+    },
+    {
+      "name": "garman_klass_vol_20",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "OHLC volatility estimator."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "generation_id": "65b674736e88171e",
+    "feature_combo_hash": "201beb6d23a406e1899ea3258ffd1b95bba9e2514d0c02c4dfe3a7d2c4b55b88",
+    "global_index": 7,
+    "feature_catalog_size": 112,
+    "parameter_grid_hash": "1f3a87a143af16ff87117007e01608797d74ec5cbae17a6a1cb0241abdebfab1",
+    "parameter_combinations": 108,
+    "complexity_score": 146,
+    "complexity_limit": 220
+  },
+  "regime_filter": {},
+  "indicators": {
+    "gap": {
+      "type": "gap",
+      "threshold_points": 6,
+      "mode": "fade"
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "gap_signal",
+          "op": "==",
+          "right": "long"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "gap_signal",
+          "op": "==",
+          "right": "short"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 12
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 18
+    },
+    "max_holding_minutes": 35
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 6,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "gap_threshold_points": {
+      "values": [
+        4,
+        6,
+        8
+      ]
+    },
+    "gap_mode": {
+      "values": [
+        "fade",
+        "continuation"
+      ]
+    },
+    "stop_points": {
+      "values": [
+        10,
+        12,
+        16
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        16,
+        18,
+        24
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        25,
+        35
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}

@@ -1,0 +1,147 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_vol_02",
+  "strategy_family": "volatility_expansion",
+  "market_hypothesis": "volatility expansion candidate generated from random intraday feature combination atr_percentile_20d, session_bucket, minutes_to_close, relative_volume_5m; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:35-20:35",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "atr_percentile_20d",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "ATR percentile over recent sessions."
+    },
+    {
+      "name": "session_bucket",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Discrete open, midday, afternoon, close bucket."
+    },
+    {
+      "name": "minutes_to_close",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Remaining minutes before flatten time."
+    },
+    {
+      "name": "relative_volume_5m",
+      "category": "volume",
+      "data_level": "bar",
+      "description": "Five-minute volume versus recent baseline."
+    },
+    {
+      "name": "return_30m",
+      "category": "return",
+      "data_level": "bar",
+      "description": "Thirty-minute close-to-close return."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "generation_id": "6f15e672144ce046",
+    "feature_combo_hash": "8332ec9a60bb560b2bcd98c662b9fea33d9d4f18f0507d228710f1daad140251",
+    "global_index": 10,
+    "feature_catalog_size": 112,
+    "parameter_grid_hash": "16c15f143a5f7f6c5eee743b543fd0980052d6c31782fa4eb1b797c7c01d0a2d",
+    "parameter_combinations": 162,
+    "complexity_score": 200,
+    "complexity_limit": 220
+  },
+  "regime_filter": {},
+  "indicators": {
+    "realized_volatility": {
+      "type": "realized_volatility",
+      "window": 8,
+      "expansion_multiple": 1.2
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "close",
+          "op": ">",
+          "right": "prior.high"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "close",
+          "op": "<",
+          "right": "prior.low"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 10
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 18
+    },
+    "max_holding_minutes": 22
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 45,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "volatility_window": {
+      "values": [
+        4,
+        5,
+        8
+      ]
+    },
+    "volatility_expansion_multiple": {
+      "values": [
+        1.1,
+        1.2,
+        1.35
+      ]
+    },
+    "stop_points": {
+      "values": [
+        8,
+        10,
+        14
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        14,
+        18,
+        24
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        16,
+        22
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}

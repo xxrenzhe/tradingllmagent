@@ -1,0 +1,152 @@
+{
+  "schema_version": 0,
+  "name": "nq_generated_feature_combo_tod_03",
+  "strategy_family": "time_of_day_edge",
+  "market_hypothesis": "time of day edge candidate generated from random intraday feature combination minute_of_session_cos, close_position_in_bar, cumulative_volume_vs_expected, bollinger_bandwidth; the feature mix is tested as a bounded NQ one-minute seed for LLM-guided parameter search.",
+  "symbol": "NQmain",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {
+    "timezone": "UTC",
+    "trade": "13:30-20:45",
+    "flatten": "20:55"
+  },
+  "feature_set": [
+    {
+      "name": "minute_of_session_cos",
+      "category": "time",
+      "data_level": "calendar",
+      "description": "Cosine transform of session minute."
+    },
+    {
+      "name": "close_position_in_bar",
+      "category": "candle",
+      "data_level": "bar",
+      "description": "Close percentile inside current bar range."
+    },
+    {
+      "name": "cumulative_volume_vs_expected",
+      "category": "volume",
+      "data_level": "bar",
+      "description": "Session volume versus expected volume curve."
+    },
+    {
+      "name": "bollinger_bandwidth",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "Bollinger band width."
+    },
+    {
+      "name": "macro_event_window_flag",
+      "category": "event",
+      "data_level": "calendar",
+      "description": "Pre/post scheduled macro event window flag."
+    },
+    {
+      "name": "garman_klass_vol_20",
+      "category": "volatility",
+      "data_level": "bar",
+      "description": "OHLC volatility estimator."
+    }
+  ],
+  "generation": {
+    "method": "deterministic_random_feature_combo",
+    "generation_id": "a23ea075acbf31bb",
+    "feature_combo_hash": "e40ae17b15ec0b2d9cedf0b677112d3df33e2be0e16c39028ad7d2a67db177e1",
+    "global_index": 20,
+    "feature_catalog_size": 112,
+    "parameter_grid_hash": "b23fde390b27169987a39fc34d0018f93a4f6f1b48aa2a12de16061bd85567d2",
+    "parameter_combinations": 108,
+    "complexity_score": 151,
+    "complexity_limit": 220
+  },
+  "regime_filter": {},
+  "indicators": {
+    "time_of_day": {
+      "type": "time_of_day",
+      "entry_time": "20:00",
+      "entry_side": "long"
+    }
+  },
+  "entry": {
+    "long": {
+      "all": [
+        {
+          "left": "time",
+          "op": ">=",
+          "right": "20:00"
+        }
+      ]
+    },
+    "short": {
+      "all": [
+        {
+          "left": "time",
+          "op": ">=",
+          "right": "20:00"
+        }
+      ]
+    }
+  },
+  "exit": {
+    "stop_loss": {
+      "type": "points",
+      "value": 12
+    },
+    "take_profit": {
+      "type": "points",
+      "value": 18
+    },
+    "max_holding_minutes": 30
+  },
+  "risk": {
+    "position_sizing": {
+      "type": "fixed_contracts",
+      "contracts": 1
+    },
+    "max_position_contracts": 1,
+    "max_trades_per_day": 8,
+    "max_daily_loss_r": 3
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "entry_time": {
+      "values": [
+        "13:35",
+        "14:10",
+        "19:30"
+      ]
+    },
+    "entry_side": {
+      "values": [
+        "long",
+        "short"
+      ]
+    },
+    "stop_points": {
+      "values": [
+        10,
+        12,
+        16
+      ]
+    },
+    "take_profit_points": {
+      "values": [
+        16,
+        18,
+        24
+      ]
+    },
+    "max_holding_minutes": {
+      "values": [
+        20,
+        30
+      ]
+    }
+  },
+  "cost_model": "nq_conservative_v1"
+}
