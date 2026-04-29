@@ -107,6 +107,51 @@ def generate_top_strategy_html_report(
     }
 
 
+def generate_top_strategy_comparison_html(
+    *,
+    report_data_paths: Sequence[Path],
+    output_html: Path,
+) -> dict[str, Any]:
+    reports = [json.loads(path.read_text(encoding="utf-8")) for path in report_data_paths]
+    rows = []
+    for report, path in zip(reports, report_data_paths):
+        strategies = report.get("strategies", [])
+        rows.append(
+            {
+                "name": path.stem,
+                "path": str(path),
+                "objective": report.get("selection_objective"),
+                "policy": report.get("selection_policy"),
+                "source_reports": report.get("source_reports") or [],
+                "strategy_count": len(strategies),
+                "total_net_pnl": sum(float(strategy["replayed_metrics"].get("net_pnl") or 0.0) for strategy in strategies),
+                "total_excess_net_pnl": sum(float(strategy["excess_summary"].get("excess_net_pnl") or 0.0) for strategy in strategies),
+                "strategies": [
+                    {
+                        "display_id": strategy.get("display_id"),
+                        "source_timeframe": strategy.get("source_timeframe"),
+                        "selection_rule": strategy.get("selection_rule"),
+                        "net_pnl": float(strategy["replayed_metrics"].get("net_pnl") or 0.0),
+                        "annualized_net_pnl": float(strategy["replayed_metrics"].get("annualized_net_pnl") or 0.0),
+                        "profit_factor": float(strategy["replayed_metrics"].get("profit_factor") or 0.0),
+                        "win_probability": float(strategy["replayed_metrics"].get("win_probability") or 0.0),
+                        "passed_gate_count": int((strategy.get("evaluation_summary") or {}).get("passed_gate_count") or 0),
+                        "total_gate_count": int((strategy.get("evaluation_summary") or {}).get("total_gate_count") or 0),
+                    }
+                    for strategy in strategies
+                ],
+            }
+        )
+    payload = {
+        "artifact": "top_strategy_comparison_html_report",
+        "report_count": len(rows),
+        "reports": rows,
+    }
+    output_html.parent.mkdir(parents=True, exist_ok=True)
+    output_html.write_text(_render_comparison_html(payload), encoding="utf-8")
+    return {"html": str(output_html), "report_count": len(rows)}
+
+
 def _select_top_yearly_strategies(
     report: dict[str, Any] | Sequence[dict[str, Any]],
     top_n: int,
@@ -166,6 +211,7 @@ def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, ..
     fully_qualified = float(evaluation.get("fully_qualified") or 0.0)
     positive_year_ratio = float(evaluation.get("positive_year_ratio") or 0.0)
     return_to_drawdown = float(full.get("return_to_drawdown") or 0.0)
+    max_drawdown = float(full.get("max_drawdown") or 0.0)
     min_pf = min(full_pf, test_pf) if full_pf and test_pf else max(full_pf, test_pf)
     if objective == "profit_factor":
         return (full_pf, test_pf, full_net, annual_trades)
@@ -173,6 +219,8 @@ def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, ..
         return (test_pf, full_pf, test_net, annual_trades)
     if objective == "balanced":
         return (annualized_net, min(full_pf, test_pf), full_net, annual_trades)
+    if objective == "stability_first":
+        return (fully_qualified, positive_year_ratio, return_to_drawdown, min_pf, test_net, annualized_net, -max_drawdown, annual_trades, full_net)
     if objective == "annualized_quality":
         return (fully_qualified, annualized_net, gate_pass_count, positive_year_ratio, min_pf, test_net, return_to_drawdown, annual_trades, full_net)
     if objective == "net_pnl":
@@ -187,6 +235,7 @@ def _selection_policy(objective: str) -> str:
         "net_pnl": "top yearly-profitable strategies by net PnL, de-duplicated by edge composition",
         "annualized_net_pnl": "top yearly-profitable strategies by annualized net PnL per 1 contract, de-duplicated by edge composition",
         "annualized_quality": "top yearly-profitable strategies by hard-gate qualification first, then annualized net PnL with stability/cost-quality tiebreakers, de-duplicated by edge composition",
+        "stability_first": "top yearly-profitable strategies by hard-gate qualification first, then positive-year ratio, return-to-drawdown, PF, and test-period resilience, de-duplicated by edge composition",
         "profit_factor": "top yearly-profitable strategies by full-period profit factor, de-duplicated by edge composition",
         "test_profit_factor": "top yearly-profitable strategies by recent test-period profit factor, de-duplicated by edge composition",
         "balanced": "top yearly-profitable strategies by annualized net PnL, then the weaker of full-period and test-period profit factor",
@@ -705,6 +754,88 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
 </body>
 </html>
 """
+
+
+def _render_comparison_html(payload: dict[str, Any]) -> str:
+    report_rows = "".join(_comparison_overview_row(report) for report in payload["reports"])
+    sections = "".join(_comparison_report_section(report) for report in payload["reports"])
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NQ Top3 策略报告对比</title>
+  <style>
+    :root {{ color-scheme: light; --bg:#f4f7fb; --surface:#ffffff; --line:#d9e2ec; --text:#172033; --muted:#667085; }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin:0; background:var(--bg); color:var(--text); font:14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+    header {{ background:#0f1728; color:#fff; padding:24px 28px; }}
+    main {{ padding:18px; max-width:1400px; margin:0 auto; }}
+    .section {{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:18px; margin-bottom:16px; }}
+    table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+    th, td {{ border-bottom:1px solid var(--line); padding:8px; text-align:right; vertical-align:top; }}
+    th:first-child, td:first-child {{ text-align:left; }}
+    th {{ color:var(--muted); background:#f8fafc; }}
+    .note {{ color:var(--muted); font-size:13px; }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>NQ Top3 策略报告对比</h1>
+    <p class="note">对比总收益优先、年化收益优先、稳健性优先三种选股口径。</p>
+  </header>
+  <main>
+    <section class="section">
+      <h2>总览</h2>
+      <table>
+        <thead><tr><th>报告</th><th>目标</th><th>策略数</th><th>Top3 总净收益</th><th>Top3 总超额收益</th></tr></thead>
+        <tbody>{report_rows}</tbody>
+      </table>
+    </section>
+    {sections}
+  </main>
+</body>
+</html>"""
+
+
+def _comparison_overview_row(report: dict[str, Any]) -> str:
+    return (
+        f"<tr><td>{html.escape(str(report['name']))}</td>"
+        f"<td>{html.escape(str(report['objective']))}</td>"
+        f"<td>{int(report['strategy_count'])}</td>"
+        f"<td>{fmt_usd(report['total_net_pnl'])}</td>"
+        f"<td>{fmt_usd(report['total_excess_net_pnl'])}</td></tr>"
+    )
+
+
+def _comparison_report_section(report: dict[str, Any]) -> str:
+    rows = []
+    for strategy in report["strategies"]:
+        rows.append(
+            f"<tr><td>{html.escape(str(strategy['display_id']))}</td>"
+            f"<td>{html.escape(str(strategy['source_timeframe']))}</td>"
+            f"<td>{html.escape(str(strategy['selection_rule']))}</td>"
+            f"<td>{fmt_usd(strategy['net_pnl'])}</td>"
+            f"<td>{fmt_usd(strategy['annualized_net_pnl'])}</td>"
+            f"<td>{fmt_num(strategy['profit_factor'], 3)}</td>"
+            f"<td>{fmt_pct(strategy['win_probability'])}</td>"
+            f"<td>{strategy['passed_gate_count']}/{strategy['total_gate_count']}</td></tr>"
+        )
+    source_reports = "; ".join(
+        f"{html.escape(str(source.get('timeframe')))} -> {html.escape(str(source.get('path')))}"
+        for source in report.get("source_reports", [])
+    )
+    return f"""
+    <section class="section">
+      <h2>{html.escape(str(report['name']))}</h2>
+      <p class="note">目标: {html.escape(str(report['objective']))} | 规则: {html.escape(str(report['policy']))}</p>
+      <p class="note">来源: {source_reports}</p>
+      <table>
+        <thead><tr><th>策略</th><th>周期</th><th>选择规则</th><th>净收益</th><th>年化净收益</th><th>PF</th><th>胜率</th><th>门槛</th></tr></thead>
+        <tbody>{''.join(rows)}</tbody>
+      </table>
+    </section>
+    """
 
 
 def _strategy_section(strategy: dict[str, Any]) -> str:

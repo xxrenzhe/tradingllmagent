@@ -65,7 +65,7 @@ from .storage import (
 )
 from .strategy import StrategySpecError, load_strategy_spec, with_strategy_symbol
 from .strategy_generation import write_feature_combo_strategy_specs, write_vol_strategy_specs
-from .top_strategy_report import generate_top_strategy_html_report
+from .top_strategy_report import generate_top_strategy_comparison_html, generate_top_strategy_html_report
 from .trigger_gate import (
     append_trigger_gate_outcome_from_payload,
     build_forward_test_schedule,
@@ -831,6 +831,15 @@ def cmd_research_top_strategy_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_research_top_strategy_compare(args: argparse.Namespace) -> int:
+    output = generate_top_strategy_comparison_html(
+        report_data_paths=[Path(path) for path in args.report_data],
+        output_html=Path(args.output),
+    )
+    print(json.dumps(output, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_research_discover_target(args: argparse.Namespace) -> int:
     if args.spec:
         spec = load_strategy_spec(Path(args.spec))
@@ -1470,11 +1479,16 @@ def build_parser() -> argparse.ArgumentParser:
     top_strategy_report.add_argument("--sample-trade-count", type=int, default=3)
     top_strategy_report.add_argument(
         "--objective",
-        choices=["annualized_quality", "annualized_net_pnl", "net_pnl", "profit_factor", "test_profit_factor", "balanced"],
+        choices=["annualized_quality", "annualized_net_pnl", "net_pnl", "stability_first", "profit_factor", "test_profit_factor", "balanced"],
         default="annualized_quality",
     )
     top_strategy_report.add_argument("--output", default="experiments/profit_mining/top3_strategy_report.html")
     top_strategy_report.set_defaults(func=cmd_research_top_strategy_report)
+
+    top_strategy_compare = research_subparsers.add_parser("top-strategy-compare")
+    top_strategy_compare.add_argument("--report-data", action="append", required=True)
+    top_strategy_compare.add_argument("--output", default="experiments/profit_mining/top3_strategy_report_compare.html")
+    top_strategy_compare.set_defaults(func=cmd_research_top_strategy_compare)
 
     discover = research_subparsers.add_parser("discover-target")
     discover.add_argument("--spec")

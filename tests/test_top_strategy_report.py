@@ -300,6 +300,74 @@ class TopStrategyReportTests(unittest.TestCase):
         self.assertEqual(selected[0]["source_timeframe"], "5m")
         self.assertEqual(selected[1]["source_timeframe"], "1m")
 
+    def test_select_top_yearly_strategies_can_rank_by_stability_first(self) -> None:
+        edge = {
+            "scan_type": "low_volume_drift",
+            "horizon_minutes": 120,
+            "session_bucket": "utc_1200_1659",
+            "dow": 1,
+            "direction_label": "long",
+            "trend_bin": 1,
+            "volume_bin": -1,
+            "range_bin": -1,
+        }
+        report = {
+            "regime_basket_replays": [
+                {
+                    "basket_id": "higher_annualized_less_stable",
+                    "basket_hash": "a",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "fast_edges",
+                            "activation_start_year": 2022,
+                            "constituent_edges": [edge],
+                            "train_period": {"covered_days": 200},
+                            "test_period": {"covered_days": 200},
+                            "full_after_activation": {
+                                "net_pnl": 1500,
+                                "annual_trades": 1500,
+                                "profit_factor": 1.18,
+                                "win_probability": 0.55,
+                                "return_to_drawdown": 1.2,
+                                "max_drawdown": 200,
+                                "cost_stress": [{"label": "configured_cost_plus_2_ticks", "net_pnl": 100}],
+                                "yearly_results": [{"year": 2024, "net_pnl": 100}, {"year": 2025, "net_pnl": -20}],
+                            },
+                            "test": {"net_pnl": 400, "profit_factor": 1.08},
+                        }
+                    ],
+                },
+                {
+                    "basket_id": "slightly_lower_annualized_more_stable",
+                    "basket_hash": "b",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "stable_edges",
+                            "activation_start_year": 2021,
+                            "constituent_edges": [{**edge, "dow": 2}],
+                            "train_period": {"covered_days": 300},
+                            "test_period": {"covered_days": 300},
+                            "full_after_activation": {
+                                "net_pnl": 1400,
+                                "annual_trades": 1600,
+                                "profit_factor": 1.22,
+                                "win_probability": 0.56,
+                                "return_to_drawdown": 2.0,
+                                "max_drawdown": 120,
+                                "cost_stress": [{"label": "configured_cost_plus_2_ticks", "net_pnl": 120}],
+                                "yearly_results": [{"year": 2024, "net_pnl": 100}, {"year": 2025, "net_pnl": 80}],
+                            },
+                            "test": {"net_pnl": 380, "profit_factor": 1.12},
+                        }
+                    ],
+                },
+            ]
+        }
+
+        selected = _select_top_yearly_strategies(report, top_n=2, objective="stability_first")
+
+        self.assertEqual(selected[0]["basket_id"], "slightly_lower_annualized_more_stable")
+
     def test_monthly_signal_results_groups_by_calendar_month(self) -> None:
         rows = _monthly_signal_results(
             [
