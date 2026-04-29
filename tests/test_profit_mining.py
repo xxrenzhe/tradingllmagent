@@ -6,7 +6,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from tlm.config import CostModelConfig, get_symbol
-from tlm.profit_mining import _horizon_spec_dicts, mine_databento_nq_profitable_strategies
+from tlm.profit_mining import (
+    _horizon_spec_dicts,
+    _optimized_regime_basket_subsets,
+    mine_databento_nq_profitable_strategies,
+)
 from tlm.storage import bar_path, write_bars_parquet
 
 
@@ -127,6 +131,57 @@ class ProfitMiningTests(unittest.TestCase):
                 {"horizon_bars": 3, "horizon_minutes": 15},
             )
             self.assertGreater(report["summary"]["qualified_candidate_count"], 0)
+
+    def test_optimized_regime_basket_subsets_keeps_qualified_subset(self) -> None:
+        edges = [
+            {
+                "scan_type": "low_volume_drift",
+                "horizon_minutes": 120,
+                "session_bucket": "utc_1200_1659",
+                "dow": 1,
+                "direction_label": "long",
+                "trend_bin": 1,
+                "volume_bin": -1,
+                "range_bin": -1,
+                "break_even_cost_usd": 100,
+                "cost_adjusted_win_probability": 0.75,
+                "cost_adjusted_net_pnl": 290,
+            },
+            {
+                "scan_type": "breakout_continuation",
+                "horizon_minutes": 120,
+                "session_bucket": "utc_1200_1659",
+                "dow": 1,
+                "direction_label": "long",
+                "trend_bin": 1,
+                "volume_bin": 2,
+                "range_bin": 2,
+                "break_even_cost_usd": -50,
+                "cost_adjusted_win_probability": 0.25,
+                "cost_adjusted_net_pnl": -200,
+            },
+        ]
+        start = datetime(2025, 1, 2, 0, 0)
+        signals = [
+            {"timestamp": start + timedelta(minutes=offset), "rule_index": 0, "pnl": pnl}
+            for offset, pnl in enumerate([100.0, 100.0, 100.0, -10.0])
+        ]
+        signals.extend(
+            {"timestamp": start + timedelta(minutes=10 + offset), "rule_index": 1, "pnl": pnl}
+            for offset, pnl in enumerate([-100.0, -100.0, 50.0, -50.0])
+        )
+
+        subsets = _optimized_regime_basket_subsets(
+            edges,
+            signals,
+            day_count=1,
+            context={"min_annual_trades": 1000, "min_win_probability": 0.53},
+        )
+
+        self.assertGreater(len(subsets), 0)
+        self.assertEqual(subsets[0]["edge_indexes"], [0])
+        self.assertGreater(subsets[0]["one_trade_per_timestamp"]["profit_factor"], 1)
+        self.assertTrue(subsets[0]["one_trade_per_timestamp"]["target_qualified"])
 
 
 if __name__ == "__main__":

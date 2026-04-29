@@ -127,6 +127,23 @@ def mine_databento_nq_profitable_strategies(
         for replay in regime_basket_replays
         if replay["one_trade_per_timestamp"]["target_qualified"]
     ]
+    optimized_regime_basket_subsets = [
+        {
+            "basket_id": replay["basket_id"],
+            "basket_hash": replay["basket_hash"],
+            **subset,
+        }
+        for replay in regime_basket_replays
+        for subset in replay.get("optimized_subsets", [])
+    ]
+    optimized_regime_basket_subsets = sorted(
+        optimized_regime_basket_subsets,
+        key=lambda row: (
+            float(row["one_trade_per_timestamp"].get("profit_factor") or 0),
+            float(row["one_trade_per_timestamp"].get("net_pnl") or 0),
+        ),
+        reverse=True,
+    )
     regime_basket_found = bool(regime_first.get("qualified_regime_baskets"))
     report = {
         "schema_version": 1,
@@ -201,6 +218,10 @@ def mine_databento_nq_profitable_strategies(
             "regime_first_candidate_count": len(regime_first["top_regime_edges"]),
             "qualified_regime_basket_count": len(regime_first.get("qualified_regime_baskets", [])),
             "qualified_regime_basket_replay_count": len(qualified_regime_basket_replays),
+            "optimized_regime_basket_subset_count": len(optimized_regime_basket_subsets),
+            "best_optimized_regime_basket_subset": optimized_regime_basket_subsets[0]
+            if optimized_regime_basket_subsets
+            else None,
             "best_cost_adjusted_net_pnl": qualified[0]["net_pnl"] if qualified else None,
             "best_gross_net_pnl": gross_only[0]["gross_net_pnl"] if gross_only else None,
             "best_regime_break_even_cost_usd": regime_first["top_regime_edges"][0]["break_even_cost_usd"]
@@ -515,10 +536,7 @@ def _replay_regime_basket(
         )
     day_count = _trading_day_count(con, context)
     independent = _replay_metrics(signals, day_count, context)
-    by_timestamp = {}
-    for signal in sorted(signals, key=lambda row: (row["timestamp"], int(row["rule_index"]))):
-        by_timestamp.setdefault(signal["timestamp"], signal)
-    one_trade = _replay_metrics(list(by_timestamp.values()), day_count, context)
+    one_trade = _replay_metrics(_one_trade_per_timestamp(signals), day_count, context)
     payload = {
         "basket_id": basket.get("basket_id"),
         "basket_hash": basket.get("basket_hash"),
@@ -526,6 +544,7 @@ def _replay_regime_basket(
         "round_trip_cost_usd": round_trip_cost_usd,
         "independent_rule_slots": independent,
         "one_trade_per_timestamp": one_trade,
+        "optimized_subsets": _optimized_regime_basket_subsets(edges, signals, day_count, context),
         "replay_mode_caveat": (
             "independent_rule_slots allows each constituent edge to trade; "
             "one_trade_per_timestamp keeps the first constituent edge per bar to reduce overlap."
@@ -533,6 +552,80 @@ def _replay_regime_basket(
     }
     payload["replay_hash"] = stable_hash(payload)
     return payload
+
+
+def _optimized_regime_basket_subsets(
+    edges: Sequence[dict[str, Any]],
+    signals: Sequence[dict[str, Any]],
+    day_count: int,
+    context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not edges or not signals:
+        return []
+    edge_indexes = list(range(len(edges)))
+    subset_specs: dict[tuple[int, ...], str] = {}
+    for label, key in (
+        ("top_break_even_cost", lambda index: float(edges[index].get("break_even_cost_usd") or 0)),
+        ("top_win_probability", lambda index: float(edges[index].get("cost_adjusted_win_probability") or 0)),
+        ("top_net_pnl", lambda index: float(edges[index].get("cost_adjusted_net_pnl") or 0)),
+    ):
+        ordered = sorted(edge_indexes, key=key, reverse=True)
+        for size in range(1, len(ordered) + 1):
+            subset_specs.setdefault(tuple(sorted(ordered[:size])), label)
+    for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
+        subset = tuple(index for index in edge_indexes if str(edges[index].get("scan_type")) == scan_type)
+        subset_specs.setdefault(subset, f"scan_type:{scan_type}")
+    for session_bucket in sorted({str(edge.get("session_bucket")) for edge in edges}):
+        subset = tuple(index for index in edge_indexes if str(edges[index].get("session_bucket")) == session_bucket)
+        subset_specs.setdefault(subset, f"session_bucket:{session_bucket}")
+
+    candidates = []
+    for subset, selection_rule in subset_specs.items():
+        subset_set = set(subset)
+        subset_signals = [signal for signal in signals if int(signal["rule_index"]) in subset_set]
+        one_trade = _one_trade_per_timestamp(subset_signals)
+        metrics = _replay_metrics(one_trade, day_count, context)
+        if not metrics["target_qualified"]:
+            continue
+        payload = {
+            "selection_rule": selection_rule,
+            "edge_indexes": list(subset),
+            "edge_count": len(subset),
+            "one_trade_per_timestamp": metrics,
+            "constituent_edges": [_edge_identity(edges[index]) for index in subset],
+        }
+        payload["subset_hash"] = stable_hash(payload)
+        candidates.append(payload)
+
+    return sorted(
+        candidates,
+        key=lambda row: (
+            float(row["one_trade_per_timestamp"].get("profit_factor") or 0),
+            float(row["one_trade_per_timestamp"].get("net_pnl") or 0),
+            float(row["one_trade_per_timestamp"].get("annual_trades") or 0),
+        ),
+        reverse=True,
+    )[:20]
+
+
+def _edge_identity(edge: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "scan_type": edge.get("scan_type"),
+        "horizon_minutes": edge.get("horizon_minutes"),
+        "session_bucket": edge.get("session_bucket"),
+        "dow": edge.get("dow"),
+        "direction_label": edge.get("direction_label"),
+        "trend_bin": edge.get("trend_bin"),
+        "volume_bin": edge.get("volume_bin"),
+        "range_bin": edge.get("range_bin"),
+    }
+
+
+def _one_trade_per_timestamp(signals: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_timestamp = {}
+    for signal in sorted(signals, key=lambda row: (row["timestamp"], int(row["rule_index"]))):
+        by_timestamp.setdefault(signal["timestamp"], signal)
+    return list(by_timestamp.values())
 
 
 def _replay_regime_edges_for_horizon(
@@ -688,10 +781,18 @@ def _replay_metrics(
     day_count: int,
     context: dict[str, Any],
 ) -> dict[str, Any]:
-    trades = len(signals)
-    net_pnl = sum(float(signal["pnl"]) for signal in signals)
-    wins = [float(signal["pnl"]) for signal in signals if float(signal["pnl"]) > 0]
-    losses = [float(signal["pnl"]) for signal in signals if float(signal["pnl"]) < 0]
+    ordered_signals = sorted(signals, key=lambda signal: signal["timestamp"])
+    trades = len(ordered_signals)
+    net_pnl = sum(float(signal["pnl"]) for signal in ordered_signals)
+    wins = [float(signal["pnl"]) for signal in ordered_signals if float(signal["pnl"]) > 0]
+    losses = [float(signal["pnl"]) for signal in ordered_signals if float(signal["pnl"]) < 0]
+    equity = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    for signal in ordered_signals:
+        equity += float(signal["pnl"])
+        peak = max(peak, equity)
+        max_drawdown = max(max_drawdown, peak - equity)
     annual_trades = trades / day_count * 365 if day_count else 0.0
     win_probability = len(wins) / trades if trades else 0.0
     profit_factor = sum(wins) / abs(sum(losses)) if losses else None
@@ -702,6 +803,8 @@ def _replay_metrics(
         "win_probability": win_probability,
         "avg_pnl": net_pnl / trades if trades else None,
         "profit_factor": profit_factor,
+        "max_drawdown": max_drawdown,
+        "return_to_drawdown": net_pnl / max_drawdown if max_drawdown else None,
         "target_qualified": (
             annual_trades > float(context["min_annual_trades"])
             and win_probability > float(context["min_win_probability"])
