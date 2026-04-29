@@ -28,24 +28,36 @@ from .variants import stable_hash
 
 def generate_top_strategy_html_report(
     *,
-    mining_report_path: Path,
+    mining_report_path: Path | None = None,
+    mining_report_paths: Sequence[Path] | None = None,
     data_root: Path,
     output_html: Path,
     top_n: int = 3,
     sample_trade_count: int = 3,
-    objective: str = "annualized_net_pnl",
+    objective: str = "annualized_quality",
 ) -> dict[str, Any]:
-    mining_report = json.loads(mining_report_path.read_text(encoding="utf-8"))
-    strategies = _select_top_yearly_strategies(mining_report, top_n=top_n, objective=objective)
-    context = _replay_context(mining_report, data_root)
-    round_trip_cost_usd = float(mining_report.get("round_trip_cost_usd") or 0.0)
-    bar_minutes = int(mining_report.get("timeframe_minutes") or timeframe_minutes(str(mining_report["timeframe"])))
+    report_paths = [Path(path) for path in (mining_report_paths or ([] if mining_report_path is None else [mining_report_path]))]
+    if not report_paths:
+        raise ValueError("At least one mining report path is required")
+    mining_reports = [
+        {
+            **json.loads(path.read_text(encoding="utf-8")),
+            "_source_report_path": str(path),
+        }
+        for path in report_paths
+    ]
+    strategies = _select_top_yearly_strategies(mining_reports, top_n=top_n, objective=objective)
+    round_trip_cost_usd = max(float(report.get("round_trip_cost_usd") or 0.0) for report in mining_reports)
 
     con = duckdb.connect(":memory:")
     try:
         enriched = []
         for index, strategy in enumerate(strategies, start=1):
-            signals = _replay_strategy_signals(con, context, strategy, round_trip_cost_usd)
+            source_report = mining_reports[int(strategy["source_report_index"])]
+            context = _replay_context(source_report, data_root)
+            strategy_round_trip_cost_usd = float(source_report.get("round_trip_cost_usd") or 0.0)
+            bar_minutes = int(source_report.get("timeframe_minutes") or timeframe_minutes(str(source_report["timeframe"])))
+            signals = _replay_strategy_signals(con, context, strategy, strategy_round_trip_cost_usd)
             samples = _sample_trades(signals, limit=sample_trade_count)
             enriched.append(
                 _enrich_strategy(
@@ -60,13 +72,20 @@ def generate_top_strategy_html_report(
     finally:
         con.close()
 
+    source_reports = [_report_summary(report) for report in mining_reports]
+    symbols = sorted({str(report.get("symbol")) for report in mining_reports})
+    timeframes = sorted({str(report.get("timeframe")) for report in mining_reports}, key=timeframe_minutes)
+    date_from = min(str(report.get("date_from")) for report in mining_reports)
+    date_to = max(str(report.get("date_to")) for report in mining_reports)
+
     payload = {
         "artifact": "top_strategy_html_report",
-        "source_report": str(mining_report_path),
-        "symbol": mining_report.get("symbol"),
-        "timeframe": mining_report.get("timeframe"),
-        "date_from": mining_report.get("date_from"),
-        "date_to": mining_report.get("date_to"),
+        "source_report": str(report_paths[0]) if len(report_paths) == 1 else None,
+        "source_reports": source_reports,
+        "symbol": symbols[0] if len(symbols) == 1 else symbols,
+        "timeframe": timeframes[0] if len(timeframes) == 1 else ", ".join(timeframes),
+        "date_from": date_from,
+        "date_to": date_to,
         "round_trip_cost_usd": round_trip_cost_usd,
         "selection_objective": objective,
         "selection_policy": _selection_policy(objective),
@@ -89,20 +108,28 @@ def generate_top_strategy_html_report(
 
 
 def _select_top_yearly_strategies(
-    report: dict[str, Any],
+    report: dict[str, Any] | Sequence[dict[str, Any]],
     top_n: int,
-    objective: str = "annualized_net_pnl",
+    objective: str = "annualized_quality",
 ) -> list[dict[str, Any]]:
     candidates = []
-    for replay in report.get("regime_basket_replays", []):
-        for candidate in replay.get("yearly_profitable_candidates", []):
-            candidates.append(
-                {
+    reports = [report] if isinstance(report, dict) else list(report)
+    for report_index, report_item in enumerate(reports):
+        for replay in report_item.get("regime_basket_replays", []):
+            for candidate in replay.get("yearly_profitable_candidates", []):
+                enriched_candidate = {
                     **candidate,
                     "basket_id": replay.get("basket_id"),
                     "basket_hash": replay.get("basket_hash"),
+                    "source_report_index": report_index,
+                    "source_report_path": report_item.get("_source_report_path"),
+                    "source_symbol": report_item.get("symbol"),
+                    "source_timeframe": report_item.get("timeframe"),
+                    "source_date_from": report_item.get("date_from"),
+                    "source_date_to": report_item.get("date_to"),
                 }
-            )
+                enriched_candidate["evaluation_summary"] = _evaluation_summary(enriched_candidate)
+                candidates.append(enriched_candidate)
     candidates.sort(key=lambda row: _selection_key(row, objective), reverse=True)
     selected = []
     seen = set()
@@ -122,7 +149,7 @@ def _select_top_yearly_strategies(
     return selected
 
 
-def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, float, float, float]:
+def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, ...]:
     full = candidate.get("full_after_activation") or {}
     test = candidate.get("test") or {}
     train_period = candidate.get("train_period") or {}
@@ -134,12 +161,20 @@ def _selection_key(candidate: dict[str, Any], objective: str) -> tuple[float, fl
     annual_trades = float(full.get("annual_trades") or 0.0)
     covered_days = max(1.0, float(train_period.get("covered_days") or 0.0) + float(test_period.get("covered_days") or 0.0))
     annualized_net = full_net / covered_days * 365.0
+    evaluation = candidate.get("evaluation_summary") or _evaluation_summary(candidate)
+    gate_pass_count = float(evaluation.get("passed_gate_count") or 0.0)
+    fully_qualified = float(evaluation.get("fully_qualified") or 0.0)
+    positive_year_ratio = float(evaluation.get("positive_year_ratio") or 0.0)
+    return_to_drawdown = float(full.get("return_to_drawdown") or 0.0)
+    min_pf = min(full_pf, test_pf) if full_pf and test_pf else max(full_pf, test_pf)
     if objective == "profit_factor":
         return (full_pf, test_pf, full_net, annual_trades)
     if objective == "test_profit_factor":
         return (test_pf, full_pf, test_net, annual_trades)
     if objective == "balanced":
         return (annualized_net, min(full_pf, test_pf), full_net, annual_trades)
+    if objective == "annualized_quality":
+        return (fully_qualified, annualized_net, gate_pass_count, positive_year_ratio, min_pf, test_net, return_to_drawdown, annual_trades, full_net)
     if objective == "net_pnl":
         return (full_net, test_net, annual_trades, full_pf)
     if objective == "annualized_net_pnl":
@@ -151,11 +186,12 @@ def _selection_policy(objective: str) -> str:
     policies = {
         "net_pnl": "top yearly-profitable strategies by net PnL, de-duplicated by edge composition",
         "annualized_net_pnl": "top yearly-profitable strategies by annualized net PnL per 1 contract, de-duplicated by edge composition",
+        "annualized_quality": "top yearly-profitable strategies by hard-gate qualification first, then annualized net PnL with stability/cost-quality tiebreakers, de-duplicated by edge composition",
         "profit_factor": "top yearly-profitable strategies by full-period profit factor, de-duplicated by edge composition",
         "test_profit_factor": "top yearly-profitable strategies by recent test-period profit factor, de-duplicated by edge composition",
         "balanced": "top yearly-profitable strategies by annualized net PnL, then the weaker of full-period and test-period profit factor",
     }
-    return policies.get(objective, policies["annualized_net_pnl"])
+    return policies.get(objective, policies["annualized_quality"])
 
 
 def _replay_context(report: dict[str, Any], data_root: Path) -> dict[str, Any]:
@@ -183,6 +219,64 @@ def _replay_context(report: dict[str, Any], data_root: Path) -> dict[str, Any]:
             },
         ],
     }
+
+
+def _report_summary(report: dict[str, Any]) -> dict[str, Any]:
+    candidate_count = sum(len(replay.get("yearly_profitable_candidates", [])) for replay in report.get("regime_basket_replays", []))
+    return {
+        "path": report.get("_source_report_path"),
+        "symbol": report.get("symbol"),
+        "timeframe": report.get("timeframe"),
+        "date_from": report.get("date_from"),
+        "date_to": report.get("date_to"),
+        "round_trip_cost_usd": float(report.get("round_trip_cost_usd") or 0.0),
+        "yearly_profitable_candidate_count": candidate_count,
+    }
+
+
+def _evaluation_summary(candidate: dict[str, Any]) -> dict[str, Any]:
+    full = candidate.get("full_after_activation") or {}
+    test = candidate.get("test") or {}
+    full_net = float(full.get("net_pnl") or 0.0)
+    test_net = float(test.get("net_pnl") or 0.0)
+    annual_trades = float(full.get("annual_trades") or 0.0)
+    full_pf = float(full.get("profit_factor") or 0.0)
+    full_win = float(full.get("win_probability") or 0.0)
+    return_to_drawdown = float(full.get("return_to_drawdown") or 0.0)
+    positive_year_ratio = _positive_year_ratio(full.get("yearly_results") or [])
+    plus_two_tick_net = _stress_metric(full, "configured_cost_plus_2_ticks", "net_pnl")
+    gates = [
+        ("full_net_positive", full_net > 0.0),
+        ("test_net_positive", test_net > 0.0),
+        ("annual_trades_ge_1000", annual_trades >= 1000.0),
+        ("win_probability_ge_53bp", full_win >= 0.53),
+        ("profit_factor_ge_1_15", full_pf >= 1.15),
+        ("cost_plus_2_ticks_positive", plus_two_tick_net > 0.0),
+        ("positive_year_ratio_ge_75pct", positive_year_ratio >= 0.75),
+        ("return_to_drawdown_gt_1", return_to_drawdown > 1.0),
+    ]
+    return {
+        "passed_gates": [name for name, passed in gates if passed],
+        "failed_gates": [name for name, passed in gates if not passed],
+        "passed_gate_count": sum(1 for _, passed in gates if passed),
+        "total_gate_count": len(gates),
+        "positive_year_ratio": positive_year_ratio,
+        "fully_qualified": all(passed for _, passed in gates),
+    }
+
+
+def _positive_year_ratio(rows: Sequence[dict[str, Any]]) -> float:
+    if not rows:
+        return 0.0
+    positive_years = sum(1 for row in rows if float(row.get("net_pnl") or 0.0) > 0.0)
+    return positive_years / len(rows)
+
+
+def _stress_metric(metrics: dict[str, Any], label: str, field: str) -> float:
+    for row in metrics.get("cost_stress") or []:
+        if str(row.get("label")) == label:
+            return float(row.get(field) or 0.0)
+    return 0.0
 
 
 def _replay_strategy_signals(
@@ -599,8 +693,9 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
     <section class="section">
       <h2>总览</h2>
       <p>本报告从已有挖掘结果中选择 Top 3，并按策略构成去重。选择目标: {html.escape(str(payload.get("selection_objective")))}；选择规则: {html.escape(str(payload.get("selection_policy")))}。所有交易均基于 OHLCV bar 级重放，不能证明真实 bid/ask、限价成交率或排队成本。</p>
+      <p class="note">来源报告: {'; '.join(f"{html.escape(str(row['timeframe']))} -> {html.escape(str(row['path']))} (候选 {row['yearly_profitable_candidate_count']})" for row in payload.get('source_reports', []))}</p>
       <table>
-        <thead><tr><th>策略</th><th>激活年份</th><th>边数量</th><th>净收益</th><th>PF</th><th>胜率</th><th>年化交易</th><th>最大回撤</th></tr></thead>
+        <thead><tr><th>策略</th><th>周期</th><th>激活年份</th><th>边数量</th><th>净收益</th><th>年化净收益</th><th>PF</th><th>胜率</th><th>门槛</th></tr></thead>
         <tbody>{overview_rows}</tbody>
       </table>
       <p class="note">配套结构化数据: {html.escape(data_filename)}</p>
@@ -619,9 +714,11 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
     excess = strategy["excess_summary"]
     analysis = strategy.get("strategy_analysis") or {}
     profile = analysis.get("strategy_profile") or {}
+    evaluation = strategy.get("evaluation_summary") or {}
     return f"""
     <section class="section">
       <h2>{html.escape(strategy["display_id"])} · {html.escape(str(strategy["selection_rule"]))}</h2>
+      <p class="note">来源: {html.escape(str(strategy.get("source_timeframe")))} | 激活年份: {html.escape(str(strategy.get("activation_start_year")))} | 候选来源: {html.escape(str(strategy.get("source_report_path")))} | 硬门槛通过: {evaluation.get("passed_gate_count", 0)}/{evaluation.get("total_gate_count", 0)} | 年度盈利占比: {fmt_pct(evaluation.get("positive_year_ratio"))}</p>
       <div class="grid">
         {_metric("净收益", fmt_usd(metrics["net_pnl"]))}
         {_metric("Profit Factor", fmt_num(metrics["profit_factor"], 3))}
@@ -670,15 +767,17 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
 
 def _overview_row(strategy: dict[str, Any]) -> str:
     metrics = strategy["replayed_metrics"]
+    evaluation = strategy.get("evaluation_summary") or {}
     return (
         f"<tr><td>{html.escape(strategy['display_id'])}</td>"
+        f"<td>{html.escape(str(strategy.get('source_timeframe')))}</td>"
         f"<td>{strategy['activation_start_year']}</td>"
         f"<td>{strategy['edge_count']}</td>"
         f"<td>{fmt_usd(metrics['net_pnl'])}</td>"
+        f"<td>{fmt_usd(metrics.get('annualized_net_pnl'))}</td>"
         f"<td>{fmt_num(metrics['profit_factor'], 3)}</td>"
         f"<td>{fmt_pct(metrics['win_probability'])}</td>"
-        f"<td>{fmt_num(metrics['annual_trades'], 1)}</td>"
-        f"<td>{fmt_usd(metrics['max_drawdown'])}</td></tr>"
+        f"<td>{int(evaluation.get('passed_gate_count') or 0)}/{int(evaluation.get('total_gate_count') or 0)}</td></tr>"
     )
 
 

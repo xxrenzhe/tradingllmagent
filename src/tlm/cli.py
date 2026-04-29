@@ -817,8 +817,10 @@ def cmd_research_mine_profitable_nq(args: argparse.Namespace) -> int:
 
 
 def cmd_research_top_strategy_report(args: argparse.Namespace) -> int:
+    mining_reports = args.mining_report or ["experiments/profit_mining/nq_cme_1m_ohlcv_strategy_mining_report.json"]
     output = generate_top_strategy_html_report(
-        mining_report_path=Path(args.mining_report),
+        mining_report_path=Path(mining_reports[0]),
+        mining_report_paths=[Path(path) for path in mining_reports],
         data_root=Path(args.data_root),
         output_html=Path(args.output),
         top_n=args.top_n,
@@ -1460,15 +1462,16 @@ def build_parser() -> argparse.ArgumentParser:
     top_strategy_report = research_subparsers.add_parser("top-strategy-report")
     top_strategy_report.add_argument(
         "--mining-report",
-        default="experiments/profit_mining/nq_cme_1m_ohlcv_strategy_mining_report.json",
+        action="append",
+        default=None,
     )
     top_strategy_report.add_argument("--data-root", default="data")
     top_strategy_report.add_argument("--top-n", type=int, default=3)
     top_strategy_report.add_argument("--sample-trade-count", type=int, default=3)
     top_strategy_report.add_argument(
         "--objective",
-        choices=["annualized_net_pnl", "net_pnl", "profit_factor", "test_profit_factor", "balanced"],
-        default="annualized_net_pnl",
+        choices=["annualized_quality", "annualized_net_pnl", "net_pnl", "profit_factor", "test_profit_factor", "balanced"],
+        default="annualized_quality",
     )
     top_strategy_report.add_argument("--output", default="experiments/profit_mining/top3_strategy_report.html")
     top_strategy_report.set_defaults(func=cmd_research_top_strategy_report)

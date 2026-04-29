@@ -167,6 +167,139 @@ class TopStrategyReportTests(unittest.TestCase):
         self.assertEqual(selected[0]["basket_id"], "fast_smaller")
         self.assertEqual(selected[1]["basket_id"], "slow_big")
 
+    def test_select_top_yearly_strategies_can_rank_by_annualized_quality(self) -> None:
+        edge = {
+            "scan_type": "low_volume_drift",
+            "horizon_minutes": 120,
+            "session_bucket": "utc_1200_1659",
+            "dow": 1,
+            "direction_label": "long",
+            "trend_bin": 1,
+            "volume_bin": -1,
+            "range_bin": -1,
+        }
+        report = {
+            "regime_basket_replays": [
+                {
+                    "basket_id": "fails_gates",
+                    "basket_hash": "a",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "all_edges",
+                            "activation_start_year": 2019,
+                            "constituent_edges": [edge],
+                            "train_period": {"covered_days": 500},
+                            "test_period": {"covered_days": 500},
+                            "full_after_activation": {
+                                "net_pnl": 1500,
+                                "annual_trades": 1500,
+                                "profit_factor": 1.10,
+                                "win_probability": 0.52,
+                                "return_to_drawdown": 0.9,
+                                "cost_stress": [{"label": "configured_cost_plus_2_ticks", "net_pnl": -50}],
+                                "yearly_results": [{"year": 2024, "net_pnl": 100}, {"year": 2025, "net_pnl": -50}],
+                            },
+                            "test": {"net_pnl": 400, "profit_factor": 1.0},
+                        }
+                    ],
+                },
+                {
+                    "basket_id": "passes_gates",
+                    "basket_hash": "b",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "quality_edges",
+                            "activation_start_year": 2020,
+                            "constituent_edges": [{**edge, "dow": 2}],
+                            "train_period": {"covered_days": 500},
+                            "test_period": {"covered_days": 500},
+                            "full_after_activation": {
+                                "net_pnl": 1200,
+                                "annual_trades": 1600,
+                                "profit_factor": 1.20,
+                                "win_probability": 0.55,
+                                "return_to_drawdown": 1.5,
+                                "cost_stress": [{"label": "configured_cost_plus_2_ticks", "net_pnl": 100}],
+                                "yearly_results": [{"year": 2024, "net_pnl": 100}, {"year": 2025, "net_pnl": 150}],
+                            },
+                            "test": {"net_pnl": 500, "profit_factor": 1.1},
+                        }
+                    ],
+                },
+            ]
+        }
+
+        selected = _select_top_yearly_strategies(report, top_n=2, objective="annualized_quality")
+
+        self.assertEqual(selected[0]["basket_id"], "passes_gates")
+        self.assertTrue(selected[0]["evaluation_summary"]["fully_qualified"])
+        self.assertFalse(selected[1]["evaluation_summary"]["fully_qualified"])
+
+    def test_select_top_yearly_strategies_can_merge_multiple_reports(self) -> None:
+        edge = {
+            "scan_type": "low_volume_drift",
+            "horizon_minutes": 120,
+            "session_bucket": "utc_1200_1659",
+            "dow": 1,
+            "direction_label": "long",
+            "trend_bin": 1,
+            "volume_bin": -1,
+            "range_bin": -1,
+        }
+        report_1m = {
+            "_source_report_path": "experiments/profit_mining/nq_cme_1m_ohlcv_strategy_mining_report.json",
+            "symbol": "NQ_CME",
+            "timeframe": "1m",
+            "date_from": "2010-01-01",
+            "date_to": "2026-01-01",
+            "regime_basket_replays": [
+                {
+                    "basket_id": "one_minute",
+                    "basket_hash": "a",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "all_edges",
+                            "activation_start_year": 2019,
+                            "constituent_edges": [edge],
+                            "train_period": {"covered_days": 100},
+                            "test_period": {"covered_days": 100},
+                            "full_after_activation": {"net_pnl": 900, "annual_trades": 1200, "profit_factor": 1.2},
+                            "test": {"net_pnl": 400, "profit_factor": 1.1},
+                        }
+                    ],
+                }
+            ],
+        }
+        report_5m = {
+            "_source_report_path": "experiments/profit_mining/nq_cme_5m_ohlcv_strategy_mining_report.json",
+            "symbol": "NQ_CME",
+            "timeframe": "5m",
+            "date_from": "2010-01-01",
+            "date_to": "2026-01-01",
+            "regime_basket_replays": [
+                {
+                    "basket_id": "five_minute",
+                    "basket_hash": "b",
+                    "yearly_profitable_candidates": [
+                        {
+                            "selection_rule": "all_edges",
+                            "activation_start_year": 2020,
+                            "constituent_edges": [{**edge, "dow": 2}],
+                            "train_period": {"covered_days": 100},
+                            "test_period": {"covered_days": 100},
+                            "full_after_activation": {"net_pnl": 1200, "annual_trades": 1200, "profit_factor": 1.2},
+                            "test": {"net_pnl": 600, "profit_factor": 1.1},
+                        }
+                    ],
+                }
+            ],
+        }
+
+        selected = _select_top_yearly_strategies([report_1m, report_5m], top_n=2, objective="annualized_net_pnl")
+
+        self.assertEqual(selected[0]["source_timeframe"], "5m")
+        self.assertEqual(selected[1]["source_timeframe"], "1m")
+
     def test_monthly_signal_results_groups_by_calendar_month(self) -> None:
         rows = _monthly_signal_results(
             [
