@@ -263,8 +263,13 @@ def mine_databento_nq_profitable_strategies(
             ],
             "ohlcv_family_scans": [
                 "breakout_continuation",
+                "failed_breakout_reversion",
+                "opening_range_breakout",
                 "range_expansion_continuation",
+                "outside_bar_momentum",
+                "session_extreme_reversion",
                 "trend_pullback_reclaim",
+                "vwap_reclaim_continuation",
                 "zscore_mean_reversion",
                 "volume_climax_reversion",
                 "low_volume_drift",
@@ -286,7 +291,7 @@ def mine_databento_nq_profitable_strategies(
                     "adverse_selection_from_top_of_book",
                 ],
                 "next_ohlcv_expansion": [
-                    "multi_timeframe_volume_confirm_1m_5m_15m",
+                    "cross_timeframe_confirmation_1m_5m_15m",
                     "session_normalized_volume_percentile",
                     "event_window_volume_attribution",
                 ],
@@ -358,10 +363,14 @@ def _run_regime_first_edge_search(
                 f"""
                 WITH raw AS (
                   SELECT timestamp, open, high, low, close, tick_count,
+                         CAST(timestamp AS DATE) AS bar_date,
                          CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER) AS moday,
                          CAST(strftime(timestamp, '%w') AS INTEGER) AS dow,
                          close - lag(close, 1) OVER (ORDER BY timestamp) AS ret1,
                          close - lag(close, 5) OVER (ORDER BY timestamp) AS ret5,
+                         lag(close, 1) OVER (ORDER BY timestamp) AS prev_close,
+                         lag(high, 1) OVER (ORDER BY timestamp) AS prev_high,
+                         lag(low, 1) OVER (ORDER BY timestamp) AS prev_low,
                          avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS ma20,
                          avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS ma50,
                          stddev_pop(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS close_std50,
@@ -369,6 +378,29 @@ def _run_regime_first_edge_search(
                          avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
                          max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
                          min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
+                         sum(((high+low+close)/3.0)*greatest(tick_count, 1)) OVER (
+                           PARTITION BY CAST(timestamp AS DATE)
+                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                         ) / NULLIF(sum(greatest(tick_count, 1)) OVER (
+                           PARTITION BY CAST(timestamp AS DATE)
+                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                         ), 0) AS session_vwap,
+                         max(high) OVER (
+                           PARTITION BY CAST(timestamp AS DATE)
+                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                         ) AS session_high_prev,
+                         min(low) OVER (
+                           PARTITION BY CAST(timestamp AS DATE)
+                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                         ) AS session_low_prev,
+                         max(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN high END) OVER (
+                           PARTITION BY CAST(timestamp AS DATE)
+                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                         ) AS opening_high_prev,
+                         min(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN low END) OVER (
+                           PARTITION BY CAST(timestamp AS DATE)
+                           ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                         ) AS opening_low_prev,
                          lead(close, {horizon_bars}) OVER (ORDER BY timestamp) AS future_close,
                          lead(timestamp, {horizon_bars}) OVER (ORDER BY timestamp) AS future_ts
                   FROM read_parquet('{context["parquet_glob"]}')
@@ -386,6 +418,8 @@ def _run_regime_first_edge_search(
                          CASE WHEN tick_count >= vol50*2.0 THEN 3 WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin,
                          CASE WHEN (high-low) >= range20*2.0 THEN 3 WHEN (high-low) >= range20*1.5 THEN 2 WHEN (high-low) >= range20 THEN 1 WHEN (high-low) < range20*0.7 THEN -1 ELSE 0 END AS range_bin,
                          CASE WHEN close_std50 > 0 THEN (close-ma50)/close_std50 ELSE 0 END AS z50,
+                         close - session_vwap AS vwap_dist,
+                         lag(close - session_vwap, 1) OVER (ORDER BY timestamp) AS prev_vwap_dist,
                          CASE WHEN high > low THEN (close-open)/(high-low) ELSE 0 END AS body_to_range,
                          CASE WHEN close > high20_prev THEN 1 WHEN close < low20_prev THEN -1 ELSE 0 END AS breakout20
                   FROM raw
@@ -402,6 +436,50 @@ def _run_regime_first_edge_search(
                          trend_bin, volume_bin, range_bin, -1, future_close, close
                   FROM feats
                   WHERE breakout20 = -1 AND trend_bin = -1 AND volume_bin >= 1
+                  UNION ALL
+                  SELECT 'opening_range_breakout', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE opening_high_prev IS NOT NULL AND moday >= 840 AND close > opening_high_prev
+                    AND trend_bin = 1 AND volume_bin >= 1
+                  UNION ALL
+                  SELECT 'opening_range_breakout', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE opening_low_prev IS NOT NULL AND moday >= 840 AND close < opening_low_prev
+                    AND trend_bin = -1 AND volume_bin >= 1
+                  UNION ALL
+                  SELECT 'failed_breakout_reversion', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE high > high20_prev AND close < high20_prev AND z50 >= 1.0 AND abs(body_to_range) <= 0.45
+                  UNION ALL
+                  SELECT 'failed_breakout_reversion', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE low < low20_prev AND close > low20_prev AND z50 <= -1.0 AND abs(body_to_range) <= 0.45
+                  UNION ALL
+                  SELECT 'vwap_reclaim_continuation', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE prev_vwap_dist < 0 AND vwap_dist >= 0 AND trend_bin = 1 AND volume_bin >= 0 AND ret1 > 0
+                  UNION ALL
+                  SELECT 'vwap_reclaim_continuation', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE prev_vwap_dist > 0 AND vwap_dist <= 0 AND trend_bin = -1 AND volume_bin >= 0 AND ret1 < 0
+                  UNION ALL
+                  SELECT 'outside_bar_momentum', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE prev_high IS NOT NULL AND high >= prev_high AND low <= prev_low
+                    AND body_to_range >= 0.55 AND close > open AND volume_bin >= 1
+                  UNION ALL
+                  SELECT 'outside_bar_momentum', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE prev_low IS NOT NULL AND high >= prev_high AND low <= prev_low
+                    AND body_to_range <= -0.55 AND close < open AND volume_bin >= 1
                   UNION ALL
                   SELECT 'range_expansion_continuation', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, 1, future_close, close
@@ -442,6 +520,18 @@ def _run_regime_first_edge_search(
                          trend_bin, volume_bin, range_bin, 1, future_close, close
                   FROM feats
                   WHERE z50 <= -1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
+                  UNION ALL
+                  SELECT 'session_extreme_reversion', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE session_high_prev IS NOT NULL AND close >= session_high_prev - range20*0.1
+                    AND z50 >= 1.25 AND volume_bin <= 1 AND abs(body_to_range) <= 0.45
+                  UNION ALL
+                  SELECT 'session_extreme_reversion', {horizon_minutes}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE session_low_prev IS NOT NULL AND close <= session_low_prev + range20*0.1
+                    AND z50 <= -1.25 AND volume_bin <= 1 AND abs(body_to_range) <= 0.45
                   UNION ALL
                   SELECT 'low_volume_drift', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, 1, future_close, close
@@ -532,9 +622,13 @@ def _build_regime_edge_baskets(
         ("scan_type",),
         ("session_bucket",),
         ("direction_label",),
+        ("horizon_minutes",),
         ("dow",),
         ("scan_type", "session_bucket"),
+        ("scan_type", "direction_label"),
+        ("scan_type", "horizon_minutes"),
         ("scan_type", "dow"),
+        ("session_bucket", "direction_label"),
         ("session_bucket", "dow"),
         ("scan_type", "session_bucket", "dow"),
     ):
@@ -918,6 +1012,12 @@ def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, .
     for dow in sorted({str(edge.get("dow")) for edge in edges}):
         subset = tuple(index for index in edge_indexes if str(edges[index].get("dow")) == dow)
         subset_specs.setdefault(subset, f"dow:{dow}")
+    for direction_label in sorted({str(edge.get("direction_label")) for edge in edges}):
+        subset = tuple(index for index in edge_indexes if str(edges[index].get("direction_label")) == direction_label)
+        subset_specs.setdefault(subset, f"direction_label:{direction_label}")
+    for horizon_minutes in sorted({str(edge.get("horizon_minutes")) for edge in edges}):
+        subset = tuple(index for index in edge_indexes if str(edges[index].get("horizon_minutes")) == horizon_minutes)
+        subset_specs.setdefault(subset, f"horizon_minutes:{horizon_minutes}")
     for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
         for session_bucket in sorted({str(edge.get("session_bucket")) for edge in edges}):
             subset = tuple(
@@ -935,6 +1035,24 @@ def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, .
                 if str(edges[index].get("scan_type")) == scan_type and str(edges[index].get("dow")) == dow
             )
             subset_specs.setdefault(subset, f"scan_type:{scan_type},dow:{dow}")
+    for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
+        for direction_label in sorted({str(edge.get("direction_label")) for edge in edges}):
+            subset = tuple(
+                index
+                for index in edge_indexes
+                if str(edges[index].get("scan_type")) == scan_type
+                and str(edges[index].get("direction_label")) == direction_label
+            )
+            subset_specs.setdefault(subset, f"scan_type:{scan_type},direction_label:{direction_label}")
+    for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
+        for horizon_minutes in sorted({str(edge.get("horizon_minutes")) for edge in edges}):
+            subset = tuple(
+                index
+                for index in edge_indexes
+                if str(edges[index].get("scan_type")) == scan_type
+                and str(edges[index].get("horizon_minutes")) == horizon_minutes
+            )
+            subset_specs.setdefault(subset, f"scan_type:{scan_type},horizon_minutes:{horizon_minutes}")
     for session_bucket in sorted({str(edge.get("session_bucket")) for edge in edges}):
         for dow in sorted({str(edge.get("dow")) for edge in edges}):
             subset = tuple(
@@ -1114,10 +1232,14 @@ def _replay_regime_edges_for_horizon(
           VALUES {values}
         ), raw AS (
           SELECT timestamp, open, high, low, close, tick_count,
+                 CAST(timestamp AS DATE) AS bar_date,
                  CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER) AS moday,
                  CAST(strftime(timestamp, '%w') AS INTEGER) AS dow,
                  close - lag(close, 1) OVER (ORDER BY timestamp) AS ret1,
                  close - lag(close, 5) OVER (ORDER BY timestamp) AS ret5,
+                 lag(close, 1) OVER (ORDER BY timestamp) AS prev_close,
+                 lag(high, 1) OVER (ORDER BY timestamp) AS prev_high,
+                 lag(low, 1) OVER (ORDER BY timestamp) AS prev_low,
                  avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS ma20,
                  avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS ma50,
                  stddev_pop(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS close_std50,
@@ -1125,6 +1247,29 @@ def _replay_regime_edges_for_horizon(
                  avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
                  max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
                  min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
+                 sum(((high+low+close)/3.0)*greatest(tick_count, 1)) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                 ) / NULLIF(sum(greatest(tick_count, 1)) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                 ), 0) AS session_vwap,
+                 max(high) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                 ) AS session_high_prev,
+                 min(low) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                 ) AS session_low_prev,
+                 max(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN high END) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                 ) AS opening_high_prev,
+                 min(CASE WHEN (CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER)) BETWEEN 810 AND 839 THEN low END) OVER (
+                   PARTITION BY CAST(timestamp AS DATE)
+                   ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                 ) AS opening_low_prev,
                  lead(close, {horizon_bars}) OVER (ORDER BY timestamp) AS future_close,
                  lead(timestamp, {horizon_bars}) OVER (ORDER BY timestamp) AS future_ts
           FROM read_parquet('{context["parquet_glob"]}')
@@ -1142,6 +1287,8 @@ def _replay_regime_edges_for_horizon(
                  CASE WHEN tick_count >= vol50*2.0 THEN 3 WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin,
                  CASE WHEN (high-low) >= range20*2.0 THEN 3 WHEN (high-low) >= range20*1.5 THEN 2 WHEN (high-low) >= range20 THEN 1 WHEN (high-low) < range20*0.7 THEN -1 ELSE 0 END AS range_bin,
                  CASE WHEN close_std50 > 0 THEN (close-ma50)/close_std50 ELSE 0 END AS z50,
+                 close - session_vwap AS vwap_dist,
+                 lag(close - session_vwap, 1) OVER (ORDER BY timestamp) AS prev_vwap_dist,
                  CASE WHEN high > low THEN (close-open)/(high-low) ELSE 0 END AS body_to_range,
                  CASE WHEN close > high20_prev THEN 1 WHEN close < low20_prev THEN -1 ELSE 0 END AS breakout20
           FROM raw
@@ -1158,6 +1305,50 @@ def _replay_regime_edges_for_horizon(
                  trend_bin, volume_bin, range_bin, -1, future_close, close
           FROM feats
           WHERE breakout20 = -1 AND trend_bin = -1 AND volume_bin >= 1
+          UNION ALL
+          SELECT timestamp, future_ts, 'opening_range_breakout', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE opening_high_prev IS NOT NULL AND moday >= 840 AND close > opening_high_prev
+            AND trend_bin = 1 AND volume_bin >= 1
+          UNION ALL
+          SELECT timestamp, future_ts, 'opening_range_breakout', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE opening_low_prev IS NOT NULL AND moday >= 840 AND close < opening_low_prev
+            AND trend_bin = -1 AND volume_bin >= 1
+          UNION ALL
+          SELECT timestamp, future_ts, 'failed_breakout_reversion', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE high > high20_prev AND close < high20_prev AND z50 >= 1.0 AND abs(body_to_range) <= 0.45
+          UNION ALL
+          SELECT timestamp, future_ts, 'failed_breakout_reversion', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE low < low20_prev AND close > low20_prev AND z50 <= -1.0 AND abs(body_to_range) <= 0.45
+          UNION ALL
+          SELECT timestamp, future_ts, 'vwap_reclaim_continuation', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE prev_vwap_dist < 0 AND vwap_dist >= 0 AND trend_bin = 1 AND volume_bin >= 0 AND ret1 > 0
+          UNION ALL
+          SELECT timestamp, future_ts, 'vwap_reclaim_continuation', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE prev_vwap_dist > 0 AND vwap_dist <= 0 AND trend_bin = -1 AND volume_bin >= 0 AND ret1 < 0
+          UNION ALL
+          SELECT timestamp, future_ts, 'outside_bar_momentum', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE prev_high IS NOT NULL AND high >= prev_high AND low <= prev_low
+            AND body_to_range >= 0.55 AND close > open AND volume_bin >= 1
+          UNION ALL
+          SELECT timestamp, future_ts, 'outside_bar_momentum', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE prev_low IS NOT NULL AND high >= prev_high AND low <= prev_low
+            AND body_to_range <= -0.55 AND close < open AND volume_bin >= 1
           UNION ALL
           SELECT timestamp, future_ts, 'range_expansion_continuation', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, 1, future_close, close
@@ -1198,6 +1389,18 @@ def _replay_regime_edges_for_horizon(
                  trend_bin, volume_bin, range_bin, 1, future_close, close
           FROM feats
           WHERE z50 <= -1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
+          UNION ALL
+          SELECT timestamp, future_ts, 'session_extreme_reversion', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE session_high_prev IS NOT NULL AND close >= session_high_prev - range20*0.1
+            AND z50 >= 1.25 AND volume_bin <= 1 AND abs(body_to_range) <= 0.45
+          UNION ALL
+          SELECT timestamp, future_ts, 'session_extreme_reversion', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE session_low_prev IS NOT NULL AND close <= session_low_prev + range20*0.1
+            AND z50 <= -1.25 AND volume_bin <= 1 AND abs(body_to_range) <= 0.45
           UNION ALL
           SELECT timestamp, future_ts, 'low_volume_drift', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, 1, future_close, close
@@ -1311,9 +1514,22 @@ def _strategy_profile(edges: Sequence[dict[str, Any]]) -> dict[str, Any]:
 
 def _strategy_family(edge: dict[str, Any]) -> str:
     scan_type = str(edge.get("scan_type"))
-    if scan_type in {"breakout_continuation", "range_expansion_continuation", "trend_pullback_reclaim", "low_volume_drift"}:
+    if scan_type in {
+        "breakout_continuation",
+        "opening_range_breakout",
+        "outside_bar_momentum",
+        "range_expansion_continuation",
+        "trend_pullback_reclaim",
+        "vwap_reclaim_continuation",
+        "low_volume_drift",
+    }:
         return "trend"
-    if scan_type in {"zscore_mean_reversion", "volume_climax_reversion"}:
+    if scan_type in {
+        "failed_breakout_reversion",
+        "session_extreme_reversion",
+        "zscore_mean_reversion",
+        "volume_climax_reversion",
+    }:
         return "mean_reversion"
     return "feature_scan"
 
@@ -1323,8 +1539,15 @@ def _volume_profile(edge: dict[str, Any]) -> str:
     volume_bin = int(edge.get("volume_bin") or 0)
     if scan_type == "volume_climax_reversion":
         return "volume_climax_reversion"
-    if scan_type in {"breakout_continuation", "range_expansion_continuation"} and volume_bin >= 1:
+    if scan_type in {
+        "breakout_continuation",
+        "opening_range_breakout",
+        "outside_bar_momentum",
+        "range_expansion_continuation",
+    } and volume_bin >= 1:
         return "volume_confirmed_breakout"
+    if scan_type == "vwap_reclaim_continuation":
+        return "vwap_volume_reclaim"
     if scan_type == "low_volume_drift" or volume_bin < 0:
         return "low_volume_drift"
     if volume_bin >= 2:
