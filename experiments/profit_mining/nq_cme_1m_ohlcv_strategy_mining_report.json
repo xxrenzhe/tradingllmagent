@@ -150318,7 +150318,7 @@
       }
     ]
   },
-  "report_hash": "52516785d01fa3342be17e83c66e916fa591ed09956568fae5c3f6b362ac28a0",
+  "report_hash": "67a1127876d5bda392b386d86982ac25591d12047576b0238f93f37fe298150b",
   "round_trip_cost_usd": 15.0,
   "schema_version": 1,
   "search_space": {
@@ -151883,7 +151883,7 @@
   "symbol": "NQ_CME",
   "target": {
     "cost_adjusted": true,
-    "min_annual_trades": 1000,
+    "min_annual_trades": 1000.0,
     "min_win_probability": 0.53,
     "requires_net_pnl_positive": true
   },
