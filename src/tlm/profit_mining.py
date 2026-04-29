@@ -487,11 +487,25 @@ def _build_regime_edge_baskets(
         and float(edge.get("cost_adjusted_win_probability") or 0) > min_win_probability
     ]
     baskets = []
-    for key_name in ("scan_type", "session_bucket", "direction_label"):
-        for value in sorted({str(edge.get(key_name)) for edge in eligible}):
+    for key_names in (
+        ("scan_type",),
+        ("session_bucket",),
+        ("direction_label",),
+        ("dow",),
+        ("scan_type", "session_bucket"),
+        ("scan_type", "dow"),
+        ("session_bucket", "dow"),
+        ("scan_type", "session_bucket", "dow"),
+    ):
+        groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        for edge in eligible:
+            key = tuple(str(edge.get(key_name)) for key_name in key_names)
+            groups.setdefault(key, []).append(edge)
+        for key, group_edges in sorted(groups.items()):
+            key_label = ",".join(f"{key_name}:{value}" for key_name, value in zip(key_names, key))
             basket = _regime_basket(
-                f"{key_name}:{value}",
-                [edge for edge in eligible if str(edge.get(key_name)) == value],
+                key_label,
+                group_edges,
                 min_annual_trades,
                 min_win_probability,
             )
@@ -805,6 +819,7 @@ def _yearly_profitable_candidates(
                 "train": train_metrics,
                 "test": test_metrics,
                 "full_after_activation": full_metrics,
+                "strategy_analysis": _strategy_analysis(selection_rule, full_metrics, train_metrics, test_metrics),
                 "constituent_edges": [_edge_identity(edges[index]) for index in subset],
                 "objective": "all_active_years_net_pnl_positive_then_maximize_full_net_pnl",
                 "caveat": (
@@ -842,6 +857,34 @@ def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, .
     for session_bucket in sorted({str(edge.get("session_bucket")) for edge in edges}):
         subset = tuple(index for index in edge_indexes if str(edges[index].get("session_bucket")) == session_bucket)
         subset_specs.setdefault(subset, f"session_bucket:{session_bucket}")
+    for dow in sorted({str(edge.get("dow")) for edge in edges}):
+        subset = tuple(index for index in edge_indexes if str(edges[index].get("dow")) == dow)
+        subset_specs.setdefault(subset, f"dow:{dow}")
+    for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
+        for session_bucket in sorted({str(edge.get("session_bucket")) for edge in edges}):
+            subset = tuple(
+                index
+                for index in edge_indexes
+                if str(edges[index].get("scan_type")) == scan_type
+                and str(edges[index].get("session_bucket")) == session_bucket
+            )
+            subset_specs.setdefault(subset, f"scan_type:{scan_type},session_bucket:{session_bucket}")
+    for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
+        for dow in sorted({str(edge.get("dow")) for edge in edges}):
+            subset = tuple(
+                index
+                for index in edge_indexes
+                if str(edges[index].get("scan_type")) == scan_type and str(edges[index].get("dow")) == dow
+            )
+            subset_specs.setdefault(subset, f"scan_type:{scan_type},dow:{dow}")
+    for session_bucket in sorted({str(edge.get("session_bucket")) for edge in edges}):
+        for dow in sorted({str(edge.get("dow")) for edge in edges}):
+            subset = tuple(
+                index
+                for index in edge_indexes
+                if str(edges[index].get("session_bucket")) == session_bucket and str(edges[index].get("dow")) == dow
+            )
+            subset_specs.setdefault(subset, f"session_bucket:{session_bucket},dow:{dow}")
     return {subset: label for subset, label in subset_specs.items() if subset}
 
 
@@ -879,6 +922,48 @@ def _passes_yearly_profitable_filter(
 def _all_years_profitable(metrics: dict[str, Any]) -> bool:
     yearly_results = metrics.get("yearly_results") or []
     return bool(yearly_results) and all(float(row.get("net_pnl") or 0) > 0 for row in yearly_results)
+
+
+def _strategy_analysis(
+    selection_rule: str,
+    full_metrics: dict[str, Any],
+    train_metrics: dict[str, Any],
+    test_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    yearly_results = full_metrics.get("yearly_results") or []
+    weakest_year = min(yearly_results, key=lambda row: float(row.get("net_pnl") or 0)) if yearly_results else None
+    strongest_year = max(yearly_results, key=lambda row: float(row.get("net_pnl") or 0)) if yearly_results else None
+    losing_year_count = sum(1 for row in yearly_results if float(row.get("net_pnl") or 0) <= 0)
+    strengths = [
+        "Every active calendar year is net profitable.",
+        "Meets the annual trade frequency, win-probability, and positive-PnL target after activation.",
+    ]
+    if float(test_metrics.get("net_pnl") or 0) > 0:
+        strengths.append("Most recent test window is net profitable.")
+    if _profit_factor_score(test_metrics.get("profit_factor")) > _profit_factor_score(train_metrics.get("profit_factor")):
+        strengths.append("Recent test profit factor is stronger than the training period.")
+    if float(full_metrics.get("annual_trades") or 0) > 2000:
+        strengths.append("High trade count reduces dependence on a tiny number of events.")
+
+    weaknesses = []
+    if weakest_year and float(weakest_year.get("net_pnl") or 0) < float(full_metrics.get("net_pnl") or 0) * 0.05:
+        weaknesses.append(f"Weakest year has thin profit: {weakest_year['year']} net_pnl={weakest_year['net_pnl']}.")
+    if (full_metrics.get("profit_factor") or 0) < 1.3:
+        weaknesses.append("Profit factor is positive but not thick; execution degradation can matter.")
+    if float(full_metrics.get("max_drawdown") or 0) > 0 and float(full_metrics.get("return_to_drawdown") or 0) < 10:
+        weaknesses.append("Return-to-drawdown is moderate; risk sizing needs restraint.")
+    if "all_edges" in selection_rule:
+        weaknesses.append("Uses a broad edge basket, so constituent overlap and regime drift should be monitored.")
+    if losing_year_count:
+        weaknesses.append(f"Contains {losing_year_count} non-profitable active years.")
+    return {
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "weakest_year": weakest_year,
+        "strongest_year": strongest_year,
+        "active_year_count": len(yearly_results),
+        "losing_year_count": losing_year_count,
+    }
 
 
 def _period_replay_metrics(signals: Sequence[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any]:

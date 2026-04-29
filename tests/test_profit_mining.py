@@ -280,6 +280,8 @@ class ProfitMiningTests(unittest.TestCase):
         self.assertGreater(len(candidates), 0)
         self.assertEqual(candidates[0]["activation_start_year"], 2022)
         self.assertFalse(candidates[0]["full_history_candidate"])
+        self.assertIn("strategy_analysis", candidates[0])
+        self.assertGreater(len(candidates[0]["strategy_analysis"]["strengths"]), 0)
         self.assertTrue(
             all(row["net_pnl"] > 0 for row in candidates[0]["full_after_activation"]["yearly_results"])
         )
