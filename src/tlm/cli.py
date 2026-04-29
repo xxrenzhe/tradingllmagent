@@ -42,6 +42,7 @@ from .modules import (
 from .paper import build_paper_replay_attribution, export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_bar_quality_report, build_quality_report
 from .quotes import build_quote_execution_report, import_databento_quotes
+from .profit_mining import mine_databento_nq_profitable_strategies
 from .research import (
     StrategyTargetCriteria,
     discover_strategy_seed_specs,
@@ -795,6 +796,25 @@ def cmd_research_vol_prescreen(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_research_mine_profitable_nq(args: argparse.Namespace) -> int:
+    symbol = get_symbol(args.symbol, Path(args.config_dir))
+    cost_model = get_cost_model(args.cost_model, Path(args.config_dir))
+    report = mine_databento_nq_profitable_strategies(
+        data_root=Path(args.data_root),
+        symbol_config=symbol,
+        cost_model=cost_model,
+        date_from=parse_date(args.date_from),
+        date_to=parse_date(args.date_to),
+        timeframe=args.timeframe,
+        output_path=Path(args.output) if args.output else None,
+        min_annual_trades=args.min_annual_trades,
+        min_win_probability=args.min_win_probability,
+        max_candidates=args.max_candidates,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True, default=str))
+    return 0
+
+
 def cmd_research_discover_target(args: argparse.Namespace) -> int:
     if args.spec:
         spec = load_strategy_spec(Path(args.spec))
@@ -1409,6 +1429,19 @@ def build_parser() -> argparse.ArgumentParser:
     vol_prescreen.add_argument("--starting-equity", type=float, default=100_000)
     vol_prescreen.add_argument("--output-dir", default="experiments/vol_execution_artifacts")
     vol_prescreen.set_defaults(func=cmd_research_vol_prescreen)
+
+    mine_profitable_nq = research_subparsers.add_parser("mine-profitable-nq")
+    mine_profitable_nq.add_argument("--symbol", default="NQ_CME")
+    mine_profitable_nq.add_argument("--timeframe", default="1m")
+    mine_profitable_nq.add_argument("--from", dest="date_from", required=True)
+    mine_profitable_nq.add_argument("--to", dest="date_to", required=True)
+    mine_profitable_nq.add_argument("--data-root", default="data")
+    mine_profitable_nq.add_argument("--cost-model", default="nq_conservative_v1")
+    mine_profitable_nq.add_argument("--min-annual-trades", type=float, default=1000)
+    mine_profitable_nq.add_argument("--min-win-probability", type=float, default=0.53)
+    mine_profitable_nq.add_argument("--max-candidates", type=int, default=50)
+    mine_profitable_nq.add_argument("--output", default="experiments/profit_mining/nq_cme_strategy_mining_report.json")
+    mine_profitable_nq.set_defaults(func=cmd_research_mine_profitable_nq)
 
     discover = research_subparsers.add_parser("discover-target")
     discover.add_argument("--spec")
