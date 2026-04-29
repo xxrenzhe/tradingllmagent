@@ -11,6 +11,7 @@ from tlm.profit_mining import (
     _horizon_spec_dicts,
     _optimized_regime_basket_subsets,
     _replay_metrics,
+    _yearly_profitable_candidates,
     mine_databento_nq_profitable_strategies,
 )
 from tlm.storage import bar_path, write_bars_parquet
@@ -242,6 +243,46 @@ class ProfitMiningTests(unittest.TestCase):
         self.assertLess(candidates[0]["activation_start_year"], 2024)
         self.assertEqual(candidates[0]["test_period"]["from"], "2024-01-01")
         self.assertGreater(candidates[0]["test"]["net_pnl"], 0)
+
+    def test_yearly_profitable_candidates_require_positive_years(self) -> None:
+        edges = [
+            {
+                "scan_type": "low_volume_drift",
+                "horizon_minutes": 120,
+                "session_bucket": "utc_1200_1659",
+                "dow": 1,
+                "direction_label": "long",
+                "trend_bin": 1,
+                "volume_bin": -1,
+                "range_bin": -1,
+                "break_even_cost_usd": 100,
+                "cost_adjusted_win_probability": 0.75,
+                "cost_adjusted_net_pnl": 1000,
+            }
+        ]
+        signals = []
+        for year in range(2020, 2027):
+            for day in range(3):
+                signals.append(
+                    {
+                        "timestamp": datetime(year, 1, day + 1, 12, 0),
+                        "rule_index": 0,
+                        "pnl": 100.0 if year >= 2022 else -20.0,
+                    }
+                )
+
+        candidates = _yearly_profitable_candidates(
+            edges,
+            signals,
+            context={"min_annual_trades": 1, "min_win_probability": 0.53},
+        )
+
+        self.assertGreater(len(candidates), 0)
+        self.assertEqual(candidates[0]["activation_start_year"], 2022)
+        self.assertFalse(candidates[0]["full_history_candidate"])
+        self.assertTrue(
+            all(row["net_pnl"] > 0 for row in candidates[0]["full_after_activation"]["yearly_results"])
+        )
 
     def test_report_includes_evaluation_periods(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

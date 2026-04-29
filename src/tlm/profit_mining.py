@@ -162,6 +162,24 @@ def mine_databento_nq_profitable_strategies(
         ),
         reverse=True,
     )
+    yearly_profitable_candidates = [
+        {
+            "basket_id": replay["basket_id"],
+            "basket_hash": replay["basket_hash"],
+            **candidate,
+        }
+        for replay in regime_basket_replays
+        for candidate in replay.get("yearly_profitable_candidates", [])
+    ]
+    yearly_profitable_candidates = sorted(
+        yearly_profitable_candidates,
+        key=lambda row: (
+            float(row["full_after_activation"].get("net_pnl") or 0),
+            float(row["test"].get("net_pnl") or 0),
+            _profit_factor_score(row["full_after_activation"].get("profit_factor")),
+        ),
+        reverse=True,
+    )
     regime_basket_found = bool(regime_first.get("qualified_regime_baskets"))
     report = {
         "schema_version": 1,
@@ -244,6 +262,10 @@ def mine_databento_nq_profitable_strategies(
             "adaptive_recent_regime_candidate_count": len(adaptive_recent_regime_candidates),
             "best_adaptive_recent_regime_candidate": adaptive_recent_regime_candidates[0]
             if adaptive_recent_regime_candidates
+            else None,
+            "yearly_profitable_candidate_count": len(yearly_profitable_candidates),
+            "best_yearly_profitable_candidate": yearly_profitable_candidates[0]
+            if yearly_profitable_candidates
             else None,
             "best_cost_adjusted_net_pnl": qualified[0]["net_pnl"] if qualified else None,
             "best_gross_net_pnl": gross_only[0]["gross_net_pnl"] if gross_only else None,
@@ -569,6 +591,7 @@ def _replay_regime_basket(
         "one_trade_per_timestamp": one_trade,
         "optimized_subsets": _optimized_regime_basket_subsets(edges, signals, day_count, context),
         "adaptive_recent_regime_candidates": _adaptive_recent_regime_candidates(edges, signals, context),
+        "yearly_profitable_candidates": _yearly_profitable_candidates(edges, signals, context),
         "replay_mode_caveat": (
             "independent_rule_slots allows each constituent edge to trade; "
             "one_trade_per_timestamp keeps the first constituent edge per bar to reduce overlap."
@@ -709,6 +732,85 @@ def _adaptive_recent_regime_candidates(
     )[:20]
 
 
+def _yearly_profitable_candidates(
+    edges: Sequence[dict[str, Any]],
+    signals: Sequence[dict[str, Any]],
+    context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not edges or not signals:
+        return []
+    years = sorted({_signal_timestamp(signal).year for signal in signals})
+    if len(years) < 4:
+        return []
+    test_start_year = max(years) - 2
+    subset_specs = _adaptive_subset_specs(edges)
+    candidates = []
+    for subset, selection_rule in subset_specs.items():
+        subset_set = set(subset)
+        subset_signals = [signal for signal in signals if int(signal["rule_index"]) in subset_set]
+        for activation_start_year in years:
+            if activation_start_year >= test_start_year:
+                continue
+            active_signals = [
+                signal
+                for signal in subset_signals
+                if _signal_timestamp(signal).year >= activation_start_year
+            ]
+            active_years = sorted({_signal_timestamp(signal).year for signal in active_signals})
+            if len(active_years) < 3:
+                continue
+            train_signals = [
+                signal
+                for signal in active_signals
+                if _signal_timestamp(signal).year < test_start_year
+            ]
+            test_signals = [
+                signal
+                for signal in active_signals
+                if _signal_timestamp(signal).year >= test_start_year
+            ]
+            train_one_trade = _one_trade_per_timestamp(train_signals)
+            test_one_trade = _one_trade_per_timestamp(test_signals)
+            full_one_trade = _one_trade_per_timestamp(active_signals)
+            if not train_one_trade or not test_one_trade:
+                continue
+            train_metrics = _period_replay_metrics(train_one_trade, context)
+            test_metrics = _period_replay_metrics(test_one_trade, context)
+            full_metrics = _period_replay_metrics(full_one_trade, context)
+            if not _passes_yearly_profitable_filter(train_metrics, test_metrics, full_metrics):
+                continue
+            payload = {
+                "selection_rule": selection_rule,
+                "activation_start_year": activation_start_year,
+                "full_history_candidate": activation_start_year == min(years),
+                "profitable_year_count": len(full_metrics["yearly_results"]),
+                "train_period": _signals_period(train_one_trade),
+                "test_period": _signals_period(test_one_trade),
+                "edge_indexes": list(subset),
+                "edge_count": len(subset),
+                "train": train_metrics,
+                "test": test_metrics,
+                "full_after_activation": full_metrics,
+                "constituent_edges": [_edge_identity(edges[index]) for index in subset],
+                "objective": "all_active_years_net_pnl_positive_then_maximize_full_net_pnl",
+                "caveat": (
+                    "Annual profitability is evaluated only from activation_start_year onward; "
+                    "full_history_candidate=true is required for all available history."
+                ),
+            }
+            payload["candidate_hash"] = stable_hash(payload)
+            candidates.append(payload)
+    return sorted(
+        candidates,
+        key=lambda row: (
+            float(row["full_after_activation"].get("net_pnl") or 0),
+            float(row["test"].get("net_pnl") or 0),
+            _profit_factor_score(row["full_after_activation"].get("profit_factor")),
+        ),
+        reverse=True,
+    )[:20]
+
+
 def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, ...], str]:
     edge_indexes = list(range(len(edges)))
     subset_specs: dict[tuple[int, ...], str] = {tuple(edge_indexes): "all_edges"}
@@ -743,6 +845,26 @@ def _passes_open_regime_filter(
         and test_metrics["annual_trades"] > float(context["min_annual_trades"]) * 0.5
         and test_metrics["win_probability"] > 0.50
     )
+
+
+def _passes_yearly_profitable_filter(
+    train_metrics: dict[str, Any],
+    test_metrics: dict[str, Any],
+    full_metrics: dict[str, Any],
+) -> bool:
+    return (
+        full_metrics["target_qualified"]
+        and train_metrics["net_pnl"] > 0
+        and test_metrics["net_pnl"] > 0
+        and _all_years_profitable(train_metrics)
+        and _all_years_profitable(test_metrics)
+        and _all_years_profitable(full_metrics)
+    )
+
+
+def _all_years_profitable(metrics: dict[str, Any]) -> bool:
+    yearly_results = metrics.get("yearly_results") or []
+    return bool(yearly_results) and all(float(row.get("net_pnl") or 0) > 0 for row in yearly_results)
 
 
 def _period_replay_metrics(signals: Sequence[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any]:
