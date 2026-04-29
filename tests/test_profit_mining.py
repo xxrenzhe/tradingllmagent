@@ -8,6 +8,7 @@ from pathlib import Path
 from tlm.config import CostModelConfig, get_symbol
 from tlm.profit_mining import (
     _adaptive_recent_regime_candidates,
+    _cost_stress_metrics,
     _horizon_spec_dicts,
     _optimized_regime_basket_subsets,
     _replay_metrics,
@@ -282,9 +283,34 @@ class ProfitMiningTests(unittest.TestCase):
         self.assertFalse(candidates[0]["full_history_candidate"])
         self.assertIn("strategy_analysis", candidates[0])
         self.assertGreater(len(candidates[0]["strategy_analysis"]["strengths"]), 0)
+        self.assertEqual(
+            candidates[0]["strategy_analysis"]["strategy_profile"]["dominant_volume_profile"],
+            "low_volume_drift",
+        )
         self.assertTrue(
             all(row["net_pnl"] > 0 for row in candidates[0]["full_after_activation"]["yearly_results"])
         )
+
+    def test_cost_stress_metrics_subtract_extra_cost_per_trade(self) -> None:
+        signals = [
+            {"timestamp": datetime(2025, 1, 2, 0, 0), "rule_index": 0, "pnl": 20.0},
+            {"timestamp": datetime(2025, 1, 2, 0, 1), "rule_index": 0, "pnl": -5.0},
+        ]
+
+        stress = _cost_stress_metrics(
+            signals,
+            day_count=1,
+            context={
+                "cost_stress_usd_per_trade": [
+                    {"label": "base", "additional_round_trip_ticks": 0, "extra_usd_per_trade": 0.0},
+                    {"label": "plus_2_ticks", "additional_round_trip_ticks": 2, "extra_usd_per_trade": 10.0},
+                ]
+            },
+        )
+
+        self.assertEqual(stress[0]["net_pnl"], 15.0)
+        self.assertEqual(stress[1]["net_pnl"], -5.0)
+        self.assertEqual(stress[1]["win_probability"], 0.5)
 
     def test_report_includes_evaluation_periods(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -331,6 +357,8 @@ class ProfitMiningTests(unittest.TestCase):
 
             self.assertEqual(report["evaluation_periods"]["full_backtest"]["from"], "2025-01-02")
             self.assertIn("walk_forward", report["evaluation_periods"])
+            self.assertEqual(report["data_semantics"]["volume_field_mapping"]["bar_volume"], "tick_count")
+            self.assertEqual(report["plan12_review"]["live_trading_readiness"], "research_only_until_quote_replay_and_paper_shadow_pass")
 
 
 if __name__ == "__main__":

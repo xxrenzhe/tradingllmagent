@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -90,6 +91,19 @@ def mine_databento_nq_profitable_strategies(
             "min_annual_trades": float(min_annual_trades),
             "min_win_probability": float(min_win_probability),
             "max_candidates": int(max_candidates),
+            "cost_stress_usd_per_trade": [
+                {"label": "configured_cost", "additional_round_trip_ticks": 0, "extra_usd_per_trade": 0.0},
+                {
+                    "label": "configured_cost_plus_1_tick",
+                    "additional_round_trip_ticks": 1,
+                    "extra_usd_per_trade": float(cost_model.tick_value),
+                },
+                {
+                    "label": "configured_cost_plus_2_ticks",
+                    "additional_round_trip_ticks": 2,
+                    "extra_usd_per_trade": float(cost_model.tick_value) * 2.0,
+                },
+            ],
         }
         cost_adjusted = _run_close_to_close_scans(con, context, round_trip_cost_usd)
         cost_adjusted.extend(_run_tp_sl_scans(con, context, round_trip_cost_usd))
@@ -215,6 +229,8 @@ def mine_databento_nq_profitable_strategies(
         "cost_model": cost_model.to_dict(),
         "round_trip_cost_usd": round_trip_cost_usd,
         "timeframe_minutes": bar_minutes,
+        "data_semantics": _ohlcv_data_semantics(symbol_config.alias, timeframe),
+        "plan12_review": _plan12_review_status(),
         "data_version_hash": compute_data_version_hash(
             bar_files,
             {
@@ -238,6 +254,7 @@ def mine_databento_nq_profitable_strategies(
                 "previous_5m_return_bin",
                 "trend_vs_ma20_or_ma50",
                 "relative_volume_bin",
+                "bar_volume_alias_tick_count",
                 "range_regime",
                 "breakout_20_previous_range",
                 "close_zscore_50",
@@ -253,6 +270,27 @@ def mine_databento_nq_profitable_strategies(
                 "low_volume_drift",
             ],
             "ohlcv_family_horizon_specs": _horizon_spec_dicts(context, "ohlcv_family"),
+            "volume_feature_status": {
+                "implemented": [
+                    "bar_volume=tick_count",
+                    "relative_volume_20_or_50",
+                    "volume_bin",
+                    "volume_price_confirm",
+                    "volume_climax_reversion",
+                    "low_volume_filter",
+                ],
+                "not_available_from_ohlcv_only": [
+                    "bid_ask_spread",
+                    "limit_order_fill_rate",
+                    "queue_position",
+                    "adverse_selection_from_top_of_book",
+                ],
+                "next_ohlcv_expansion": [
+                    "multi_timeframe_volume_confirm_1m_5m_15m",
+                    "session_normalized_volume_percentile",
+                    "event_window_volume_attribution",
+                ],
+            },
         },
         "summary": {
             "bar_file_count": len(bar_files),
@@ -833,7 +871,6 @@ def _yearly_profitable_candidates(
                 "train": train_metrics,
                 "test": test_metrics,
                 "full_after_activation": full_metrics,
-                "strategy_analysis": _strategy_analysis(selection_rule, full_metrics, train_metrics, test_metrics),
                 "constituent_edges": [_edge_identity(edges[index]) for index in subset],
                 "objective": "all_active_years_net_pnl_positive_then_maximize_full_net_pnl",
                 "caveat": (
@@ -841,6 +878,13 @@ def _yearly_profitable_candidates(
                     "full_history_candidate=true is required for all available history."
                 ),
             }
+            payload["strategy_analysis"] = _strategy_analysis(
+                selection_rule,
+                full_metrics,
+                train_metrics,
+                test_metrics,
+                payload["constituent_edges"],
+            )
             payload["candidate_hash"] = stable_hash(payload)
             candidates.append(payload)
     return sorted(
@@ -943,11 +987,13 @@ def _strategy_analysis(
     full_metrics: dict[str, Any],
     train_metrics: dict[str, Any],
     test_metrics: dict[str, Any],
+    constituent_edges: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     yearly_results = full_metrics.get("yearly_results") or []
     weakest_year = min(yearly_results, key=lambda row: float(row.get("net_pnl") or 0)) if yearly_results else None
     strongest_year = max(yearly_results, key=lambda row: float(row.get("net_pnl") or 0)) if yearly_results else None
     losing_year_count = sum(1 for row in yearly_results if float(row.get("net_pnl") or 0) <= 0)
+    strategy_profile = _strategy_profile(constituent_edges or [])
     strengths = [
         "Every active calendar year is net profitable.",
         "Meets the annual trade frequency, win-probability, and positive-PnL target after activation.",
@@ -958,6 +1004,8 @@ def _strategy_analysis(
         strengths.append("Recent test profit factor is stronger than the training period.")
     if float(full_metrics.get("annual_trades") or 0) > 2000:
         strengths.append("High trade count reduces dependence on a tiny number of events.")
+    if strategy_profile["dominant_volume_profile"] != "mixed":
+        strengths.append(f"Clear VOL dependency: {strategy_profile['dominant_volume_profile']}.")
 
     weaknesses = []
     if weakest_year and float(weakest_year.get("net_pnl") or 0) < float(full_metrics.get("net_pnl") or 0) * 0.05:
@@ -970,9 +1018,22 @@ def _strategy_analysis(
         weaknesses.append("Uses a broad edge basket, so constituent overlap and regime drift should be monitored.")
     if losing_year_count:
         weaknesses.append(f"Contains {losing_year_count} non-profitable active years.")
+    if strategy_profile["dominant_session_bucket"] != "mixed":
+        weaknesses.append(
+            f"Session concentration: dominant_session_bucket={strategy_profile['dominant_session_bucket']}."
+        )
+    if full_metrics.get("cost_stress"):
+        fragile = [
+            row["label"]
+            for row in full_metrics["cost_stress"]
+            if row["extra_usd_per_trade"] > 0 and row["net_pnl"] <= 0
+        ]
+        if fragile:
+            weaknesses.append(f"Cost fragile under stress scenarios: {', '.join(fragile)}.")
     return {
         "strengths": strengths,
         "weaknesses": weaknesses,
+        "strategy_profile": strategy_profile,
         "weakest_year": weakest_year,
         "strongest_year": strongest_year,
         "active_year_count": len(yearly_results),
@@ -992,6 +1053,7 @@ def _period_replay_metrics(signals: Sequence[dict[str, Any]], context: dict[str,
             and metrics["net_pnl"] > 0
         ),
         "yearly_results": _yearly_signal_results(ordered),
+        "cost_stress": _cost_stress_metrics(ordered, period_days, context),
     }
 
 
@@ -1181,12 +1243,99 @@ def _replay_metrics(
     return {
         **metrics,
         "yearly_results": _yearly_signal_results(ordered_signals),
+        "cost_stress": _cost_stress_metrics(ordered_signals, day_count, context),
         "target_qualified": (
             annual_trades > float(context["min_annual_trades"])
             and win_probability > float(context["min_win_probability"])
             and metrics["net_pnl"] > 0
         ),
     }
+
+
+def _cost_stress_metrics(
+    signals: Sequence[dict[str, Any]],
+    day_count: int,
+    context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    scenarios = context.get("cost_stress_usd_per_trade") or []
+    if not scenarios:
+        return []
+    stressed = []
+    for scenario in scenarios:
+        extra_cost = float(scenario.get("extra_usd_per_trade") or 0.0)
+        adjusted_signals = [
+            {**signal, "pnl": float(signal["pnl"]) - extra_cost}
+            for signal in signals
+        ]
+        metrics = _signal_metrics(adjusted_signals, day_count)
+        stressed.append(
+            {
+                "label": scenario.get("label"),
+                "additional_round_trip_ticks": scenario.get("additional_round_trip_ticks"),
+                "extra_usd_per_trade": extra_cost,
+                "trades": metrics["trades"],
+                "annual_trades": metrics["annual_trades"],
+                "net_pnl": metrics["net_pnl"],
+                "win_probability": metrics["win_probability"],
+                "avg_pnl": metrics["avg_pnl"],
+                "profit_factor": metrics["profit_factor"],
+                "max_drawdown": metrics["max_drawdown"],
+                "return_to_drawdown": metrics["return_to_drawdown"],
+            }
+        )
+    return stressed
+
+
+def _strategy_profile(edges: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    scan_types = Counter(str(edge.get("scan_type")) for edge in edges)
+    sessions = Counter(str(edge.get("session_bucket")) for edge in edges)
+    directions = Counter(str(edge.get("direction_label")) for edge in edges)
+    volume_profiles = Counter(_volume_profile(edge) for edge in edges)
+    families = Counter(_strategy_family(edge) for edge in edges)
+    return {
+        "edge_count": len(edges),
+        "families": dict(sorted(families.items())),
+        "scan_types": dict(sorted(scan_types.items())),
+        "directions": dict(sorted(directions.items())),
+        "volume_profiles": dict(sorted(volume_profiles.items())),
+        "dominant_volume_profile": _dominant_counter_label(volume_profiles),
+        "session_buckets": dict(sorted(sessions.items())),
+        "dominant_session_bucket": _dominant_counter_label(sessions),
+    }
+
+
+def _strategy_family(edge: dict[str, Any]) -> str:
+    scan_type = str(edge.get("scan_type"))
+    if scan_type in {"breakout_continuation", "range_expansion_continuation", "trend_pullback_reclaim", "low_volume_drift"}:
+        return "trend"
+    if scan_type in {"zscore_mean_reversion", "volume_climax_reversion"}:
+        return "mean_reversion"
+    return "feature_scan"
+
+
+def _volume_profile(edge: dict[str, Any]) -> str:
+    scan_type = str(edge.get("scan_type"))
+    volume_bin = int(edge.get("volume_bin") or 0)
+    if scan_type == "volume_climax_reversion":
+        return "volume_climax_reversion"
+    if scan_type in {"breakout_continuation", "range_expansion_continuation"} and volume_bin >= 1:
+        return "volume_confirmed_breakout"
+    if scan_type == "low_volume_drift" or volume_bin < 0:
+        return "low_volume_drift"
+    if volume_bin >= 2:
+        return "high_volume"
+    if volume_bin >= 1:
+        return "normal_volume"
+    return "volume_neutral"
+
+
+def _dominant_counter_label(counter: Counter[str]) -> str:
+    if not counter:
+        return "none"
+    [(label, count), *rest] = counter.most_common()
+    if rest and rest[0][1] == count:
+        return "mixed"
+    return label
 
 
 def _signal_metrics(signals: Sequence[dict[str, Any]], day_count: int) -> dict[str, Any]:
@@ -1304,6 +1453,54 @@ def _evaluation_periods(date_from: date, date_to: date, walk_forward: dict[str, 
             "regime_basket_replays[*].one_trade_per_timestamp.yearly_results and "
             "regime_basket_replays[*].optimized_subsets[*].one_trade_per_timestamp.yearly_results"
         ),
+    }
+
+
+def _ohlcv_data_semantics(symbol: str, timeframe: str) -> dict[str, Any]:
+    return {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "source": "Databento OHLCV bars",
+        "volume_field_mapping": {
+            "bar_volume": "tick_count",
+            "tick_count": "Databento OHLCV volume mapped into the local bar schema",
+        },
+        "execution_fields_available": {
+            "ohlc": True,
+            "bar_volume": True,
+            "bid_ask_spread": False,
+            "top_of_book_size": False,
+            "limit_order_fill": False,
+        },
+        "execution_caveat": (
+            "OHLCV research can identify historical gross or cost-adjusted bar edges, "
+            "but cannot prove market-order spread cost, limit-order fill rate, queue position, or adverse selection."
+        ),
+    }
+
+
+def _plan12_review_status() -> dict[str, Any]:
+    return {
+        "implemented_in_this_report": [
+            "OHLCV-only profitability search across simple trend and mean-reversion families",
+            "VOL-aware regime bins using bar_volume=tick_count relative to recent volume",
+            "session/time bucket attribution on candidate edges",
+            "train/test/final period metadata and yearly results for replay candidates",
+            "additional 1 and 2 tick per-trade cost stress for replayed candidate baskets",
+            "strategy profile cards for candidate family, direction, VOL dependency, and session concentration",
+        ],
+        "partially_implemented": [
+            "VOL feature set covers relative volume, volume breakout, climax reversion, and low-volume filters; "
+            "session-normalized percentile and explicit multi-timeframe confirmation remain next steps.",
+            "Execution cost is stress-tested from OHLCV PnL; real spread, fill probability, and queue effects still need quote data.",
+        ],
+        "not_implemented_without_more_data": [
+            "TBBO/MBP quote replay",
+            "limit-order fill and missed-fill simulation",
+            "event-window spread/slippage attribution",
+            "paper shadow live execution review",
+        ],
+        "live_trading_readiness": "research_only_until_quote_replay_and_paper_shadow_pass",
     }
 
 
