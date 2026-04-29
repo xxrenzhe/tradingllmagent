@@ -7,6 +7,7 @@ from typing import Any, Sequence
 
 import duckdb
 
+from .bars import timeframe_minutes
 from .config import CostModelConfig, SymbolConfig
 from .storage import compute_data_version_hash, write_json
 from .variants import stable_hash
@@ -28,6 +29,35 @@ DEFAULT_TP_SL_PAIRS = (
 OHLCV_FAMILY_HORIZONS = (5, 15, 30, 60, 120)
 
 
+def _minute_horizon_specs(requested_minutes: Sequence[int], bar_minutes: int) -> list[tuple[int, int]]:
+    specs = []
+    for target_minutes in requested_minutes:
+        horizon_bars = max(1, (target_minutes + bar_minutes - 1) // bar_minutes)
+        specs.append((horizon_bars, horizon_bars * bar_minutes))
+    return specs
+
+
+def _horizon_specs(context: dict[str, Any], family: str) -> list[tuple[int, int]]:
+    bar_minutes = int(context["timeframe_minutes"])
+    if family == "close":
+        return _minute_horizon_specs(DEFAULT_CLOSE_HORIZONS, bar_minutes)
+    if family == "tp_sl":
+        return _minute_horizon_specs(DEFAULT_TP_SL_HORIZONS, bar_minutes)
+    if family == "ohlcv_family":
+        return _minute_horizon_specs(OHLCV_FAMILY_HORIZONS, bar_minutes)
+    raise ValueError(f"Unknown horizon family: {family}")
+
+
+def _horizon_spec_dicts(context: dict[str, Any], family: str) -> list[dict[str, int]]:
+    return [
+        {
+            "horizon_bars": horizon_bars,
+            "horizon_minutes": horizon_minutes,
+        }
+        for horizon_bars, horizon_minutes in _horizon_specs(context, family)
+    ]
+
+
 def mine_databento_nq_profitable_strategies(
     *,
     data_root: Path,
@@ -45,6 +75,7 @@ def mine_databento_nq_profitable_strategies(
     if not bar_files:
         raise ValueError(f"No {symbol_config.alias} {timeframe} bars found between {date_from} and {date_to}")
 
+    bar_minutes = timeframe_minutes(timeframe)
     round_trip_cost_usd = cost_model.round_trip_fees_usd + 2 * cost_model.slippage_ticks_per_side * cost_model.tick_value
     con = duckdb.connect(":memory:")
     try:
@@ -54,6 +85,8 @@ def mine_databento_nq_profitable_strategies(
             "date_from": date_from.isoformat(),
             "date_to_exclusive": (date_to + timedelta(days=1)).isoformat(),
             "point_value": float(symbol_config.point_value),
+            "timeframe_minutes": bar_minutes,
+            "continuity_tolerance_minutes": max(2, bar_minutes * 2),
             "min_annual_trades": float(min_annual_trades),
             "min_win_probability": float(min_win_probability),
             "max_candidates": int(max_candidates),
@@ -105,6 +138,7 @@ def mine_databento_nq_profitable_strategies(
         },
         "cost_model": cost_model.to_dict(),
         "round_trip_cost_usd": round_trip_cost_usd,
+        "timeframe_minutes": bar_minutes,
         "data_version_hash": compute_data_version_hash(
             bar_files,
             {
@@ -117,7 +151,9 @@ def mine_databento_nq_profitable_strategies(
         ),
         "search_space": {
             "close_to_close_horizons": list(DEFAULT_CLOSE_HORIZONS),
+            "close_to_close_horizon_specs": _horizon_spec_dicts(context, "close"),
             "tp_sl_horizons": list(DEFAULT_TP_SL_HORIZONS),
+            "tp_sl_horizon_specs": _horizon_spec_dicts(context, "tp_sl"),
             "tp_sl_pairs": [{"take_profit_points": tp, "stop_loss_points": stop} for tp, stop in DEFAULT_TP_SL_PAIRS],
             "feature_conditions": [
                 "utc_time_bucket",
@@ -140,6 +176,7 @@ def mine_databento_nq_profitable_strategies(
                 "volume_climax_reversion",
                 "low_volume_drift",
             ],
+            "ohlcv_family_horizon_specs": _horizon_spec_dicts(context, "ohlcv_family"),
         },
         "summary": {
             "bar_file_count": len(bar_files),
@@ -177,7 +214,7 @@ def _run_regime_first_edge_search(
     round_trip_cost_usd: float,
 ) -> dict[str, Any]:
     rows = []
-    for horizon in OHLCV_FAMILY_HORIZONS:
+    for horizon_bars, horizon_minutes in _horizon_specs(context, "ohlcv_family"):
         rows.extend(
             _fetch_dicts(
                 con,
@@ -195,8 +232,8 @@ def _run_regime_first_edge_search(
                          avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
                          max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
                          min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
-                         lead(close, {horizon}) OVER (ORDER BY timestamp) AS future_close,
-                         lead(timestamp, {horizon}) OVER (ORDER BY timestamp) AS future_ts
+                         lead(close, {horizon_bars}) OVER (ORDER BY timestamp) AS future_close,
+                         lead(timestamp, {horizon_bars}) OVER (ORDER BY timestamp) AS future_ts
                   FROM read_parquet('{context["parquet_glob"]}')
                   WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
                 ), feats AS (
@@ -217,64 +254,64 @@ def _run_regime_first_edge_search(
                   FROM raw
                   WHERE future_close IS NOT NULL AND ma20 IS NOT NULL AND ma50 IS NOT NULL AND close_std50 IS NOT NULL
                     AND vol50 IS NOT NULL AND range20 IS NOT NULL
-                    AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon} AND {horizon + 2}
+                    AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon_minutes} AND {horizon_minutes + int(context["continuity_tolerance_minutes"])}
                 ), signals AS (
-                  SELECT 'breakout_continuation' AS scan_type, {horizon} AS horizon_minutes, session_bucket, dow,
+                  SELECT 'breakout_continuation' AS scan_type, {horizon_minutes} AS horizon_minutes, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, 1 AS direction, future_close, close
                   FROM feats
                   WHERE breakout20 = 1 AND trend_bin = 1 AND volume_bin >= 1
                   UNION ALL
-                  SELECT 'breakout_continuation', {horizon}, session_bucket, dow,
+                  SELECT 'breakout_continuation', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, -1, future_close, close
                   FROM feats
                   WHERE breakout20 = -1 AND trend_bin = -1 AND volume_bin >= 1
                   UNION ALL
-                  SELECT 'range_expansion_continuation', {horizon}, session_bucket, dow,
+                  SELECT 'range_expansion_continuation', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, 1, future_close, close
                   FROM feats
                   WHERE body_to_range >= 0.6 AND range_bin >= 2 AND volume_bin >= 1
                   UNION ALL
-                  SELECT 'range_expansion_continuation', {horizon}, session_bucket, dow,
+                  SELECT 'range_expansion_continuation', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, -1, future_close, close
                   FROM feats
                   WHERE body_to_range <= -0.6 AND range_bin >= 2 AND volume_bin >= 1
                   UNION ALL
-                  SELECT 'trend_pullback_reclaim', {horizon}, session_bucket, dow,
+                  SELECT 'trend_pullback_reclaim', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, 1, future_close, close
                   FROM feats
                   WHERE trend_bin = 1 AND ret5 < 0 AND ret1 > 0 AND close > ma20
                   UNION ALL
-                  SELECT 'trend_pullback_reclaim', {horizon}, session_bucket, dow,
+                  SELECT 'trend_pullback_reclaim', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, -1, future_close, close
                   FROM feats
                   WHERE trend_bin = -1 AND ret5 > 0 AND ret1 < 0 AND close < ma20
                   UNION ALL
-                  SELECT 'zscore_mean_reversion', {horizon}, session_bucket, dow,
+                  SELECT 'zscore_mean_reversion', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, -1, future_close, close
                   FROM feats
                   WHERE z50 >= 2 AND volume_bin <= 1
                   UNION ALL
-                  SELECT 'zscore_mean_reversion', {horizon}, session_bucket, dow,
+                  SELECT 'zscore_mean_reversion', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, 1, future_close, close
                   FROM feats
                   WHERE z50 <= -2 AND volume_bin <= 1
                   UNION ALL
-                  SELECT 'volume_climax_reversion', {horizon}, session_bucket, dow,
+                  SELECT 'volume_climax_reversion', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, -1, future_close, close
                   FROM feats
                   WHERE z50 >= 1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
                   UNION ALL
-                  SELECT 'volume_climax_reversion', {horizon}, session_bucket, dow,
+                  SELECT 'volume_climax_reversion', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, 1, future_close, close
                   FROM feats
                   WHERE z50 <= -1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
                   UNION ALL
-                  SELECT 'low_volume_drift', {horizon}, session_bucket, dow,
+                  SELECT 'low_volume_drift', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, 1, future_close, close
                   FROM feats
                   WHERE trend_bin = 1 AND volume_bin = -1 AND ret1 > 0
                   UNION ALL
-                  SELECT 'low_volume_drift', {horizon}, session_bucket, dow,
+                  SELECT 'low_volume_drift', {horizon_minutes}, session_bucket, dow,
                          trend_bin, volume_bin, range_bin, -1, future_close, close
                   FROM feats
                   WHERE trend_bin = -1 AND volume_bin = -1 AND ret1 < 0
@@ -497,7 +534,7 @@ def _run_walk_forward_stability_search(
 
 def _run_close_to_close_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], cost: float) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
-    for horizon in DEFAULT_CLOSE_HORIZONS:
+    for horizon_bars, horizon_minutes in _horizon_specs(context, "close"):
         rows = _fetch_dicts(
             con,
             f"""
@@ -509,29 +546,29 @@ def _run_close_to_close_scans(con: duckdb.DuckDBPyConnection, context: dict[str,
                      close - lag(close, 5) OVER (ORDER BY timestamp) AS ret5,
                      avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS ma50,
                      avg(tick_count) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS vol50,
-                     lead(close, {horizon}) OVER (ORDER BY timestamp) AS future_close,
-                     lead(timestamp, {horizon}) OVER (ORDER BY timestamp) AS future_ts
+                     lead(close, {horizon_bars}) OVER (ORDER BY timestamp) AS future_close,
+                     lead(timestamp, {horizon_bars}) OVER (ORDER BY timestamp) AS future_ts
               FROM read_parquet('{context["parquet_glob"]}')
               WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
             ), feats AS (
               SELECT *,
                      floor(moday/240)*240 AS bucket_start,
-                     moday % {horizon} AS phase,
+                     moday % {horizon_minutes} AS phase,
                      CASE WHEN ret1 > 0 THEN 1 WHEN ret1 < 0 THEN -1 ELSE 0 END AS ret1_sign,
                      CASE WHEN ret5 > 2 THEN 2 WHEN ret5 > 0 THEN 1 WHEN ret5 < -2 THEN -2 WHEN ret5 < 0 THEN -1 ELSE 0 END AS ret5_bin,
                      CASE WHEN close > ma50 THEN 1 ELSE -1 END AS trend_bin,
                      CASE WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin
               FROM raw
               WHERE future_close IS NOT NULL AND ma50 IS NOT NULL AND vol50 IS NOT NULL
-                AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon} AND {horizon + 2}
+                AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon_minutes} AND {horizon_minutes + int(context["continuity_tolerance_minutes"])}
             ), pnl AS (
-              SELECT 'close_to_close_feature_scan' AS scan_type, {horizon} AS horizon_minutes,
+              SELECT 'close_to_close_feature_scan' AS scan_type, {horizon_minutes} AS horizon_minutes,
                      bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin, 0 AS range_bin,
                      NULL::DOUBLE AS take_profit_points, NULL::DOUBLE AS stop_loss_points,
                      1 AS direction, (future_close-close)*{context["point_value"]}-{cost} AS pnl
               FROM feats
               UNION ALL
-              SELECT 'close_to_close_feature_scan', {horizon},
+              SELECT 'close_to_close_feature_scan', {horizon_minutes},
                      bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin, 0 AS range_bin,
                      NULL::DOUBLE, NULL::DOUBLE,
                      -1, (close-future_close)*{context["point_value"]}-{cost}
@@ -546,7 +583,7 @@ def _run_close_to_close_scans(con: duckdb.DuckDBPyConnection, context: dict[str,
 
 def _run_ohlcv_family_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], cost: float) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
-    for horizon in OHLCV_FAMILY_HORIZONS:
+    for horizon_bars, horizon_minutes in _horizon_specs(context, "ohlcv_family"):
         rows = _fetch_dicts(
             con,
             f"""
@@ -564,14 +601,14 @@ def _run_ohlcv_family_scans(con: duckdb.DuckDBPyConnection, context: dict[str, A
                      avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
                      max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
                      min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
-                     lead(close, {horizon}) OVER (ORDER BY timestamp) AS future_close,
-                     lead(timestamp, {horizon}) OVER (ORDER BY timestamp) AS future_ts
+                     lead(close, {horizon_bars}) OVER (ORDER BY timestamp) AS future_close,
+                     lead(timestamp, {horizon_bars}) OVER (ORDER BY timestamp) AS future_ts
               FROM read_parquet('{context["parquet_glob"]}')
               WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
             ), feats AS (
               SELECT *,
                      floor(moday/120)*120 AS bucket_start,
-                     moday % {horizon} AS phase,
+                     moday % {horizon_minutes} AS phase,
                      CASE WHEN close > ma50 THEN 1 ELSE -1 END AS trend_bin,
                      CASE WHEN tick_count >= vol50*2.0 THEN 3 WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin,
                      CASE WHEN (high-low) >= range20*2.0 THEN 3 WHEN (high-low) >= range20*1.5 THEN 2 WHEN (high-low) >= range20 THEN 1 WHEN (high-low) < range20*0.7 THEN -1 ELSE 0 END AS range_bin,
@@ -581,64 +618,64 @@ def _run_ohlcv_family_scans(con: duckdb.DuckDBPyConnection, context: dict[str, A
               FROM raw
               WHERE future_close IS NOT NULL AND ma20 IS NOT NULL AND ma50 IS NOT NULL AND close_std50 IS NOT NULL
                 AND vol20 IS NOT NULL AND vol50 IS NOT NULL AND range20 IS NOT NULL
-                AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon} AND {horizon + 2}
+                AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon_minutes} AND {horizon_minutes + int(context["continuity_tolerance_minutes"])}
             ), signals AS (
-              SELECT 'breakout_continuation' AS scan_type, {horizon} AS horizon_minutes, bucket_start, phase, dow,
+              SELECT 'breakout_continuation' AS scan_type, {horizon_minutes} AS horizon_minutes, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, 1 AS direction, future_close, close
               FROM feats
               WHERE breakout20 = 1 AND trend_bin = 1 AND volume_bin >= 1
               UNION ALL
-              SELECT 'breakout_continuation', {horizon}, bucket_start, phase, dow,
+              SELECT 'breakout_continuation', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, -1, future_close, close
               FROM feats
               WHERE breakout20 = -1 AND trend_bin = -1 AND volume_bin >= 1
               UNION ALL
-              SELECT 'range_expansion_continuation', {horizon}, bucket_start, phase, dow,
+              SELECT 'range_expansion_continuation', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, 1, future_close, close
               FROM feats
               WHERE body_to_range >= 0.6 AND range_bin >= 2 AND volume_bin >= 1
               UNION ALL
-              SELECT 'range_expansion_continuation', {horizon}, bucket_start, phase, dow,
+              SELECT 'range_expansion_continuation', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, -1, future_close, close
               FROM feats
               WHERE body_to_range <= -0.6 AND range_bin >= 2 AND volume_bin >= 1
               UNION ALL
-              SELECT 'trend_pullback_reclaim', {horizon}, bucket_start, phase, dow,
+              SELECT 'trend_pullback_reclaim', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, 1, future_close, close
               FROM feats
               WHERE trend_bin = 1 AND ret5 < 0 AND ret1 > 0 AND close > ma20
               UNION ALL
-              SELECT 'trend_pullback_reclaim', {horizon}, bucket_start, phase, dow,
+              SELECT 'trend_pullback_reclaim', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, -1, future_close, close
               FROM feats
               WHERE trend_bin = -1 AND ret5 > 0 AND ret1 < 0 AND close < ma20
               UNION ALL
-              SELECT 'zscore_mean_reversion', {horizon}, bucket_start, phase, dow,
+              SELECT 'zscore_mean_reversion', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, -1, future_close, close
               FROM feats
               WHERE z50 >= 2 AND volume_bin <= 1
               UNION ALL
-              SELECT 'zscore_mean_reversion', {horizon}, bucket_start, phase, dow,
+              SELECT 'zscore_mean_reversion', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, 1, future_close, close
               FROM feats
               WHERE z50 <= -2 AND volume_bin <= 1
               UNION ALL
-              SELECT 'volume_climax_reversion', {horizon}, bucket_start, phase, dow,
+              SELECT 'volume_climax_reversion', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, -1, future_close, close
               FROM feats
               WHERE z50 >= 1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
               UNION ALL
-              SELECT 'volume_climax_reversion', {horizon}, bucket_start, phase, dow,
+              SELECT 'volume_climax_reversion', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, 1, future_close, close
               FROM feats
               WHERE z50 <= -1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
               UNION ALL
-              SELECT 'low_volume_drift', {horizon}, bucket_start, phase, dow,
+              SELECT 'low_volume_drift', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, 1, future_close, close
               FROM feats
               WHERE trend_bin = 1 AND volume_bin = -1 AND ret1 > 0
               UNION ALL
-              SELECT 'low_volume_drift', {horizon}, bucket_start, phase, dow,
+              SELECT 'low_volume_drift', {horizon_minutes}, bucket_start, phase, dow,
                      trend_bin, volume_bin, range_bin, -1, future_close, close
               FROM feats
               WHERE trend_bin = -1 AND volume_bin = -1 AND ret1 < 0
@@ -664,7 +701,7 @@ def _run_ohlcv_family_scans(con: duckdb.DuckDBPyConnection, context: dict[str, A
 def _run_tp_sl_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], cost: float) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     values = ",".join(f"({tp},{stop})" for tp, stop in DEFAULT_TP_SL_PAIRS)
-    for horizon in DEFAULT_TP_SL_HORIZONS:
+    for horizon_bars, horizon_minutes in _horizon_specs(context, "tp_sl"):
         rows = _fetch_dicts(
             con,
             f"""
@@ -675,16 +712,16 @@ def _run_tp_sl_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], co
                      CAST(strftime(timestamp, '%w') AS INTEGER) AS dow,
                      close - lag(close, 1) OVER (ORDER BY timestamp) AS ret1,
                      avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS ma20,
-                     lead(close, {horizon}) OVER (ORDER BY timestamp) AS future_close,
-                     lead(timestamp, {horizon}) OVER (ORDER BY timestamp) AS future_ts,
-                     max(high) OVER (ORDER BY timestamp ROWS BETWEEN 1 FOLLOWING AND {horizon} FOLLOWING) AS fwd_high,
-                     min(low) OVER (ORDER BY timestamp ROWS BETWEEN 1 FOLLOWING AND {horizon} FOLLOWING) AS fwd_low
+                     lead(close, {horizon_bars}) OVER (ORDER BY timestamp) AS future_close,
+                     lead(timestamp, {horizon_bars}) OVER (ORDER BY timestamp) AS future_ts,
+                     max(high) OVER (ORDER BY timestamp ROWS BETWEEN 1 FOLLOWING AND {horizon_bars} FOLLOWING) AS fwd_high,
+                     min(low) OVER (ORDER BY timestamp ROWS BETWEEN 1 FOLLOWING AND {horizon_bars} FOLLOWING) AS fwd_low
               FROM read_parquet('{context["parquet_glob"]}')
               WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
             ), feats AS (
               SELECT *,
                      floor(moday/240)*240 AS bucket_start,
-                     moday % {horizon} AS phase,
+                     moday % {horizon_minutes} AS phase,
                      CASE WHEN ret1 > 0 THEN 1 WHEN ret1 < 0 THEN -1 ELSE 0 END AS ret1_sign,
                      0 AS ret5_bin,
                      CASE WHEN close > ma20 THEN 1 ELSE -1 END AS trend_bin,
@@ -692,9 +729,9 @@ def _run_tp_sl_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], co
                      0 AS range_bin
               FROM raw
               WHERE future_close IS NOT NULL AND ma20 IS NOT NULL
-                AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon} AND {horizon + 2}
+                AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon_minutes} AND {horizon_minutes + int(context["continuity_tolerance_minutes"])}
             ), pnl AS (
-              SELECT 'tp_sl_feature_scan' AS scan_type, {horizon} AS horizon_minutes,
+              SELECT 'tp_sl_feature_scan' AS scan_type, {horizon_minutes} AS horizon_minutes,
                      bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin, range_bin,
                      p.take_profit_points, p.stop_loss_points, 1 AS direction,
                      CASE
@@ -704,7 +741,7 @@ def _run_tp_sl_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], co
                      END AS pnl
               FROM feats CROSS JOIN params p
               UNION ALL
-              SELECT 'tp_sl_feature_scan', {horizon},
+              SELECT 'tp_sl_feature_scan', {horizon_minutes},
                      bucket_start, phase, dow, ret1_sign, ret5_bin, trend_bin, volume_bin, range_bin,
                      p.take_profit_points, p.stop_loss_points, -1,
                      CASE
