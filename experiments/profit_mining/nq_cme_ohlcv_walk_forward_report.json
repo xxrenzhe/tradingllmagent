@@ -1,0 +1,141 @@
+{
+  "artifact": "databento_nq_profit_strategy_mining_report",
+  "blocked_next_steps": [
+    "No scanned candidate met annual_trades > 1000, win_probability > 0.53, and cost-adjusted net_pnl > 0.",
+    "Stay in OHLCV-only research mode: add walk-forward family search before trusting any in-sample candidate.",
+    "Prefer session-normalized OHLCV features, volatility-regime splits, and simpler risk filters over higher-dimensional curve fitting."
+  ],
+  "cost_model": {
+    "name": "nq_conservative_v1",
+    "point_value": 20.0,
+    "round_trip_fees_usd": 5.0,
+    "slippage_ticks_per_side": 1.0,
+    "tick_size": 0.25,
+    "tick_value": 5.0
+  },
+  "data_version_hash": "b2795b2a34a72f6e665bc15a77f2e244057d3161bb6077ed38a8356117595159",
+  "date_from": "2010-06-06",
+  "date_to": "2026-04-27",
+  "gross_only_candidates": [],
+  "qualified_candidates": [],
+  "report_hash": "002f4f37281928b8dc7151fa81a63456928ff4c467a566ffe11da045aedd7bbd",
+  "round_trip_cost_usd": 15.0,
+  "schema_version": 1,
+  "search_space": {
+    "close_to_close_horizons": [
+      5,
+      15,
+      30,
+      60,
+      120
+    ],
+    "feature_conditions": [
+      "utc_time_bucket",
+      "entry_phase_mod_horizon",
+      "previous_1m_return_sign",
+      "previous_5m_return_bin",
+      "trend_vs_ma20_or_ma50",
+      "relative_volume_bin",
+      "range_regime",
+      "breakout_20_previous_range",
+      "close_zscore_50",
+      "body_to_range",
+      "intraday_opening_window_utc"
+    ],
+    "ohlcv_family_scans": [
+      "breakout_continuation",
+      "range_expansion_continuation",
+      "trend_pullback_reclaim",
+      "zscore_mean_reversion",
+      "volume_climax_reversion",
+      "low_volume_drift"
+    ],
+    "tp_sl_horizons": [
+      5,
+      15,
+      30,
+      60
+    ],
+    "tp_sl_pairs": [
+      {
+        "stop_loss_points": 4,
+        "take_profit_points": 0.5
+      },
+      {
+        "stop_loss_points": 4,
+        "take_profit_points": 1
+      },
+      {
+        "stop_loss_points": 8,
+        "take_profit_points": 1
+      },
+      {
+        "stop_loss_points": 8,
+        "take_profit_points": 2
+      },
+      {
+        "stop_loss_points": 12,
+        "take_profit_points": 2
+      },
+      {
+        "stop_loss_points": 12,
+        "take_profit_points": 3
+      },
+      {
+        "stop_loss_points": 16,
+        "take_profit_points": 4
+      },
+      {
+        "stop_loss_points": 24,
+        "take_profit_points": 6
+      }
+    ]
+  },
+  "status": "not_found",
+  "summary": {
+    "bar_file_count": 4930,
+    "best_cost_adjusted_net_pnl": null,
+    "best_gross_net_pnl": null,
+    "gross_only_candidate_count": 0,
+    "qualified_candidate_count": 0,
+    "walk_forward_stable_candidate_count": 0,
+    "walk_forward_window_count": 2
+  },
+  "symbol": "NQ_CME",
+  "target": {
+    "cost_adjusted": true,
+    "min_annual_trades": 1000,
+    "min_win_probability": 0.53,
+    "requires_net_pnl_positive": true
+  },
+  "timeframe": "1m",
+  "walk_forward": {
+    "mode": "train_window_candidate_must_independently_pass_next_test_window",
+    "stable_candidates": [],
+    "step_years": 8,
+    "test_years": 1,
+    "train_years": 8,
+    "windows": [
+      {
+        "matched_stable_candidate_count": 0,
+        "matched_stable_candidates": [],
+        "test_candidate_count": 0,
+        "test_from": "2018-01-01",
+        "test_to": "2018-12-31",
+        "train_candidate_count": 0,
+        "train_from": "2010-06-06",
+        "train_to": "2017-12-31"
+      },
+      {
+        "matched_stable_candidate_count": 0,
+        "matched_stable_candidates": [],
+        "test_candidate_count": 0,
+        "test_from": "2026-01-01",
+        "test_to": "2026-04-27",
+        "train_candidate_count": 0,
+        "train_from": "2018-01-01",
+        "train_to": "2025-12-31"
+      }
+    ]
+  }
+}

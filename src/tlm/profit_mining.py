@@ -63,6 +63,7 @@ def mine_databento_nq_profitable_strategies(
         cost_adjusted.extend(_run_ohlcv_family_scans(con, context, round_trip_cost_usd))
         gross_candidates = _run_tp_sl_scans(con, context, 0.0)
         gross_candidates.extend(_run_ohlcv_family_scans(con, context, 0.0))
+        walk_forward = _run_walk_forward_stability_search(con, context, date_from, date_to, round_trip_cost_usd)
     finally:
         con.close()
 
@@ -142,11 +143,14 @@ def mine_databento_nq_profitable_strategies(
             "bar_file_count": len(bar_files),
             "qualified_candidate_count": len(qualified),
             "gross_only_candidate_count": len(gross_only),
+            "walk_forward_window_count": len(walk_forward["windows"]),
+            "walk_forward_stable_candidate_count": len(walk_forward["stable_candidates"]),
             "best_cost_adjusted_net_pnl": qualified[0]["net_pnl"] if qualified else None,
             "best_gross_net_pnl": gross_only[0]["gross_net_pnl"] if gross_only else None,
         },
         "qualified_candidates": qualified[:max_candidates],
         "gross_only_candidates": gross_only,
+        "walk_forward": walk_forward,
         "blocked_next_steps": [] if qualified else [
             "No scanned candidate met annual_trades > 1000, win_probability > 0.53, and cost-adjusted net_pnl > 0.",
             "Stay in OHLCV-only research mode: add walk-forward family search before trusting any in-sample candidate.",
@@ -157,6 +161,77 @@ def mine_databento_nq_profitable_strategies(
     if output_path is not None:
         write_json(output_path, report)
     return report
+
+
+def _run_all_candidate_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], cost: float) -> list[dict[str, Any]]:
+    candidates = _run_close_to_close_scans(con, context, cost)
+    candidates.extend(_run_tp_sl_scans(con, context, cost))
+    candidates.extend(_run_ohlcv_family_scans(con, context, cost))
+    return _dedupe_candidates(candidates)
+
+
+def _run_walk_forward_stability_search(
+    con: duckdb.DuckDBPyConnection,
+    base_context: dict[str, Any],
+    date_from: date,
+    date_to: date,
+    cost: float,
+    *,
+    train_years: int = 8,
+    test_years: int = 1,
+    step_years: int = 8,
+) -> dict[str, Any]:
+    windows = _walk_forward_windows(date_from, date_to, train_years=train_years, test_years=test_years, step_years=step_years)
+    rows = []
+    stable = []
+    for window in windows:
+        train_context = {
+            **base_context,
+            "date_from": window["train_from"],
+            "date_to_exclusive": _next_day_iso(date.fromisoformat(window["train_to"])),
+            "max_candidates": 50,
+        }
+        test_context = {
+            **base_context,
+            "date_from": window["test_from"],
+            "date_to_exclusive": _next_day_iso(date.fromisoformat(window["test_to"])),
+            "max_candidates": 50,
+        }
+        train_candidates = _run_all_candidate_scans(con, train_context, cost)
+        test_candidates = _run_all_candidate_scans(con, test_context, cost)
+        test_by_rule = {candidate["rule_hash"]: candidate for candidate in test_candidates}
+        matched = []
+        for train_candidate in train_candidates:
+            test_candidate = test_by_rule.get(train_candidate["rule_hash"])
+            if not test_candidate:
+                continue
+            matched.append(
+                {
+                    "rule_hash": train_candidate["rule_hash"],
+                    "rule": train_candidate["rule"],
+                    "train": _candidate_metrics(train_candidate),
+                    "test": _candidate_metrics(test_candidate),
+                }
+            )
+        matched = sorted(matched, key=lambda row: row["test"]["net_pnl"], reverse=True)
+        rows.append(
+            {
+                **window,
+                "train_candidate_count": len(train_candidates),
+                "test_candidate_count": len(test_candidates),
+                "matched_stable_candidate_count": len(matched),
+                "matched_stable_candidates": matched[:20],
+            }
+        )
+        stable.extend({**candidate, "window": window} for candidate in matched)
+    return {
+        "mode": "train_window_candidate_must_independently_pass_next_test_window",
+        "train_years": train_years,
+        "test_years": test_years,
+        "step_years": step_years,
+        "windows": rows,
+        "stable_candidates": stable[:50],
+    }
 
 
 def _run_close_to_close_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], cost: float) -> list[dict[str, Any]]:
@@ -421,10 +496,12 @@ def _fetch_dicts(con: duckdb.DuckDBPyConnection, query: str) -> list[dict[str, A
 def _annotate_rows(rows: Sequence[dict[str, Any]], cost: float) -> list[dict[str, Any]]:
     annotated = []
     for row in rows:
+        rule = _candidate_rule(row)
         payload = {
             **row,
             "round_trip_cost_usd": cost,
-            "rule": _candidate_rule(row),
+            "rule": rule,
+            "rule_hash": stable_hash(rule),
         }
         payload["candidate_hash"] = stable_hash(payload)
         annotated.append(payload)
@@ -458,6 +535,51 @@ def _dedupe_candidates(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     for row in rows:
         by_hash.setdefault(row["candidate_hash"], row)
     return list(by_hash.values())
+
+
+def _candidate_metrics(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "trades": row.get("trades"),
+        "annual_trades": row.get("annual_trades"),
+        "net_pnl": row.get("net_pnl"),
+        "win_probability": row.get("win_probability"),
+        "avg_pnl": row.get("avg_pnl"),
+        "profit_factor": row.get("profit_factor"),
+        "round_trip_cost_usd": row.get("round_trip_cost_usd"),
+    }
+
+
+def _walk_forward_windows(
+    date_from: date,
+    date_to: date,
+    *,
+    train_years: int,
+    test_years: int,
+    step_years: int,
+) -> list[dict[str, str]]:
+    windows = []
+    start_year = date_from.year
+    while True:
+        train_from = max(date_from, date(start_year, 1, 1))
+        train_to = min(date(start_year + train_years - 1, 12, 31), date_to)
+        test_from = date(start_year + train_years, 1, 1)
+        test_to = min(date(start_year + train_years + test_years - 1, 12, 31), date_to)
+        if test_from > date_to or train_to <= train_from:
+            break
+        windows.append(
+            {
+                "train_from": train_from.isoformat(),
+                "train_to": train_to.isoformat(),
+                "test_from": test_from.isoformat(),
+                "test_to": test_to.isoformat(),
+            }
+        )
+        start_year += step_years
+    return windows
+
+
+def _next_day_iso(value: date) -> str:
+    return (value + timedelta(days=1)).isoformat()
 
 
 def _bar_files(data_root: Path, symbol: str, timeframe: str, date_from: date, date_to: date) -> list[Path]:
