@@ -1007,16 +1007,21 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/gateways/ibkr/health", paths)
         self.assertIn("/api/gateways/ibkr/readiness", paths)
         self.assertIn("/api/gateways/ibkr/contracts", paths)
+        self.assertIn("/api/gateways/ibkr/contracts/sync", paths)
         self.assertIn("/api/gateways/ibkr/market-data", paths)
+        self.assertIn("/api/gateways/ibkr/market-data/sync", paths)
         self.assertIn("/api/gateways/ibkr/connect", paths)
         self.assertIn("/api/gateways/ibkr/safe-mode", paths)
         self.assertIn("/api/gateways/ibkr/bracket-orders", paths)
+        self.assertIn("/api/gateways/ibkr/bracket-orders/{bracket_id}/submit", paths)
         self.assertIn("/api/gateways/ibkr/kill-switch", paths)
         self.assertIn("/api/gateways/ibkr/execution-ledger", paths)
         self.assertIn("/api/gateways/ibkr/orders", paths)
         self.assertIn("/api/gateways/ibkr/executions", paths)
         self.assertIn("/api/gateways/ibkr/positions", paths)
+        self.assertIn("/api/gateways/ibkr/positions/sync", paths)
         self.assertIn("/api/gateways/ibkr/account-snapshots", paths)
+        self.assertIn("/api/gateways/ibkr/account-snapshots/sync", paths)
         self.assertIn("/api/gateways/ibkr/reviews", paths)
         self.assertIn("/api/gateways/ibkr/fast-path-optimizer", paths)
         self.assertIn("/api/ibkr-paper/runs", paths)
@@ -1178,16 +1183,21 @@ class APIImportTests(unittest.TestCase):
             "/api/gateways/ibkr/health",
             "/api/gateways/ibkr/readiness",
             "/api/gateways/ibkr/contracts",
+            "/api/gateways/ibkr/contracts/sync",
             "/api/gateways/ibkr/market-data",
+            "/api/gateways/ibkr/market-data/sync",
             "/api/gateways/ibkr/connect",
             "/api/gateways/ibkr/safe-mode",
             "/api/gateways/ibkr/bracket-orders",
+            "/api/gateways/ibkr/bracket-orders/{bracket_id}/submit",
             "/api/gateways/ibkr/kill-switch",
             "/api/gateways/ibkr/execution-ledger",
             "/api/gateways/ibkr/orders",
             "/api/gateways/ibkr/executions",
             "/api/gateways/ibkr/positions",
+            "/api/gateways/ibkr/positions/sync",
             "/api/gateways/ibkr/account-snapshots",
+            "/api/gateways/ibkr/account-snapshots/sync",
             "/api/gateways/ibkr/reviews",
             "/api/gateways/ibkr/fast-path-optimizer",
             "/api/ibkr-paper/runs",

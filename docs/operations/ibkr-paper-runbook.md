@@ -37,6 +37,13 @@ This runbook is the minimum operating procedure for the Mac-local IBKR Paper loo
    ```
 8. In WebUI, open `Execution`, click `Refresh IBKR Paper`, and confirm status is `ready` before paper order testing.
 
+Recommended adapter sync sequence after connect:
+
+- `POST /api/gateways/ibkr/contracts/sync`
+- `POST /api/gateways/ibkr/market-data/sync`
+- `POST /api/gateways/ibkr/positions/sync`
+- `POST /api/gateways/ibkr/account-snapshots/sync`
+
 ## Normal Loop
 
 - Build `1m` bars from IBKR snapshots.
@@ -44,6 +51,7 @@ This runbook is the minimum operating procedure for the Mac-local IBKR Paper loo
 - Every `5m`, build a structured review request with recent bars, signals, execution ledger, and risk context.
 - Only allow a paper order when review action is `paper_allow` and gateway readiness is `ready`.
 - Submit only deterministic bracket order drafts with entry, stop-loss, take-profit, and max holding minutes.
+- Use `POST /api/gateways/ibkr/bracket-orders/{bracket_id}/submit` only after the local draft is approved and the active `MNQ` contract month or local symbol is configured.
 - Record order status, fills, commission, positions, and account snapshots from IBKR callbacks.
 - Use `/api/gateways/ibkr/execution-ledger` as the source of real paper PnL for strategy diagnosis.
 - Use `/api/ibkr-paper/reports/current` for the runtime promotion-blocker and paper PnL report.

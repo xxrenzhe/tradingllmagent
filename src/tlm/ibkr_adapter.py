@@ -333,9 +333,12 @@ class OfficialIbkrAdapter:
 
         order = Order()
         order.orderId = order_id
+        if self.managed_accounts:
+            order.account = self.managed_accounts[0]
         order.action = str(payload["action"]).upper()
         order.orderType = str(payload.get("entry_order_type", "MKT")).upper()
         order.totalQuantity = int(payload["quantity"])
+        order.tif = "DAY"
         if order.orderType == "LMT":
             order.lmtPrice = float(payload["entry_price"])
         order.transmit = False
@@ -358,9 +361,12 @@ class OfficialIbkrAdapter:
         order = Order()
         order.orderId = order_id
         order.parentId = parent_order_id
+        if self.managed_accounts:
+            order.account = self.managed_accounts[0]
         order.action = action
         order.orderType = order_type
         order.totalQuantity = quantity
+        order.tif = "DAY"
         if aux_price is not None:
             order.auxPrice = aux_price
         if limit_price is not None:
