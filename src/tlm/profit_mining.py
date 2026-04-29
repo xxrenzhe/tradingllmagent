@@ -28,6 +28,8 @@ DEFAULT_TP_SL_PAIRS = (
 )
 
 OHLCV_FAMILY_HORIZONS = (5, 15, 30, 60, 120)
+REGIME_REPLAY_BASKET_LIMIT = 12
+REGIME_REPLAY_EDGE_LIMIT = 24
 
 
 def _minute_horizon_specs(requested_minutes: Sequence[int], bar_minutes: int) -> list[tuple[int, int]]:
@@ -739,7 +741,7 @@ def _run_regime_basket_replays(
     regime_first: dict[str, Any],
     round_trip_cost_usd: float,
 ) -> list[dict[str, Any]]:
-    baskets = regime_first.get("qualified_regime_baskets") or []
+    baskets = (regime_first.get("qualified_regime_baskets") or [])[:REGIME_REPLAY_BASKET_LIMIT]
     return [
         _replay_regime_basket(con, context, basket, round_trip_cost_usd)
         for basket in baskets
@@ -753,7 +755,7 @@ def _replay_regime_basket(
     round_trip_cost_usd: float,
 ) -> dict[str, Any]:
     signals = []
-    edges = basket.get("constituent_edges") or []
+    edges = _rank_regime_edges_for_replay(basket.get("constituent_edges") or [])[:REGIME_REPLAY_EDGE_LIMIT]
     for horizon_minutes in sorted({int(edge["horizon_minutes"]) for edge in edges}):
         horizon_edges = [
             (index, edge)
@@ -789,6 +791,18 @@ def _replay_regime_basket(
     }
     payload["replay_hash"] = stable_hash(payload)
     return payload
+
+
+def _rank_regime_edges_for_replay(edges: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        edges,
+        key=lambda edge: (
+            float(edge.get("break_even_cost_usd") or 0.0),
+            float(edge.get("cost_adjusted_net_pnl") or 0.0),
+            float(edge.get("cost_adjusted_win_probability") or 0.0),
+        ),
+        reverse=True,
+    )
 
 
 def _optimized_regime_basket_subsets(
