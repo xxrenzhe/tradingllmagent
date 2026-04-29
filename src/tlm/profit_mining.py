@@ -64,6 +64,7 @@ def mine_databento_nq_profitable_strategies(
         gross_candidates = _run_tp_sl_scans(con, context, 0.0)
         gross_candidates.extend(_run_ohlcv_family_scans(con, context, 0.0))
         walk_forward = _run_walk_forward_stability_search(con, context, date_from, date_to, round_trip_cost_usd)
+        regime_first = _run_regime_first_edge_search(con, context, round_trip_cost_usd)
     finally:
         con.close()
 
@@ -145,12 +146,17 @@ def mine_databento_nq_profitable_strategies(
             "gross_only_candidate_count": len(gross_only),
             "walk_forward_window_count": len(walk_forward["windows"]),
             "walk_forward_stable_candidate_count": len(walk_forward["stable_candidates"]),
+            "regime_first_candidate_count": len(regime_first["top_regime_edges"]),
             "best_cost_adjusted_net_pnl": qualified[0]["net_pnl"] if qualified else None,
             "best_gross_net_pnl": gross_only[0]["gross_net_pnl"] if gross_only else None,
+            "best_regime_break_even_cost_usd": regime_first["top_regime_edges"][0]["break_even_cost_usd"]
+            if regime_first["top_regime_edges"]
+            else None,
         },
         "qualified_candidates": qualified[:max_candidates],
         "gross_only_candidates": gross_only,
         "walk_forward": walk_forward,
+        "regime_first": regime_first,
         "blocked_next_steps": [] if qualified else [
             "No scanned candidate met annual_trades > 1000, win_probability > 0.53, and cost-adjusted net_pnl > 0.",
             "Stay in OHLCV-only research mode: add walk-forward family search before trusting any in-sample candidate.",
@@ -161,6 +167,170 @@ def mine_databento_nq_profitable_strategies(
     if output_path is not None:
         write_json(output_path, report)
     return report
+
+
+def _run_regime_first_edge_search(
+    con: duckdb.DuckDBPyConnection,
+    context: dict[str, Any],
+    round_trip_cost_usd: float,
+) -> dict[str, Any]:
+    rows = []
+    for horizon in OHLCV_FAMILY_HORIZONS:
+        rows.extend(
+            _fetch_dicts(
+                con,
+                f"""
+                WITH raw AS (
+                  SELECT timestamp, open, high, low, close, tick_count,
+                         CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER) AS moday,
+                         CAST(strftime(timestamp, '%w') AS INTEGER) AS dow,
+                         close - lag(close, 1) OVER (ORDER BY timestamp) AS ret1,
+                         close - lag(close, 5) OVER (ORDER BY timestamp) AS ret5,
+                         avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS ma20,
+                         avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS ma50,
+                         stddev_pop(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS close_std50,
+                         avg(tick_count) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS vol50,
+                         avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
+                         max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
+                         min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
+                         lead(close, {horizon}) OVER (ORDER BY timestamp) AS future_close,
+                         lead(timestamp, {horizon}) OVER (ORDER BY timestamp) AS future_ts
+                  FROM read_parquet('{context["parquet_glob"]}')
+                  WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
+                ), feats AS (
+                  SELECT *,
+                         CASE
+                           WHEN moday BETWEEN 0 AND 359 THEN 'utc_0000_0559'
+                           WHEN moday BETWEEN 360 AND 719 THEN 'utc_0600_1159'
+                           WHEN moday BETWEEN 720 AND 1019 THEN 'utc_1200_1659'
+                           WHEN moday BETWEEN 1020 AND 1259 THEN 'utc_1700_2059'
+                           ELSE 'utc_2100_2359'
+                         END AS session_bucket,
+                         CASE WHEN close > ma50 THEN 1 ELSE -1 END AS trend_bin,
+                         CASE WHEN tick_count >= vol50*2.0 THEN 3 WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin,
+                         CASE WHEN (high-low) >= range20*2.0 THEN 3 WHEN (high-low) >= range20*1.5 THEN 2 WHEN (high-low) >= range20 THEN 1 WHEN (high-low) < range20*0.7 THEN -1 ELSE 0 END AS range_bin,
+                         CASE WHEN close_std50 > 0 THEN (close-ma50)/close_std50 ELSE 0 END AS z50,
+                         CASE WHEN high > low THEN (close-open)/(high-low) ELSE 0 END AS body_to_range,
+                         CASE WHEN close > high20_prev THEN 1 WHEN close < low20_prev THEN -1 ELSE 0 END AS breakout20
+                  FROM raw
+                  WHERE future_close IS NOT NULL AND ma20 IS NOT NULL AND ma50 IS NOT NULL AND close_std50 IS NOT NULL
+                    AND vol50 IS NOT NULL AND range20 IS NOT NULL
+                    AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon} AND {horizon + 2}
+                ), signals AS (
+                  SELECT 'breakout_continuation' AS scan_type, {horizon} AS horizon_minutes, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1 AS direction, future_close, close
+                  FROM feats
+                  WHERE breakout20 = 1 AND trend_bin = 1 AND volume_bin >= 1
+                  UNION ALL
+                  SELECT 'breakout_continuation', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE breakout20 = -1 AND trend_bin = -1 AND volume_bin >= 1
+                  UNION ALL
+                  SELECT 'range_expansion_continuation', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE body_to_range >= 0.6 AND range_bin >= 2 AND volume_bin >= 1
+                  UNION ALL
+                  SELECT 'range_expansion_continuation', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE body_to_range <= -0.6 AND range_bin >= 2 AND volume_bin >= 1
+                  UNION ALL
+                  SELECT 'trend_pullback_reclaim', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE trend_bin = 1 AND ret5 < 0 AND ret1 > 0 AND close > ma20
+                  UNION ALL
+                  SELECT 'trend_pullback_reclaim', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE trend_bin = -1 AND ret5 > 0 AND ret1 < 0 AND close < ma20
+                  UNION ALL
+                  SELECT 'zscore_mean_reversion', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE z50 >= 2 AND volume_bin <= 1
+                  UNION ALL
+                  SELECT 'zscore_mean_reversion', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE z50 <= -2 AND volume_bin <= 1
+                  UNION ALL
+                  SELECT 'volume_climax_reversion', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE z50 >= 1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
+                  UNION ALL
+                  SELECT 'volume_climax_reversion', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE z50 <= -1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
+                  UNION ALL
+                  SELECT 'low_volume_drift', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, 1, future_close, close
+                  FROM feats
+                  WHERE trend_bin = 1 AND volume_bin = -1 AND ret1 > 0
+                  UNION ALL
+                  SELECT 'low_volume_drift', {horizon}, session_bucket, dow,
+                         trend_bin, volume_bin, range_bin, -1, future_close, close
+                  FROM feats
+                  WHERE trend_bin = -1 AND volume_bin = -1 AND ret1 < 0
+                ), pnl AS (
+                  SELECT scan_type, horizon_minutes, session_bucket, dow, trend_bin, volume_bin, range_bin, direction,
+                         CASE WHEN direction = 1
+                           THEN (future_close-close)*{context["point_value"]}
+                           ELSE (close-future_close)*{context["point_value"]}
+                         END AS gross_pnl
+                  FROM signals
+                )
+                SELECT scan_type, horizon_minutes, session_bucket, dow, trend_bin, volume_bin, range_bin, direction,
+                       count(*) AS trades,
+                       count(*) / (
+                         SELECT count(DISTINCT CAST(timestamp AS DATE))
+                         FROM read_parquet('{context["parquet_glob"]}')
+                         WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
+                       ) * 365 AS annual_trades,
+                       sum(gross_pnl) AS gross_net_pnl,
+                       sum(gross_pnl) - count(*) * {round_trip_cost_usd} AS cost_adjusted_net_pnl,
+                       avg(gross_pnl) AS gross_avg_pnl,
+                       avg(gross_pnl) - {round_trip_cost_usd} AS cost_adjusted_avg_pnl,
+                       avg(CASE WHEN gross_pnl > 0 THEN 1.0 ELSE 0.0 END) AS gross_win_probability,
+                       avg(CASE WHEN gross_pnl - {round_trip_cost_usd} > 0 THEN 1.0 ELSE 0.0 END) AS cost_adjusted_win_probability,
+                       sum(CASE WHEN gross_pnl > 0 THEN gross_pnl ELSE 0 END)/NULLIF(abs(sum(CASE WHEN gross_pnl < 0 THEN gross_pnl ELSE 0 END)), 0) AS gross_profit_factor,
+                       sum(gross_pnl)/count(*) AS break_even_cost_usd
+                FROM pnl
+                GROUP BY ALL
+                HAVING annual_trades > 100
+                   AND trades >= 100
+                   AND gross_net_pnl > 0
+                ORDER BY break_even_cost_usd DESC
+                LIMIT {context["max_candidates"]}
+                """,
+            )
+        )
+    annotated = []
+    for row in rows:
+        payload = {
+            **row,
+            "direction_label": "long" if int(row.get("direction") or 0) == 1 else "short",
+            "round_trip_cost_usd": round_trip_cost_usd,
+            "cost_survives": float(row.get("break_even_cost_usd") or 0) > round_trip_cost_usd,
+        }
+        payload["regime_edge_hash"] = stable_hash(payload)
+        annotated.append(payload)
+    annotated = sorted(
+        annotated,
+        key=lambda row: (float(row.get("break_even_cost_usd") or 0), float(row.get("gross_net_pnl") or 0)),
+        reverse=True,
+    )
+    return {
+        "mode": "gross_edge_by_ohlcv_regime_before_hard_target_filter",
+        "minimum_annual_trades": 100,
+        "round_trip_cost_usd": round_trip_cost_usd,
+        "top_regime_edges": annotated[: int(context["max_candidates"])],
+        "cost_surviving_edges": [row for row in annotated if row["cost_survives"]][: int(context["max_candidates"])],
+    }
 
 
 def _run_all_candidate_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], cost: float) -> list[dict[str, Any]]:
