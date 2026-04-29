@@ -65,6 +65,7 @@ from .storage import (
 )
 from .strategy import StrategySpecError, load_strategy_spec, with_strategy_symbol
 from .strategy_generation import write_feature_combo_strategy_specs, write_vol_strategy_specs
+from .top_strategy_report import generate_top_strategy_html_report
 from .trigger_gate import (
     append_trigger_gate_outcome_from_payload,
     build_forward_test_schedule,
@@ -815,6 +816,18 @@ def cmd_research_mine_profitable_nq(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_research_top_strategy_report(args: argparse.Namespace) -> int:
+    output = generate_top_strategy_html_report(
+        mining_report_path=Path(args.mining_report),
+        data_root=Path(args.data_root),
+        output_html=Path(args.output),
+        top_n=args.top_n,
+        sample_trade_count=args.sample_trade_count,
+    )
+    print(json.dumps(output, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_research_discover_target(args: argparse.Namespace) -> int:
     if args.spec:
         spec = load_strategy_spec(Path(args.spec))
@@ -1442,6 +1455,17 @@ def build_parser() -> argparse.ArgumentParser:
     mine_profitable_nq.add_argument("--max-candidates", type=int, default=50)
     mine_profitable_nq.add_argument("--output", default="experiments/profit_mining/nq_cme_strategy_mining_report.json")
     mine_profitable_nq.set_defaults(func=cmd_research_mine_profitable_nq)
+
+    top_strategy_report = research_subparsers.add_parser("top-strategy-report")
+    top_strategy_report.add_argument(
+        "--mining-report",
+        default="experiments/profit_mining/nq_cme_1m_ohlcv_strategy_mining_report.json",
+    )
+    top_strategy_report.add_argument("--data-root", default="data")
+    top_strategy_report.add_argument("--top-n", type=int, default=3)
+    top_strategy_report.add_argument("--sample-trade-count", type=int, default=3)
+    top_strategy_report.add_argument("--output", default="experiments/profit_mining/top3_strategy_report.html")
+    top_strategy_report.set_defaults(func=cmd_research_top_strategy_report)
 
     discover = research_subparsers.add_parser("discover-target")
     discover.add_argument("--spec")

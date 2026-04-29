@@ -1209,7 +1209,11 @@ def _replay_regime_edges_for_horizon(
           FROM feats
           WHERE trend_bin = -1 AND volume_bin = -1 AND ret1 < 0
         ), matched AS (
-          SELECT s.timestamp, e.rule_index, {horizon_minutes} AS horizon_minutes,
+          SELECT s.timestamp, s.future_ts AS exit_timestamp, e.rule_index, {horizon_minutes} AS horizon_minutes,
+                 e.scan_type,
+                 CASE WHEN e.direction = 1 THEN 'long' ELSE 'short' END AS direction_label,
+                 s.session_bucket, s.dow, s.trend_bin, s.volume_bin, s.range_bin,
+                 s.close AS entry_price, s.future_close AS exit_price,
                  CASE WHEN e.direction = 1
                    THEN (s.future_close-s.close)*{context["point_value"]} - {round_trip_cost_usd}
                    ELSE (s.close-s.future_close)*{context["point_value"]} - {round_trip_cost_usd}
@@ -1224,7 +1228,8 @@ def _replay_regime_edges_for_horizon(
            AND s.range_bin = e.range_bin
            AND s.direction = e.direction
         )
-        SELECT timestamp, rule_index, horizon_minutes, pnl
+        SELECT timestamp, exit_timestamp, rule_index, horizon_minutes, scan_type, direction_label,
+               session_bucket, dow, trend_bin, volume_bin, range_bin, entry_price, exit_price, pnl
         FROM matched
         ORDER BY timestamp, rule_index
         """,
