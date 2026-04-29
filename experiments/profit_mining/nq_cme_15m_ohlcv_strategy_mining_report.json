@@ -1513,7 +1513,7 @@
       }
     ]
   },
-  "report_hash": "f493872fb6559a5a143c3cf0a446c1d85b807953341aeb852d5439db96a38cd5",
+  "report_hash": "1db993fe15a3eba4098acca8cd252af4015e01924e23c9c9a1e52983f3c94d9e",
   "round_trip_cost_usd": 15.0,
   "schema_version": 1,
   "search_space": {
@@ -1654,9 +1654,13 @@
     "bar_file_count": 5805,
     "best_adaptive_recent_regime_candidate": null,
     "best_cost_adjusted_net_pnl": null,
+    "best_full_history_yearly_profitable_candidate": null,
     "best_gross_net_pnl": null,
     "best_optimized_regime_basket_subset": null,
     "best_regime_break_even_cost_usd": 33.275470473718364,
+    "best_yearly_profitable_candidate": null,
+    "earliest_yearly_profitable_activation_year": null,
+    "full_history_yearly_profitable_candidate_count": 0,
     "gross_only_candidate_count": 0,
     "optimized_regime_basket_subset_count": 0,
     "qualified_candidate_count": 0,
@@ -1664,7 +1668,8 @@
     "qualified_regime_basket_replay_count": 0,
     "regime_first_candidate_count": 50,
     "walk_forward_stable_candidate_count": 0,
-    "walk_forward_window_count": 2
+    "walk_forward_window_count": 2,
+    "yearly_profitable_candidate_count": 0
   },
   "symbol": "NQ_CME",
   "target": {
