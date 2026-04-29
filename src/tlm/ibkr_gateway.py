@@ -28,6 +28,8 @@ class IbkrGatewayAdapter(Protocol):
 
     def submit_bracket_order(self, contract: dict[str, Any], order: dict[str, Any]) -> dict[str, Any]: ...
 
+    def drain_runtime_events(self) -> dict[str, Any]: ...
+
 
 @dataclass(frozen=True)
 class IbkrContractSpec:
@@ -643,6 +645,24 @@ class IbkrPaperGateway:
             return self._order_event("account_snapshot_sync_failed", {"errors": [str(exc)]})
         event = self.record_account_snapshot(payload)
         return self._order_event("account_snapshot_sync_completed", {"recorded_event": event})
+
+    def sync_runtime_events(self) -> dict[str, Any]:
+        if self.adapter is None:
+            return self._order_event("runtime_event_sync_rejected", {"errors": ["adapter_not_configured"]})
+        try:
+            payload = self.adapter.drain_runtime_events()
+        except Exception as exc:
+            self.enter_safe_mode("adapter_runtime_event_sync_failed")
+            return self._order_event("runtime_event_sync_failed", {"errors": [str(exc)]})
+        order_status_events = [self.record_order_status(item) for item in payload.get("order_status", [])]
+        execution_events = [self.record_execution_fill(item) for item in payload.get("executions", [])]
+        return self._order_event(
+            "runtime_event_sync_completed",
+            {
+                "order_status_count": len(order_status_events),
+                "execution_count": len(execution_events),
+            },
+        )
 
     def execution_ledger(self) -> dict[str, Any]:
         latest_account = self.account_snapshots[-1].to_dict() if self.account_snapshots else None
