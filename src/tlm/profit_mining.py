@@ -88,10 +88,11 @@ def mine_databento_nq_profitable_strategies(
             )
     gross_only = sorted(gross_only, key=lambda row: float(row["gross_net_pnl"]), reverse=True)[:max_candidates]
 
+    regime_basket_found = bool(regime_first.get("qualified_regime_baskets"))
     report = {
         "schema_version": 1,
         "artifact": "databento_nq_profit_strategy_mining_report",
-        "status": "target_found" if qualified else "not_found",
+        "status": "target_found" if qualified else "regime_basket_found" if regime_basket_found else "not_found",
         "symbol": symbol_config.alias,
         "timeframe": timeframe,
         "date_from": date_from.isoformat(),
@@ -147,6 +148,7 @@ def mine_databento_nq_profitable_strategies(
             "walk_forward_window_count": len(walk_forward["windows"]),
             "walk_forward_stable_candidate_count": len(walk_forward["stable_candidates"]),
             "regime_first_candidate_count": len(regime_first["top_regime_edges"]),
+            "qualified_regime_basket_count": len(regime_first.get("qualified_regime_baskets", [])),
             "best_cost_adjusted_net_pnl": qualified[0]["net_pnl"] if qualified else None,
             "best_gross_net_pnl": gross_only[0]["gross_net_pnl"] if gross_only else None,
             "best_regime_break_even_cost_usd": regime_first["top_regime_edges"][0]["break_even_cost_usd"]
@@ -158,7 +160,7 @@ def mine_databento_nq_profitable_strategies(
         "walk_forward": walk_forward,
         "regime_first": regime_first,
         "blocked_next_steps": [] if qualified else [
-            "No scanned candidate met annual_trades > 1000, win_probability > 0.53, and cost-adjusted net_pnl > 0.",
+            "No single scanned candidate met annual_trades > 1000, win_probability > 0.53, and cost-adjusted net_pnl > 0.",
             "Stay in OHLCV-only research mode: add walk-forward family search before trusting any in-sample candidate.",
             "Prefer session-normalized OHLCV features, volatility-regime splits, and simpler risk filters over higher-dimensional curve fitting.",
         ],
@@ -324,13 +326,102 @@ def _run_regime_first_edge_search(
         key=lambda row: (float(row.get("break_even_cost_usd") or 0), float(row.get("gross_net_pnl") or 0)),
         reverse=True,
     )
+    baskets = _build_regime_edge_baskets(
+        annotated,
+        min_annual_trades=float(context["min_annual_trades"]),
+        min_win_probability=float(context["min_win_probability"]),
+    )
     return {
         "mode": "gross_edge_by_ohlcv_regime_before_hard_target_filter",
         "minimum_annual_trades": 100,
         "round_trip_cost_usd": round_trip_cost_usd,
         "top_regime_edges": annotated[: int(context["max_candidates"])],
         "cost_surviving_edges": [row for row in annotated if row["cost_survives"]][: int(context["max_candidates"])],
+        "qualified_regime_baskets": baskets,
     }
+
+
+def _build_regime_edge_baskets(
+    edges: Sequence[dict[str, Any]],
+    *,
+    min_annual_trades: float,
+    min_win_probability: float,
+) -> list[dict[str, Any]]:
+    eligible = [
+        edge
+        for edge in edges
+        if float(edge.get("cost_adjusted_net_pnl") or 0) > 0
+        and float(edge.get("cost_adjusted_win_probability") or 0) > min_win_probability
+    ]
+    baskets = []
+    for key_name in ("scan_type", "session_bucket", "direction_label"):
+        for value in sorted({str(edge.get(key_name)) for edge in eligible}):
+            basket = _regime_basket(
+                f"{key_name}:{value}",
+                [edge for edge in eligible if str(edge.get(key_name)) == value],
+                min_annual_trades,
+                min_win_probability,
+            )
+            if basket:
+                baskets.append(basket)
+    all_basket = _regime_basket("all_eligible_regime_edges", eligible, min_annual_trades, min_win_probability)
+    if all_basket:
+        baskets.append(all_basket)
+    return sorted(
+        baskets,
+        key=lambda row: (float(row["cost_adjusted_net_pnl"]), float(row["annual_trades"])),
+        reverse=True,
+    )
+
+
+def _regime_basket(
+    basket_id: str,
+    edges: Sequence[dict[str, Any]],
+    min_annual_trades: float,
+    min_win_probability: float,
+) -> dict[str, Any] | None:
+    if not edges:
+        return None
+    trades = sum(int(edge.get("trades") or 0) for edge in edges)
+    if trades <= 0:
+        return None
+    annual_trades = sum(float(edge.get("annual_trades") or 0) for edge in edges)
+    cost_adjusted_net_pnl = sum(float(edge.get("cost_adjusted_net_pnl") or 0) for edge in edges)
+    weighted_win_probability = sum(
+        float(edge.get("cost_adjusted_win_probability") or 0) * int(edge.get("trades") or 0)
+        for edge in edges
+    ) / trades
+    if annual_trades <= min_annual_trades or weighted_win_probability <= min_win_probability or cost_adjusted_net_pnl <= 0:
+        return None
+    payload = {
+        "basket_id": basket_id,
+        "edge_count": len(edges),
+        "trades": trades,
+        "annual_trades": annual_trades,
+        "cost_adjusted_net_pnl": cost_adjusted_net_pnl,
+        "weighted_cost_adjusted_win_probability": weighted_win_probability,
+        "avg_break_even_cost_usd": sum(float(edge.get("break_even_cost_usd") or 0) for edge in edges) / len(edges),
+        "constituent_edges": [
+            {
+                "scan_type": edge.get("scan_type"),
+                "horizon_minutes": edge.get("horizon_minutes"),
+                "session_bucket": edge.get("session_bucket"),
+                "dow": edge.get("dow"),
+                "direction_label": edge.get("direction_label"),
+                "trend_bin": edge.get("trend_bin"),
+                "volume_bin": edge.get("volume_bin"),
+                "range_bin": edge.get("range_bin"),
+                "annual_trades": edge.get("annual_trades"),
+                "cost_adjusted_net_pnl": edge.get("cost_adjusted_net_pnl"),
+                "cost_adjusted_win_probability": edge.get("cost_adjusted_win_probability"),
+                "break_even_cost_usd": edge.get("break_even_cost_usd"),
+            }
+            for edge in edges
+        ],
+        "caveat": "Basket metrics are aggregate regime-edge estimates; replay constituent rules before treating as one executable strategy.",
+    }
+    payload["basket_hash"] = stable_hash(payload)
+    return payload
 
 
 def _run_all_candidate_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], cost: float) -> list[dict[str, Any]]:
