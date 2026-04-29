@@ -199,7 +199,9 @@ class ProfitMiningTests(unittest.TestCase):
 
         self.assertEqual([row["year"] for row in metrics["yearly_results"]], [2024, 2025])
         self.assertEqual(metrics["yearly_results"][0]["trades"], 1)
-        self.assertEqual(metrics["yearly_results"][0]["period_from"], "2024-01-01")
+        self.assertEqual(metrics["yearly_results"][0]["period_from"], "2024-12-31")
+        self.assertEqual(metrics["yearly_results"][0]["period_to"], "2024-12-31")
+        self.assertEqual(metrics["yearly_results"][0]["covered_days"], 1)
         self.assertEqual(metrics["yearly_results"][1]["net_pnl"], 40.0)
 
     def test_report_includes_evaluation_periods(self) -> None:

@@ -832,12 +832,16 @@ def _yearly_signal_results(signals: Sequence[dict[str, Any]]) -> list[dict[str, 
     results = []
     for year, year_signals in sorted(by_year.items()):
         ordered = sorted(year_signals, key=lambda signal: signal["timestamp"])
-        metrics = _signal_metrics(ordered, _calendar_days_in_year(year))
+        first_day = _signal_timestamp(ordered[0]).date()
+        last_day = _signal_timestamp(ordered[-1]).date()
+        covered_days = max(1, (last_day - first_day).days + 1)
+        metrics = _signal_metrics(ordered, covered_days)
         results.append(
             {
                 "year": year,
-                "period_from": f"{year}-01-01",
-                "period_to": f"{year}-12-31",
+                "period_from": first_day.isoformat(),
+                "period_to": last_day.isoformat(),
+                "covered_days": covered_days,
                 **metrics,
             }
         )
@@ -851,10 +855,6 @@ def _signal_timestamp(signal: dict[str, Any]) -> datetime:
     if isinstance(value, str):
         return datetime.fromisoformat(value)
     raise TypeError(f"Unsupported signal timestamp type: {type(value)!r}")
-
-
-def _calendar_days_in_year(year: int) -> int:
-    return (date(year + 1, 1, 1) - date(year, 1, 1)).days
 
 
 def _evaluation_periods(date_from: date, date_to: date, walk_forward: dict[str, Any]) -> dict[str, Any]:
