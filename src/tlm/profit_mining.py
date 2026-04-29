@@ -180,6 +180,11 @@ def mine_databento_nq_profitable_strategies(
         ),
         reverse=True,
     )
+    full_history_yearly_profitable_candidates = [
+        candidate
+        for candidate in yearly_profitable_candidates
+        if candidate.get("full_history_candidate")
+    ]
     regime_basket_found = bool(regime_first.get("qualified_regime_baskets"))
     report = {
         "schema_version": 1,
@@ -265,6 +270,15 @@ def mine_databento_nq_profitable_strategies(
             else None,
             "yearly_profitable_candidate_count": len(yearly_profitable_candidates),
             "best_yearly_profitable_candidate": yearly_profitable_candidates[0]
+            if yearly_profitable_candidates
+            else None,
+            "full_history_yearly_profitable_candidate_count": len(full_history_yearly_profitable_candidates),
+            "best_full_history_yearly_profitable_candidate": full_history_yearly_profitable_candidates[0]
+            if full_history_yearly_profitable_candidates
+            else None,
+            "earliest_yearly_profitable_activation_year": min(
+                int(candidate["activation_start_year"]) for candidate in yearly_profitable_candidates
+            )
             if yearly_profitable_candidates
             else None,
             "best_cost_adjusted_net_pnl": qualified[0]["net_pnl"] if qualified else None,
