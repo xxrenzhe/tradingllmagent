@@ -1513,7 +1513,7 @@
       }
     ]
   },
-  "report_hash": "98a7fc3d650fc5d04862f8b58369f711cd0c30a40b7af70d70df2fe7090aa200",
+  "report_hash": "f493872fb6559a5a143c3cf0a446c1d85b807953341aeb852d5439db96a38cd5",
   "round_trip_cost_usd": 15.0,
   "schema_version": 1,
   "search_space": {
@@ -1650,7 +1650,9 @@
   },
   "status": "not_found",
   "summary": {
+    "adaptive_recent_regime_candidate_count": 0,
     "bar_file_count": 5805,
+    "best_adaptive_recent_regime_candidate": null,
     "best_cost_adjusted_net_pnl": null,
     "best_gross_net_pnl": null,
     "best_optimized_regime_basket_subset": null,
