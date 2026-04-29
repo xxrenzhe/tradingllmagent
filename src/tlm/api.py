@@ -17,6 +17,7 @@ from .events import (
 )
 from .experiments import load_experiment_audit_logs, load_experiment_summary
 from .feature_catalog import FEATURE_CATALOG, feature_readiness_report
+from .ibkr_adapter import build_ibkr_gateway_adapter
 from .ibkr_gateway import IbkrPaperGateway
 from .ibkr_optimizer import apply_fast_path_control_diff
 from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
@@ -413,7 +414,7 @@ def create_app():
         ) from exc
 
     nt8_gateway = Nt8SimGateway()
-    ibkr_gateway = IbkrPaperGateway()
+    ibkr_gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     ibkr_review_history: list[dict] = []
     ibkr_optimizer_history: list[dict] = []
 
@@ -866,6 +867,10 @@ def create_app():
     def ibkr_contracts_post(payload: dict = Body(...)) -> dict:
         return ibkr_gateway.record_contract_details(payload)
 
+    @app.post("/api/gateways/ibkr/contracts/sync")
+    def ibkr_contracts_sync(payload: dict = Body(default={})) -> dict:
+        return ibkr_gateway.sync_contract_details(str(payload.get("symbol", "MNQ")))
+
     @app.get("/api/gateways/ibkr/market-data")
     def ibkr_market_data(symbol: str = "MNQ", max_stale_seconds: int = 5) -> dict:
         return ibkr_gateway.market_data_readiness(symbol, max_stale_seconds=max_stale_seconds)
@@ -873,6 +878,13 @@ def create_app():
     @app.post("/api/gateways/ibkr/market-data")
     def ibkr_market_data_post(payload: dict = Body(...)) -> dict:
         return ibkr_gateway.record_market_data(payload)
+
+    @app.post("/api/gateways/ibkr/market-data/sync")
+    def ibkr_market_data_sync(payload: dict = Body(default={})) -> dict:
+        return ibkr_gateway.sync_market_data(
+            symbol=str(payload.get("symbol", "MNQ")),
+            timeout_seconds=int(payload.get("timeout_seconds", 5)),
+        )
 
     @app.post("/api/gateways/ibkr/connect")
     def ibkr_connect(payload: dict = Body(default={})) -> dict:
@@ -893,6 +905,10 @@ def create_app():
     @app.get("/api/gateways/ibkr/bracket-orders")
     def ibkr_bracket_orders_report() -> dict:
         return ibkr_gateway.bracket_order_report()
+
+    @app.post("/api/gateways/ibkr/bracket-orders/{bracket_id}/submit")
+    def ibkr_bracket_orders_submit(bracket_id: str) -> dict:
+        return ibkr_gateway.submit_bracket_order(bracket_id)
 
     @app.post("/api/gateways/ibkr/cancel-orders")
     def ibkr_cancel_orders(payload: dict = Body(default={})) -> dict:
@@ -934,6 +950,10 @@ def create_app():
     def ibkr_positions_get() -> dict:
         return ibkr_gateway.positions_report()
 
+    @app.post("/api/gateways/ibkr/positions/sync")
+    def ibkr_positions_sync() -> dict:
+        return ibkr_gateway.sync_positions()
+
     @app.post("/api/gateways/ibkr/account-snapshots")
     def ibkr_account_snapshots(payload: dict = Body(...)) -> dict:
         return ibkr_gateway.record_account_snapshot(payload)
@@ -941,6 +961,10 @@ def create_app():
     @app.get("/api/gateways/ibkr/account-snapshots")
     def ibkr_account_snapshots_get() -> dict:
         return ibkr_gateway.account_snapshots_report()
+
+    @app.post("/api/gateways/ibkr/account-snapshots/sync")
+    def ibkr_account_snapshots_sync() -> dict:
+        return ibkr_gateway.sync_account_snapshot()
 
     @app.post("/api/gateways/ibkr/reconciliation")
     def ibkr_reconciliation(payload: dict = Body(default={})) -> dict:

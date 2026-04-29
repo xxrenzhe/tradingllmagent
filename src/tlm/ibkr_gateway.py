@@ -18,6 +18,16 @@ class IbkrGatewayAdapter(Protocol):
 
     def account_summary(self) -> dict[str, Any]: ...
 
+    def request_contract_details(self, contract: dict[str, Any]) -> dict[str, Any]: ...
+
+    def request_market_data(self, contract: dict[str, Any], timeout_seconds: int = 5) -> dict[str, Any]: ...
+
+    def request_positions(self) -> list[dict[str, Any]]: ...
+
+    def request_account_snapshot(self, account_id: str | None = None) -> dict[str, Any]: ...
+
+    def submit_bracket_order(self, contract: dict[str, Any], order: dict[str, Any]) -> dict[str, Any]: ...
+
 
 @dataclass(frozen=True)
 class IbkrContractSpec:
@@ -244,7 +254,7 @@ class IbkrPaperAccount:
 
     @property
     def is_paper(self) -> bool:
-        return self.account_type.lower() == "paper"
+        return self.account_type.lower() == "paper" or self.account_id.upper().startswith("DU")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -284,6 +294,7 @@ class IbkrPaperGateway:
             "mode": "ibkr_paper",
             "protocol_version": IBKR_PROTOCOL_VERSION,
             "ibapi_available": ibapi_available(),
+            "adapter_configured": self.adapter is not None,
             "connected": self.connected,
             "read_only": self.read_only,
             "safe_mode": self.safe_mode,
@@ -367,6 +378,20 @@ class IbkrPaperGateway:
         self.contract_specs[spec.symbol] = spec
         return self._event("contract_spec_registered", {"contract": spec.to_dict()})
 
+    def sync_contract_details(self, symbol: str = "MNQ") -> dict[str, Any]:
+        if self.adapter is None:
+            return self._event("contract_sync_rejected", {"errors": ["adapter_not_configured"]})
+        spec = self.contract_specs.get(symbol)
+        if spec is None:
+            return self._event("contract_sync_rejected", {"errors": [f"unknown_symbol:{symbol}"]})
+        try:
+            payload = self.adapter.request_contract_details(spec.to_dict())
+        except Exception as exc:
+            self.enter_safe_mode("adapter_contract_sync_failed")
+            return self._event("contract_sync_failed", {"errors": [str(exc)], "symbol": symbol})
+        event = self.record_contract_details(payload)
+        return self._event("contract_sync_completed", {"symbol": symbol, "recorded_event": event})
+
     def record_contract_details(self, payload: dict[str, Any]) -> dict[str, Any]:
         details = IbkrContractDetails(
             symbol=str(payload.get("symbol", "MNQ")),
@@ -418,6 +443,20 @@ class IbkrPaperGateway:
         )
         self.market_data[symbol] = snapshot
         return self._event("market_data_recorded", {"snapshot": snapshot.to_dict()})
+
+    def sync_market_data(self, symbol: str = "MNQ", timeout_seconds: int = 5) -> dict[str, Any]:
+        if self.adapter is None:
+            return self._event("market_data_sync_rejected", {"errors": ["adapter_not_configured"]})
+        spec = self.contract_specs.get(symbol)
+        if spec is None:
+            return self._event("market_data_sync_rejected", {"errors": [f"unknown_symbol:{symbol}"]})
+        try:
+            payload = self.adapter.request_market_data(spec.to_dict(), timeout_seconds=timeout_seconds)
+        except Exception as exc:
+            self.enter_safe_mode("adapter_market_data_sync_failed")
+            return self._event("market_data_sync_failed", {"errors": [str(exc)], "symbol": symbol})
+        event = self.record_market_data(payload)
+        return self._event("market_data_sync_completed", {"symbol": symbol, "recorded_event": event})
 
     def market_data_readiness(
         self,
@@ -581,6 +620,30 @@ class IbkrPaperGateway:
         self.account_snapshots.append(snapshot)
         return self._order_event("account_snapshot_recorded", {"account_snapshot": snapshot.to_dict()})
 
+    def sync_positions(self) -> dict[str, Any]:
+        if self.adapter is None:
+            return self._order_event("positions_sync_rejected", {"errors": ["adapter_not_configured"]})
+        try:
+            payloads = self.adapter.request_positions()
+        except Exception as exc:
+            self.enter_safe_mode("adapter_positions_sync_failed")
+            return self._order_event("positions_sync_failed", {"errors": [str(exc)]})
+        events = [self.record_position_snapshot(payload) for payload in payloads]
+        return self._order_event("positions_sync_completed", {"count": len(events), "positions": payloads})
+
+    def sync_account_snapshot(self) -> dict[str, Any]:
+        if self.adapter is None:
+            return self._order_event("account_snapshot_sync_rejected", {"errors": ["adapter_not_configured"]})
+        try:
+            payload = self.adapter.request_account_snapshot(
+                self.account.account_id if self.account is not None else None
+            )
+        except Exception as exc:
+            self.enter_safe_mode("adapter_account_snapshot_sync_failed")
+            return self._order_event("account_snapshot_sync_failed", {"errors": [str(exc)]})
+        event = self.record_account_snapshot(payload)
+        return self._order_event("account_snapshot_sync_completed", {"recorded_event": event})
+
     def execution_ledger(self) -> dict[str, Any]:
         latest_account = self.account_snapshots[-1].to_dict() if self.account_snapshots else None
         return {
@@ -639,6 +702,36 @@ class IbkrPaperGateway:
             "order_event_count": len(self.order_events),
             "recent_order_events": self.order_events[-20:],
         }
+
+    def submit_bracket_order(self, bracket_id: str) -> dict[str, Any]:
+        if self.adapter is None:
+            return self._order_event("bracket_order_submit_rejected", {"errors": ["adapter_not_configured"]})
+        draft = self.bracket_orders.get(bracket_id)
+        if draft is None:
+            return self._order_event("bracket_order_submit_rejected", {"errors": [f"unknown_bracket_id:{bracket_id}"]})
+        readiness = self.readiness(symbol=draft.symbol)
+        if readiness["status"] != "ready":
+            return self._order_event(
+                "bracket_order_submit_rejected",
+                {"errors": readiness["missing_requirements"], "readiness": readiness},
+            )
+        spec = self.contract_specs.get(draft.symbol)
+        if spec is None:
+            return self._order_event("bracket_order_submit_rejected", {"errors": [f"unknown_symbol:{draft.symbol}"]})
+        if not spec.last_trade_date_or_contract_month and not spec.local_symbol:
+            return self._order_event(
+                "bracket_order_submit_rejected",
+                {"errors": ["contract_month_or_local_symbol_required_for_submit"]},
+            )
+        try:
+            submission = self.adapter.submit_bracket_order(spec.to_dict(), draft.to_dict())
+        except Exception as exc:
+            self.enter_safe_mode("adapter_bracket_submit_failed")
+            return self._order_event("bracket_order_submit_failed", {"errors": [str(exc)], "bracket_id": bracket_id})
+        return self._order_event(
+            "bracket_order_submitted",
+            {"bracket_id": bracket_id, "bracket_order": draft.to_dict(), "broker_submission": submission},
+        )
 
     def reconcile_position(self, symbol: str = "MNQ", expected_quantity: int | None = None) -> dict[str, Any]:
         expected = self.paper_position_quantity if expected_quantity is None else expected_quantity

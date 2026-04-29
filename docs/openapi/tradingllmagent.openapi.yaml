@@ -546,6 +546,12 @@ paths:
       responses:
         "200":
           description: IBKR contract details event.
+  /api/gateways/ibkr/contracts/sync:
+    post:
+      summary: Request IBKR contract details from the configured paper adapter and record them locally.
+      responses:
+        "200":
+          description: IBKR contract sync event.
   /api/gateways/ibkr/market-data:
     get:
       summary: Check IBKR real-time market data readiness.
@@ -557,6 +563,12 @@ paths:
       responses:
         "200":
           description: IBKR market data event.
+  /api/gateways/ibkr/market-data/sync:
+    post:
+      summary: Request IBKR market data from the configured paper adapter and record it locally.
+      responses:
+        "200":
+          description: IBKR market data sync event.
   /api/gateways/ibkr/connect:
     post:
       summary: Connect to an IBKR paper gateway adapter.
@@ -586,6 +598,12 @@ paths:
       responses:
         "200":
           description: IBKR bracket order event.
+  /api/gateways/ibkr/bracket-orders/{bracket_id}/submit:
+    post:
+      summary: Submit a previously built IBKR paper bracket order draft through the configured adapter.
+      responses:
+        "200":
+          description: IBKR bracket order submit event.
   /api/gateways/ibkr/cancel-orders:
     post:
       summary: Cancel open IBKR paper order drafts.
@@ -644,6 +662,12 @@ paths:
       responses:
         "200":
           description: IBKR paper position event.
+  /api/gateways/ibkr/positions/sync:
+    post:
+      summary: Request IBKR paper positions from the configured adapter and record them locally.
+      responses:
+        "200":
+          description: IBKR paper positions sync event.
   /api/gateways/ibkr/account-snapshots:
     get:
       summary: List IBKR paper account and PnL snapshots.
@@ -655,6 +679,12 @@ paths:
       responses:
         "200":
           description: IBKR paper account snapshot event.
+  /api/gateways/ibkr/account-snapshots/sync:
+    post:
+      summary: Request an IBKR paper account snapshot from the configured adapter and record it locally.
+      responses:
+        "200":
+          description: IBKR paper account snapshot sync event.
   /api/gateways/ibkr/reconciliation:
     post:
       summary: Reconcile tracked IBKR paper position against expected quantity.
