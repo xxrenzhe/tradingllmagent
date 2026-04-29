@@ -13,6 +13,23 @@
     "tick_size": 0.25,
     "tick_value": 5.0
   },
+  "data_semantics": {
+    "execution_caveat": "OHLCV research can identify historical gross or cost-adjusted bar edges, but cannot prove market-order spread cost, limit-order fill rate, queue position, or adverse selection.",
+    "execution_fields_available": {
+      "bar_volume": true,
+      "bid_ask_spread": false,
+      "limit_order_fill": false,
+      "ohlc": true,
+      "top_of_book_size": false
+    },
+    "source": "Databento OHLCV bars",
+    "symbol": "NQ_CME",
+    "timeframe": "5m",
+    "volume_field_mapping": {
+      "bar_volume": "tick_count",
+      "tick_count": "Databento OHLCV volume mapped into the local bar schema"
+    }
+  },
   "data_version_hash": "e0c13f54c9da24f31de558267ee50235adf040cf6a7fabaf1688043ee3a7bdcc",
   "date_from": "2010-06-06",
   "date_to": "2026-04-27",
@@ -61,6 +78,27 @@
     "yearly_results_location": "regime_basket_replays[*].one_trade_per_timestamp.yearly_results and regime_basket_replays[*].optimized_subsets[*].one_trade_per_timestamp.yearly_results"
   },
   "gross_only_candidates": [],
+  "plan12_review": {
+    "implemented_in_this_report": [
+      "OHLCV-only profitability search across simple trend and mean-reversion families",
+      "VOL-aware regime bins using bar_volume=tick_count relative to recent volume",
+      "session/time bucket attribution on candidate edges",
+      "train/test/final period metadata and yearly results for replay candidates",
+      "additional 1 and 2 tick per-trade cost stress for replayed candidate baskets",
+      "strategy profile cards for candidate family, direction, VOL dependency, and session concentration"
+    ],
+    "live_trading_readiness": "research_only_until_quote_replay_and_paper_shadow_pass",
+    "not_implemented_without_more_data": [
+      "TBBO/MBP quote replay",
+      "limit-order fill and missed-fill simulation",
+      "event-window spread/slippage attribution",
+      "paper shadow live execution review"
+    ],
+    "partially_implemented": [
+      "VOL feature set covers relative volume, volume breakout, climax reversion, and low-volume filters; session-normalized percentile and explicit multi-timeframe confirmation remain next steps.",
+      "Execution cost is stress-tested from OHLCV PnL; real spread, fill probability, and queue effects still need quote data."
+    ]
+  },
   "qualified_candidates": [],
   "regime_basket_replays": [],
   "regime_first": {
@@ -2065,7 +2103,7 @@
       }
     ]
   },
-  "report_hash": "778723677c24627ffcb41c75f3837af620180f386839009ad77cb812cd490252",
+  "report_hash": "f645b3f2bf4cd8959064b7e4d8eae45a096b90118ec6a1de930e6b42c4b1478c",
   "round_trip_cost_usd": 15.0,
   "schema_version": 1,
   "search_space": {
@@ -2105,6 +2143,7 @@
       "previous_5m_return_bin",
       "trend_vs_ma20_or_ma50",
       "relative_volume_bin",
+      "bar_volume_alias_tick_count",
       "range_regime",
       "breakout_20_previous_range",
       "close_zscore_50",
@@ -2198,7 +2237,28 @@
         "stop_loss_points": 24,
         "take_profit_points": 6
       }
-    ]
+    ],
+    "volume_feature_status": {
+      "implemented": [
+        "bar_volume=tick_count",
+        "relative_volume_20_or_50",
+        "volume_bin",
+        "volume_price_confirm",
+        "volume_climax_reversion",
+        "low_volume_filter"
+      ],
+      "next_ohlcv_expansion": [
+        "multi_timeframe_volume_confirm_1m_5m_15m",
+        "session_normalized_volume_percentile",
+        "event_window_volume_attribution"
+      ],
+      "not_available_from_ohlcv_only": [
+        "bid_ask_spread",
+        "limit_order_fill_rate",
+        "queue_position",
+        "adverse_selection_from_top_of_book"
+      ]
+    }
   },
   "status": "not_found",
   "summary": {
