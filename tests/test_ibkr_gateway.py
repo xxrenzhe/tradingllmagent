@@ -134,6 +134,14 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertIn("contract:contract_details_missing", readiness["missing_requirements"])
         self.assertIn("market_data:market_data_missing", readiness["missing_requirements"])
 
+    def test_du_account_prefix_is_treated_as_paper_even_without_literal_paper_type(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter(account_id="DU7654321", account_type="individual"))
+
+        event = gateway.connect()
+
+        self.assertEqual(event["event_type"], "connected")
+        self.assertTrue(gateway.account is not None and gateway.account.is_paper)
+
     def test_contract_and_real_time_market_data_complete_readiness(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
 

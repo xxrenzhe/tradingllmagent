@@ -42,11 +42,21 @@ class OfficialIbkrAdapter:
     def connect(self, host: str, port: int, client_id: int) -> dict[str, Any]:
         if self.client is None:
             self._init_client()
+        if self.client.isConnected():
+            return {
+                "connected": True,
+                "host": host,
+                "port": port,
+                "client_id": client_id,
+                "next_valid_order_id": self.next_order_id,
+                "managed_accounts": list(self.managed_accounts),
+            }
         self.connected_event.clear()
         self.next_valid_id_event.clear()
         self.client.connect(host, port, client_id)
-        self.thread = threading.Thread(target=self.client.run, name="ibkr-api", daemon=True)
-        self.thread.start()
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self.client.run, name="ibkr-api", daemon=True)
+            self.thread.start()
         self._wait(self.next_valid_id_event, 10.0, "timed_out_waiting_for_next_valid_id")
         self.connected_event.set()
         return {
@@ -62,6 +72,7 @@ class OfficialIbkrAdapter:
         if self.client is not None and self.client.isConnected():
             self.client.disconnect()
         self.connected_event.clear()
+        self.thread = None
         return {"connected": False}
 
     def account_summary(self) -> dict[str, Any]:
