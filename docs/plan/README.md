@@ -22,6 +22,7 @@ Older documents remain useful as design history, but they should not override ne
 - `docs/plan/10.strategy-search-best-practices-optimization-plan.md`: authoritative for first-search failure analysis, online best-practice research synthesis, executable feature/grammar upgrades, inverse mutation, pre-screening, and the next strategy-search optimization plan.
 - `docs/plan/11.nq-historical-data-acquisition-plan.md`: authoritative for NQ historical data source selection, FirstRate/Databento data layering, free-data boundaries, acquisition sequencing, and quote-level execution validation.
 - `docs/plan/12.vol-execution-aware-llm-trading-optimization-plan.md`: authoritative for VOL-centered simple strategy search, OHLCV-to-execution validation boundaries, limit-order modeling, paper shadow LLM review, and the next NQ_CME optimization loop.
+- `docs/plan/13.strategy-evaluation-scorecard-and-top3-report-standard.md`: authoritative for excellent-strategy evaluation dimensions, hard filters, annualized-return-first ranking, and cross-timeframe Top3 report selection.
 
 ## 3. Version Boundaries
 
