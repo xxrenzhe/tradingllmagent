@@ -98,6 +98,7 @@ def mine_databento_nq_profitable_strategies(
         gross_candidates.extend(_run_ohlcv_family_scans(con, context, 0.0))
         walk_forward = _run_walk_forward_stability_search(con, context, date_from, date_to, round_trip_cost_usd)
         regime_first = _run_regime_first_edge_search(con, context, round_trip_cost_usd)
+        regime_basket_replays = _run_regime_basket_replays(con, context, regime_first, round_trip_cost_usd)
     finally:
         con.close()
 
@@ -186,6 +187,13 @@ def mine_databento_nq_profitable_strategies(
             "walk_forward_stable_candidate_count": len(walk_forward["stable_candidates"]),
             "regime_first_candidate_count": len(regime_first["top_regime_edges"]),
             "qualified_regime_basket_count": len(regime_first.get("qualified_regime_baskets", [])),
+            "qualified_regime_basket_replay_count": len(
+                [
+                    replay
+                    for replay in regime_basket_replays
+                    if replay["one_trade_per_timestamp"]["target_qualified"]
+                ]
+            ),
             "best_cost_adjusted_net_pnl": qualified[0]["net_pnl"] if qualified else None,
             "best_gross_net_pnl": gross_only[0]["gross_net_pnl"] if gross_only else None,
             "best_regime_break_even_cost_usd": regime_first["top_regime_edges"][0]["break_even_cost_usd"]
@@ -196,6 +204,7 @@ def mine_databento_nq_profitable_strategies(
         "gross_only_candidates": gross_only,
         "walk_forward": walk_forward,
         "regime_first": regime_first,
+        "regime_basket_replays": regime_basket_replays,
         "blocked_next_steps": [] if qualified else [
             "No single scanned candidate met annual_trades > 1000, win_probability > 0.53, and cost-adjusted net_pnl > 0.",
             "Stay in OHLCV-only research mode: add walk-forward family search before trusting any in-sample candidate.",
@@ -459,6 +468,256 @@ def _regime_basket(
     }
     payload["basket_hash"] = stable_hash(payload)
     return payload
+
+
+def _run_regime_basket_replays(
+    con: duckdb.DuckDBPyConnection,
+    context: dict[str, Any],
+    regime_first: dict[str, Any],
+    round_trip_cost_usd: float,
+) -> list[dict[str, Any]]:
+    baskets = regime_first.get("qualified_regime_baskets") or []
+    return [
+        _replay_regime_basket(con, context, basket, round_trip_cost_usd)
+        for basket in baskets
+    ]
+
+
+def _replay_regime_basket(
+    con: duckdb.DuckDBPyConnection,
+    context: dict[str, Any],
+    basket: dict[str, Any],
+    round_trip_cost_usd: float,
+) -> dict[str, Any]:
+    signals = []
+    edges = basket.get("constituent_edges") or []
+    for horizon_minutes in sorted({int(edge["horizon_minutes"]) for edge in edges}):
+        horizon_edges = [
+            (index, edge)
+            for index, edge in enumerate(edges)
+            if int(edge["horizon_minutes"]) == horizon_minutes
+        ]
+        signals.extend(
+            _replay_regime_edges_for_horizon(
+                con,
+                context,
+                horizon_minutes=horizon_minutes,
+                indexed_edges=horizon_edges,
+                round_trip_cost_usd=round_trip_cost_usd,
+            )
+        )
+    day_count = _trading_day_count(con, context)
+    independent = _replay_metrics(signals, day_count, context)
+    by_timestamp = {}
+    for signal in sorted(signals, key=lambda row: (row["timestamp"], int(row["rule_index"]))):
+        by_timestamp.setdefault(signal["timestamp"], signal)
+    one_trade = _replay_metrics(list(by_timestamp.values()), day_count, context)
+    payload = {
+        "basket_id": basket.get("basket_id"),
+        "basket_hash": basket.get("basket_hash"),
+        "edge_count": len(edges),
+        "round_trip_cost_usd": round_trip_cost_usd,
+        "independent_rule_slots": independent,
+        "one_trade_per_timestamp": one_trade,
+        "replay_mode_caveat": (
+            "independent_rule_slots allows each constituent edge to trade; "
+            "one_trade_per_timestamp keeps the first constituent edge per bar to reduce overlap."
+        ),
+    }
+    payload["replay_hash"] = stable_hash(payload)
+    return payload
+
+
+def _replay_regime_edges_for_horizon(
+    con: duckdb.DuckDBPyConnection,
+    context: dict[str, Any],
+    *,
+    horizon_minutes: int,
+    indexed_edges: Sequence[tuple[int, dict[str, Any]]],
+    round_trip_cost_usd: float,
+) -> list[dict[str, Any]]:
+    if not indexed_edges:
+        return []
+    horizon_bars = max(1, (horizon_minutes + int(context["timeframe_minutes"]) - 1) // int(context["timeframe_minutes"]))
+    values = ", ".join(
+        "("
+        f"{index}, "
+        f"'{_sql_string(str(edge['scan_type']))}', "
+        f"'{_sql_string(str(edge['session_bucket']))}', "
+        f"{int(edge['dow'])}, "
+        f"{int(edge['trend_bin'])}, "
+        f"{int(edge['volume_bin'])}, "
+        f"{int(edge['range_bin'])}, "
+        f"{1 if edge['direction_label'] == 'long' else -1}"
+        ")"
+        for index, edge in indexed_edges
+    )
+    return _fetch_dicts(
+        con,
+        f"""
+        WITH edges(rule_index, scan_type, session_bucket, dow, trend_bin, volume_bin, range_bin, direction) AS (
+          VALUES {values}
+        ), raw AS (
+          SELECT timestamp, open, high, low, close, tick_count,
+                 CAST(strftime(timestamp, '%H') AS INTEGER)*60 + CAST(strftime(timestamp, '%M') AS INTEGER) AS moday,
+                 CAST(strftime(timestamp, '%w') AS INTEGER) AS dow,
+                 close - lag(close, 1) OVER (ORDER BY timestamp) AS ret1,
+                 close - lag(close, 5) OVER (ORDER BY timestamp) AS ret5,
+                 avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS ma20,
+                 avg(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS ma50,
+                 stddev_pop(close) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS close_std50,
+                 avg(tick_count) OVER (ORDER BY timestamp ROWS BETWEEN 50 PRECEDING AND 1 PRECEDING) AS vol50,
+                 avg(high-low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS range20,
+                 max(high) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS high20_prev,
+                 min(low) OVER (ORDER BY timestamp ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS low20_prev,
+                 lead(close, {horizon_bars}) OVER (ORDER BY timestamp) AS future_close,
+                 lead(timestamp, {horizon_bars}) OVER (ORDER BY timestamp) AS future_ts
+          FROM read_parquet('{context["parquet_glob"]}')
+          WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
+        ), feats AS (
+          SELECT *,
+                 CASE
+                   WHEN moday BETWEEN 0 AND 359 THEN 'utc_0000_0559'
+                   WHEN moday BETWEEN 360 AND 719 THEN 'utc_0600_1159'
+                   WHEN moday BETWEEN 720 AND 1019 THEN 'utc_1200_1659'
+                   WHEN moday BETWEEN 1020 AND 1259 THEN 'utc_1700_2059'
+                   ELSE 'utc_2100_2359'
+                 END AS session_bucket,
+                 CASE WHEN close > ma50 THEN 1 ELSE -1 END AS trend_bin,
+                 CASE WHEN tick_count >= vol50*2.0 THEN 3 WHEN tick_count >= vol50*1.5 THEN 2 WHEN tick_count >= vol50 THEN 1 WHEN tick_count < vol50*0.7 THEN -1 ELSE 0 END AS volume_bin,
+                 CASE WHEN (high-low) >= range20*2.0 THEN 3 WHEN (high-low) >= range20*1.5 THEN 2 WHEN (high-low) >= range20 THEN 1 WHEN (high-low) < range20*0.7 THEN -1 ELSE 0 END AS range_bin,
+                 CASE WHEN close_std50 > 0 THEN (close-ma50)/close_std50 ELSE 0 END AS z50,
+                 CASE WHEN high > low THEN (close-open)/(high-low) ELSE 0 END AS body_to_range,
+                 CASE WHEN close > high20_prev THEN 1 WHEN close < low20_prev THEN -1 ELSE 0 END AS breakout20
+          FROM raw
+          WHERE future_close IS NOT NULL AND ma20 IS NOT NULL AND ma50 IS NOT NULL AND close_std50 IS NOT NULL
+            AND vol50 IS NOT NULL AND range20 IS NOT NULL
+            AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon_minutes} AND {horizon_minutes + int(context["continuity_tolerance_minutes"])}
+        ), signals AS (
+          SELECT timestamp, 'breakout_continuation' AS scan_type, session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1 AS direction, future_close, close
+          FROM feats
+          WHERE breakout20 = 1 AND trend_bin = 1 AND volume_bin >= 1
+          UNION ALL
+          SELECT timestamp, 'breakout_continuation', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE breakout20 = -1 AND trend_bin = -1 AND volume_bin >= 1
+          UNION ALL
+          SELECT timestamp, 'range_expansion_continuation', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE body_to_range >= 0.6 AND range_bin >= 2 AND volume_bin >= 1
+          UNION ALL
+          SELECT timestamp, 'range_expansion_continuation', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE body_to_range <= -0.6 AND range_bin >= 2 AND volume_bin >= 1
+          UNION ALL
+          SELECT timestamp, 'trend_pullback_reclaim', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE trend_bin = 1 AND ret5 < 0 AND ret1 > 0 AND close > ma20
+          UNION ALL
+          SELECT timestamp, 'trend_pullback_reclaim', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE trend_bin = -1 AND ret5 > 0 AND ret1 < 0 AND close < ma20
+          UNION ALL
+          SELECT timestamp, 'zscore_mean_reversion', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE z50 >= 2 AND volume_bin <= 1
+          UNION ALL
+          SELECT timestamp, 'zscore_mean_reversion', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE z50 <= -2 AND volume_bin <= 1
+          UNION ALL
+          SELECT timestamp, 'volume_climax_reversion', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE z50 >= 1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
+          UNION ALL
+          SELECT timestamp, 'volume_climax_reversion', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE z50 <= -1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
+          UNION ALL
+          SELECT timestamp, 'low_volume_drift', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, 1, future_close, close
+          FROM feats
+          WHERE trend_bin = 1 AND volume_bin = -1 AND ret1 > 0
+          UNION ALL
+          SELECT timestamp, 'low_volume_drift', session_bucket, dow,
+                 trend_bin, volume_bin, range_bin, -1, future_close, close
+          FROM feats
+          WHERE trend_bin = -1 AND volume_bin = -1 AND ret1 < 0
+        ), matched AS (
+          SELECT s.timestamp, e.rule_index, {horizon_minutes} AS horizon_minutes,
+                 CASE WHEN e.direction = 1
+                   THEN (s.future_close-s.close)*{context["point_value"]} - {round_trip_cost_usd}
+                   ELSE (s.close-s.future_close)*{context["point_value"]} - {round_trip_cost_usd}
+                 END AS pnl
+          FROM signals s
+          JOIN edges e
+            ON s.scan_type = e.scan_type
+           AND s.session_bucket = e.session_bucket
+           AND s.dow = e.dow
+           AND s.trend_bin = e.trend_bin
+           AND s.volume_bin = e.volume_bin
+           AND s.range_bin = e.range_bin
+           AND s.direction = e.direction
+        )
+        SELECT timestamp, rule_index, horizon_minutes, pnl
+        FROM matched
+        ORDER BY timestamp, rule_index
+        """,
+    )
+
+
+def _replay_metrics(
+    signals: Sequence[dict[str, Any]],
+    day_count: int,
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    trades = len(signals)
+    net_pnl = sum(float(signal["pnl"]) for signal in signals)
+    wins = [float(signal["pnl"]) for signal in signals if float(signal["pnl"]) > 0]
+    losses = [float(signal["pnl"]) for signal in signals if float(signal["pnl"]) < 0]
+    annual_trades = trades / day_count * 365 if day_count else 0.0
+    win_probability = len(wins) / trades if trades else 0.0
+    profit_factor = sum(wins) / abs(sum(losses)) if losses else None
+    return {
+        "trades": trades,
+        "annual_trades": annual_trades,
+        "net_pnl": net_pnl,
+        "win_probability": win_probability,
+        "avg_pnl": net_pnl / trades if trades else None,
+        "profit_factor": profit_factor,
+        "target_qualified": (
+            annual_trades > float(context["min_annual_trades"])
+            and win_probability > float(context["min_win_probability"])
+            and net_pnl > 0
+        ),
+    }
+
+
+def _trading_day_count(con: duckdb.DuckDBPyConnection, context: dict[str, Any]) -> int:
+    return int(
+        con.execute(
+            f"""
+            SELECT count(DISTINCT CAST(timestamp AS DATE))
+            FROM read_parquet('{context["parquet_glob"]}')
+            WHERE timestamp >= '{context["date_from"]}' AND timestamp < '{context["date_to_exclusive"]}'
+            """
+        ).fetchone()[0]
+        or 0
+    )
+
+
+def _sql_string(value: str) -> str:
+    return value.replace("'", "''")
 
 
 def _run_all_candidate_scans(con: duckdb.DuckDBPyConnection, context: dict[str, Any], cost: float) -> list[dict[str, Any]]:
