@@ -1469,7 +1469,7 @@
       }
     ]
   },
-  "report_hash": "c944ea4d72af2ad6d978ce3f50971a6425730ed55e7726712da10629f5d05e14",
+  "report_hash": "ff1ba6dcad8f951fcb630aea378a9ced24bbd0761e693ce355443418617ec28d",
   "round_trip_cost_usd": 15.0,
   "schema_version": 1,
   "search_space": {
@@ -1609,8 +1609,10 @@
     "bar_file_count": 5805,
     "best_cost_adjusted_net_pnl": null,
     "best_gross_net_pnl": null,
+    "best_optimized_regime_basket_subset": null,
     "best_regime_break_even_cost_usd": 33.275470473718364,
     "gross_only_candidate_count": 0,
+    "optimized_regime_basket_subset_count": 0,
     "qualified_candidate_count": 0,
     "qualified_regime_basket_count": 0,
     "qualified_regime_basket_replay_count": 0,
