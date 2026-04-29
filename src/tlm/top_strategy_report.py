@@ -46,6 +46,7 @@ def generate_top_strategy_html_report(
         }
         for path in report_paths
     ]
+    capital_base_usd = float(next((report.get("starting_equity") for report in mining_reports if report.get("starting_equity") is not None), 100_000.0))
     strategies = _select_top_yearly_strategies(mining_reports, top_n=top_n, objective=objective)
     round_trip_cost_usd = max(float(report.get("round_trip_cost_usd") or 0.0) for report in mining_reports)
 
@@ -67,6 +68,7 @@ def generate_top_strategy_html_report(
                     signals=signals,
                     sample_trades=samples,
                     bar_minutes=bar_minutes,
+                    capital_base_usd=capital_base_usd,
                 )
             )
     finally:
@@ -87,6 +89,7 @@ def generate_top_strategy_html_report(
         "date_from": date_from,
         "date_to": date_to,
         "round_trip_cost_usd": round_trip_cost_usd,
+        "capital_base_usd": capital_base_usd,
         "selection_objective": objective,
         "selection_policy": _selection_policy(objective),
         "strategy_count": len(enriched),
@@ -368,15 +371,18 @@ def _enrich_strategy(
     signals: Sequence[dict[str, Any]],
     sample_trades: Sequence[dict[str, Any]],
     bar_minutes: int,
+    capital_base_usd: float,
 ) -> dict[str, Any]:
     day_count = _signals_covered_days(signals)
     replay_metrics = _period_replay_metrics(signals, context)
     replay_metrics["annualized_net_pnl"] = float(replay_metrics.get("net_pnl") or 0.0) / max(1, day_count) * 365.0
-    monthly = _monthly_signal_results(signals)
+    replay_metrics = _with_return_metrics(replay_metrics, capital_base_usd)
+    monthly = [_with_return_metrics(row, capital_base_usd) for row in _monthly_signal_results(signals)]
     equity_curve = _equity_curve(signals)
-    benchmark = _benchmark_bundle(con, context, signals)
+    benchmark = _benchmark_bundle(con, context, signals, capital_base_usd=capital_base_usd)
     excess_summary = _excess_summary(replay_metrics, benchmark["metrics"])
-    annual_excess = _merge_period_results(_yearly_signal_results(signals), benchmark["annual_results"], "year")
+    annual_results = [_with_return_metrics(row, capital_base_usd) for row in _yearly_signal_results(signals)]
+    annual_excess = _merge_period_results(annual_results, benchmark["annual_results"], "year")
     monthly_excess = _merge_period_results(monthly, benchmark["monthly_results"], "period")
     samples = []
     for sample in sample_trades:
@@ -392,7 +398,7 @@ def _enrich_strategy(
     return {
         **strategy,
         "replayed_metrics": replay_metrics,
-        "annual_results": _yearly_signal_results(signals),
+        "annual_results": annual_results,
         "monthly_results": monthly,
         "equity_curve": equity_curve,
         "equity_curve_sampled": _sample_series(equity_curve, max_points=1200),
@@ -451,6 +457,8 @@ def _benchmark_bundle(
     con: duckdb.DuckDBPyConnection,
     context: dict[str, Any],
     signals: Sequence[dict[str, Any]],
+    *,
+    capital_base_usd: float,
 ) -> dict[str, Any]:
     if not signals:
         return {
@@ -495,12 +503,13 @@ def _benchmark_bundle(
             }
         )
     metrics = _benchmark_metrics(curve)
+    metrics = _with_return_metrics(metrics, capital_base_usd)
     return {
         "metrics": metrics,
         "equity_curve": curve,
         "equity_curve_sampled": _sample_series(curve, max_points=1200),
-        "annual_results": _benchmark_period_results(curve, "year", point_value),
-        "monthly_results": _benchmark_period_results(curve, "month", point_value),
+        "annual_results": [_with_return_metrics(row, capital_base_usd) for row in _benchmark_period_results(curve, "year", point_value)],
+        "monthly_results": [_with_return_metrics(row, capital_base_usd) for row in _benchmark_period_results(curve, "month", point_value)],
     }
 
 
@@ -580,7 +589,9 @@ def _merge_period_results(
             {
                 **row,
                 "benchmark_net_pnl": float(bench.get("net_pnl") or 0.0),
+                "benchmark_net_return": float(bench.get("net_return") or 0.0),
                 "excess_net_pnl": float(row.get("net_pnl") or 0.0) - float(bench.get("net_pnl") or 0.0),
+                "excess_net_return": float(row.get("net_return") or 0.0) - float(bench.get("net_return") or 0.0),
             }
         )
     return merged
@@ -594,11 +605,31 @@ def _excess_summary(strategy_metrics: dict[str, Any], benchmark_metrics: dict[st
     return {
         "strategy_net_pnl": strategy_net,
         "strategy_annualized_net_pnl": strategy_annualized,
+        "strategy_net_return": float(strategy_metrics.get("net_return") or 0.0),
+        "strategy_annualized_net_return": float(strategy_metrics.get("annualized_net_return") or 0.0),
         "benchmark_net_pnl": benchmark_net,
         "benchmark_annualized_net_pnl": benchmark_annualized,
+        "benchmark_net_return": float(benchmark_metrics.get("net_return") or 0.0),
+        "benchmark_annualized_net_return": float(benchmark_metrics.get("annualized_net_return") or 0.0),
         "excess_net_pnl": strategy_net - benchmark_net,
         "excess_annualized_net_pnl": strategy_annualized - benchmark_annualized,
+        "excess_net_return": float(strategy_metrics.get("net_return") or 0.0) - float(benchmark_metrics.get("net_return") or 0.0),
+        "excess_annualized_net_return": float(strategy_metrics.get("annualized_net_return") or 0.0) - float(benchmark_metrics.get("annualized_net_return") or 0.0),
     }
+
+
+def _with_return_metrics(metrics: dict[str, Any], capital_base_usd: float) -> dict[str, Any]:
+    enriched = dict(metrics)
+    base = max(1.0, float(capital_base_usd))
+    enriched["capital_base_usd"] = base
+    enriched["net_return"] = float(enriched.get("net_pnl") or 0.0) / base
+    annualized_net_pnl = enriched.get("annualized_net_pnl")
+    if annualized_net_pnl is not None:
+        enriched["annualized_net_return"] = float(annualized_net_pnl) / base
+    max_drawdown = enriched.get("max_drawdown")
+    if max_drawdown is not None:
+        enriched["max_drawdown_return"] = float(max_drawdown) / base
+    return enriched
 
 
 def _sample_trades(signals: Sequence[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -758,7 +789,7 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
 <body>
   <header>
     <h1>NQ_CME Top 3 策略表现报告</h1>
-    <div class="meta">数据: {html.escape(str(payload["symbol"]))} {html.escape(str(payload["timeframe"]))} OHLCV, {html.escape(str(payload["date_from"]))} 至 {html.escape(str(payload["date_to"]))}; 成本: {fmt_usd(payload["round_trip_cost_usd"])} / trade</div>
+    <div class="meta">数据: {html.escape(str(payload["symbol"]))} {html.escape(str(payload["timeframe"]))} OHLCV, {html.escape(str(payload["date_from"]))} 至 {html.escape(str(payload["date_to"]))}; 成本: {fmt_usd(payload["round_trip_cost_usd"])} / trade; 收益率基准资金: {fmt_usd(payload["capital_base_usd"])}</div>
   </header>
   <main>
     <section class="section">
@@ -766,7 +797,7 @@ def _render_html(payload: dict[str, Any], data_filename: str) -> str:
       <p>本报告从已有挖掘结果中选择 Top 3，并按策略构成去重。选择目标: {html.escape(str(payload.get("selection_objective")))}；选择规则: {html.escape(str(payload.get("selection_policy")))}。所有交易均基于 OHLCV bar 级重放，不能证明真实 bid/ask、限价成交率或排队成本。</p>
       <p class="note">来源报告: {'; '.join(f"{html.escape(str(row['timeframe']))} -> {html.escape(str(row['path']))} (候选 {row['yearly_profitable_candidate_count']})" for row in payload.get('source_reports', []))}</p>
       <table>
-        <thead><tr><th>策略</th><th>周期</th><th>激活年份</th><th>边数量</th><th>净收益</th><th>年化净收益</th><th>PF</th><th>胜率</th><th>门槛</th></tr></thead>
+        <thead><tr><th>策略</th><th>周期</th><th>激活年份</th><th>边数量</th><th>净收益</th><th>收益率</th><th>年化净收益</th><th>年化收益率</th><th>PF</th><th>胜率</th><th>门槛</th></tr></thead>
         <tbody>{overview_rows}</tbody>
       </table>
       <p class="note">配套结构化数据: {html.escape(data_filename)}</p>
@@ -929,22 +960,32 @@ def _strategy_section(strategy: dict[str, Any]) -> str:
       <p class="note">来源: {html.escape(str(strategy.get("source_timeframe")))} | 激活年份: {html.escape(str(strategy.get("activation_start_year")))} | 候选来源: {html.escape(str(strategy.get("source_report_path")))} | 硬门槛通过: {evaluation.get("passed_gate_count", 0)}/{evaluation.get("total_gate_count", 0)} | 年度盈利占比: {fmt_pct(evaluation.get("positive_year_ratio"))}</p>
       <div class="grid">
         {_metric("净收益", fmt_usd(metrics["net_pnl"]))}
+        {_metric("净收益率", fmt_pct(metrics.get("net_return")))}
         {_metric("Profit Factor", fmt_num(metrics["profit_factor"], 3))}
         {_metric("胜率", fmt_pct(metrics["win_probability"]))}
         {_metric("年化交易", fmt_num(metrics["annual_trades"], 1))}
         {_metric("年化净收益", fmt_usd(metrics.get("annualized_net_pnl")))}
+        {_metric("年化收益率", fmt_pct(metrics.get("annualized_net_return")))}
         {_metric("最大回撤", fmt_usd(metrics["max_drawdown"]))}
+        {_metric("最大回撤率", fmt_pct(metrics.get("max_drawdown_return")))}
         {_metric("交易数", fmt_int(metrics["trades"]))}
       </div>
       <h3>基准与超额收益</h3>
       <div class="grid">
         {_metric("策略净收益", fmt_usd(excess["strategy_net_pnl"]))}
+        {_metric("策略净收益率", fmt_pct(excess["strategy_net_return"]))}
         {_metric("策略年化净收益", fmt_usd(excess["strategy_annualized_net_pnl"]))}
+        {_metric("策略年化收益率", fmt_pct(excess["strategy_annualized_net_return"]))}
         {_metric("NQ 持有净收益", fmt_usd(excess["benchmark_net_pnl"]))}
+        {_metric("NQ 持有净收益率", fmt_pct(excess["benchmark_net_return"]))}
         {_metric("NQ 持有年化净收益", fmt_usd(excess["benchmark_annualized_net_pnl"]))}
+        {_metric("NQ 持有年化收益率", fmt_pct(excess["benchmark_annualized_net_return"]))}
         {_metric("超额收益", fmt_usd(excess["excess_net_pnl"]))}
+        {_metric("超额收益率", fmt_pct(excess["excess_net_return"]))}
         {_metric("年化超额收益", fmt_usd(excess["excess_annualized_net_pnl"]))}
+        {_metric("年化超额收益率", fmt_pct(excess["excess_annualized_net_return"]))}
         {_metric("基准最大回撤", fmt_usd(benchmark_metrics["max_drawdown"]))}
+        {_metric("基准最大回撤率", fmt_pct(benchmark_metrics.get("max_drawdown_return")))}
       </div>
       <h3>策略构成</h3>
       <p>{_profile_pills(profile)}</p>
@@ -982,7 +1023,9 @@ def _overview_row(strategy: dict[str, Any]) -> str:
         f"<td>{strategy['activation_start_year']}</td>"
         f"<td>{strategy['edge_count']}</td>"
         f"<td>{fmt_usd(metrics['net_pnl'])}</td>"
+        f"<td>{fmt_pct(metrics.get('net_return'))}</td>"
         f"<td>{fmt_usd(metrics.get('annualized_net_pnl'))}</td>"
+        f"<td>{fmt_pct(metrics.get('annualized_net_return'))}</td>"
         f"<td>{fmt_num(metrics['profit_factor'], 3)}</td>"
         f"<td>{fmt_pct(metrics['win_probability'])}</td>"
         f"<td>{int(evaluation.get('passed_gate_count') or 0)}/{int(evaluation.get('total_gate_count') or 0)}</td></tr>"
@@ -1025,27 +1068,29 @@ def _edge_rows(edges: Sequence[dict[str, Any]]) -> str:
 
 
 def _period_rows(rows: Sequence[dict[str, Any]], label_keys: Sequence[str]) -> str:
-    out = ["<thead><tr><th>周期</th><th>交易数</th><th>净收益</th><th>PF</th><th>胜率</th><th>最大回撤</th></tr></thead><tbody>"]
+    out = ["<thead><tr><th>周期</th><th>交易数</th><th>净收益</th><th>收益率</th><th>PF</th><th>胜率</th><th>最大回撤</th><th>回撤率</th></tr></thead><tbody>"]
     for row in rows:
         label = " ".join(str(row.get(key)) for key in label_keys)
         css = "good" if float(row.get("net_pnl") or 0) >= 0 else "bad"
         out.append(
             f"<tr><td>{html.escape(label)}</td><td>{fmt_int(row.get('trades'))}</td>"
             f"<td class=\"{css}\">{fmt_usd(row.get('net_pnl'))}</td>"
+            f"<td class=\"{css}\">{fmt_pct(row.get('net_return'))}</td>"
             f"<td>{fmt_num(row.get('profit_factor'), 3)}</td>"
             f"<td>{fmt_pct(row.get('win_probability'))}</td>"
-            f"<td>{fmt_usd(row.get('max_drawdown'))}</td></tr>"
+            f"<td>{fmt_usd(row.get('max_drawdown'))}</td>"
+            f"<td>{fmt_pct(row.get('max_drawdown_return'))}</td></tr>"
         )
     out.append("</tbody>")
     return "".join(out)
 
 
 def _cost_stress_rows(rows: Sequence[dict[str, Any]]) -> str:
-    out = ["<thead><tr><th>场景</th><th>额外成本</th><th>净收益</th><th>PF</th><th>胜率</th></tr></thead><tbody>"]
+    out = ["<thead><tr><th>场景</th><th>额外成本</th><th>净收益</th><th>收益率</th><th>PF</th><th>胜率</th></tr></thead><tbody>"]
     for row in rows:
         out.append(
             f"<tr><td>{html.escape(str(row.get('label')))}</td><td>{fmt_usd(row.get('extra_usd_per_trade'))}</td>"
-            f"<td>{fmt_usd(row.get('net_pnl'))}</td><td>{fmt_num(row.get('profit_factor'), 3)}</td>"
+            f"<td>{fmt_usd(row.get('net_pnl'))}</td><td>{fmt_pct(row.get('net_return'))}</td><td>{fmt_num(row.get('profit_factor'), 3)}</td>"
             f"<td>{fmt_pct(row.get('win_probability'))}</td></tr>"
         )
     out.append("</tbody>")
@@ -1053,15 +1098,18 @@ def _cost_stress_rows(rows: Sequence[dict[str, Any]]) -> str:
 
 
 def _excess_period_rows(rows: Sequence[dict[str, Any]], label_keys: Sequence[str]) -> str:
-    out = ["<thead><tr><th>周期</th><th>策略净收益</th><th>基准净收益</th><th>超额收益</th><th>策略PF</th><th>策略胜率</th></tr></thead><tbody>"]
+    out = ["<thead><tr><th>周期</th><th>策略净收益</th><th>策略收益率</th><th>基准净收益</th><th>基准收益率</th><th>超额收益</th><th>超额收益率</th><th>策略PF</th><th>策略胜率</th></tr></thead><tbody>"]
     for row in rows:
         label = " ".join(str(row.get(key)) for key in label_keys)
         excess_css = "good" if float(row.get("excess_net_pnl") or 0) >= 0 else "bad"
         out.append(
             f"<tr><td>{html.escape(label)}</td>"
             f"<td>{fmt_usd(row.get('net_pnl'))}</td>"
+            f"<td>{fmt_pct(row.get('net_return'))}</td>"
             f"<td>{fmt_usd(row.get('benchmark_net_pnl'))}</td>"
+            f"<td>{fmt_pct(row.get('benchmark_net_return'))}</td>"
             f"<td class=\"{excess_css}\">{fmt_usd(row.get('excess_net_pnl'))}</td>"
+            f"<td class=\"{excess_css}\">{fmt_pct(row.get('excess_net_return'))}</td>"
             f"<td>{fmt_num(row.get('profit_factor'), 3)}</td>"
             f"<td>{fmt_pct(row.get('win_probability'))}</td></tr>"
         )

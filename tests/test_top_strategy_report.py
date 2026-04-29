@@ -13,6 +13,7 @@ from tlm.top_strategy_report import (
     _merge_period_results,
     _monthly_signal_results,
     _select_top_yearly_strategies,
+    _with_return_metrics,
 )
 
 
@@ -390,17 +391,19 @@ class TopStrategyReportTests(unittest.TestCase):
             {"timestamp": "2025-01-03 10:00:00", "close": 110.0, "equity": 200.0, "pnl": 200.0},
             {"timestamp": "2025-01-04 10:00:00", "close": 105.0, "equity": 100.0, "pnl": 100.0},
         ]
-        metrics = _benchmark_metrics(curve)
+        metrics = _with_return_metrics(_benchmark_metrics(curve), 100_000.0)
         merged = _merge_period_results(
-            [{"period": "2025-01", "net_pnl": 150.0, "profit_factor": 1.2, "win_probability": 0.6}],
-            [{"period": "2025-01", "net_pnl": 100.0}],
+            [_with_return_metrics({"period": "2025-01", "net_pnl": 150.0, "profit_factor": 1.2, "win_probability": 0.6}, 100_000.0)],
+            [_with_return_metrics({"period": "2025-01", "net_pnl": 100.0}, 100_000.0)],
             "period",
         )
 
         self.assertEqual(metrics["net_pnl"], 100.0)
         self.assertGreater(metrics["annualized_net_pnl"], 0.0)
+        self.assertEqual(metrics["net_return"], 0.001)
         self.assertEqual(metrics["max_drawdown"], 100.0)
         self.assertEqual(merged[0]["excess_net_pnl"], 50.0)
+        self.assertEqual(merged[0]["excess_net_return"], 0.0005)
 
     def test_benchmark_period_results_use_equity_boundaries(self) -> None:
         curve = [
