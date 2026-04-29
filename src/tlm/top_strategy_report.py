@@ -394,12 +394,15 @@ def _benchmark_period_results(curve: Sequence[dict[str, Any]], mode: str, point_
         key = ts.year if mode == "year" else (ts.year, ts.month)
         grouped[key].append(row)
     results = []
+    previous_period_end_equity = 0.0
     for key, rows in sorted(grouped.items()):
         first = rows[0]
         last = rows[-1]
         first_ts = datetime.fromisoformat(str(first["timestamp"]))
         last_ts = datetime.fromisoformat(str(last["timestamp"]))
-        period_pnl = (float(last["close"]) - float(first["close"])) * point_value
+        period_end_equity = float(last["equity"])
+        period_pnl = period_end_equity - previous_period_end_equity
+        previous_period_end_equity = period_end_equity
         payload = {
             "period_from": first_ts.date().isoformat(),
             "period_to": last_ts.date().isoformat(),

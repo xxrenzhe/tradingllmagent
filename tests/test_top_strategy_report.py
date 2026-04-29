@@ -5,6 +5,7 @@ from datetime import datetime
 
 from tlm.top_strategy_report import (
     _benchmark_metrics,
+    _benchmark_period_results,
     _candlestick_svg,
     _merge_period_results,
     _monthly_signal_results,
@@ -196,6 +197,20 @@ class TopStrategyReportTests(unittest.TestCase):
         self.assertGreater(metrics["annualized_net_pnl"], 0.0)
         self.assertEqual(metrics["max_drawdown"], 100.0)
         self.assertEqual(merged[0]["excess_net_pnl"], 50.0)
+
+    def test_benchmark_period_results_use_equity_boundaries(self) -> None:
+        curve = [
+            {"timestamp": "2025-01-31 23:59:00", "close": 100.0, "equity": 0.0, "pnl": 0.0},
+            {"timestamp": "2025-02-01 00:00:00", "close": 110.0, "equity": 200.0, "pnl": 200.0},
+            {"timestamp": "2025-02-28 23:59:00", "close": 120.0, "equity": 400.0, "pnl": 400.0},
+            {"timestamp": "2025-03-01 00:00:00", "close": 115.0, "equity": 300.0, "pnl": 300.0},
+            {"timestamp": "2025-03-31 23:59:00", "close": 130.0, "equity": 600.0, "pnl": 600.0},
+        ]
+
+        monthly = _benchmark_period_results(curve, "month", 20.0)
+
+        self.assertEqual([row["net_pnl"] for row in monthly], [0.0, 400.0, 200.0])
+        self.assertEqual(sum(row["net_pnl"] for row in monthly), 600.0)
 
     def test_candlestick_svg_contains_entry_and_exit_markers(self) -> None:
         bars = [
