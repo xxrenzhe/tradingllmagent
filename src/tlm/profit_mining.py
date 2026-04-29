@@ -1149,62 +1149,62 @@ def _replay_regime_edges_for_horizon(
             AND vol50 IS NOT NULL AND range20 IS NOT NULL
             AND (epoch(future_ts)-epoch(timestamp))/60.0 BETWEEN {horizon_minutes} AND {horizon_minutes + int(context["continuity_tolerance_minutes"])}
         ), signals AS (
-          SELECT timestamp, 'breakout_continuation' AS scan_type, session_bucket, dow,
+          SELECT timestamp, future_ts, 'breakout_continuation' AS scan_type, session_bucket, dow,
                  trend_bin, volume_bin, range_bin, 1 AS direction, future_close, close
           FROM feats
           WHERE breakout20 = 1 AND trend_bin = 1 AND volume_bin >= 1
           UNION ALL
-          SELECT timestamp, 'breakout_continuation', session_bucket, dow,
+          SELECT timestamp, future_ts, 'breakout_continuation', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, -1, future_close, close
           FROM feats
           WHERE breakout20 = -1 AND trend_bin = -1 AND volume_bin >= 1
           UNION ALL
-          SELECT timestamp, 'range_expansion_continuation', session_bucket, dow,
+          SELECT timestamp, future_ts, 'range_expansion_continuation', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, 1, future_close, close
           FROM feats
           WHERE body_to_range >= 0.6 AND range_bin >= 2 AND volume_bin >= 1
           UNION ALL
-          SELECT timestamp, 'range_expansion_continuation', session_bucket, dow,
+          SELECT timestamp, future_ts, 'range_expansion_continuation', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, -1, future_close, close
           FROM feats
           WHERE body_to_range <= -0.6 AND range_bin >= 2 AND volume_bin >= 1
           UNION ALL
-          SELECT timestamp, 'trend_pullback_reclaim', session_bucket, dow,
+          SELECT timestamp, future_ts, 'trend_pullback_reclaim', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, 1, future_close, close
           FROM feats
           WHERE trend_bin = 1 AND ret5 < 0 AND ret1 > 0 AND close > ma20
           UNION ALL
-          SELECT timestamp, 'trend_pullback_reclaim', session_bucket, dow,
+          SELECT timestamp, future_ts, 'trend_pullback_reclaim', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, -1, future_close, close
           FROM feats
           WHERE trend_bin = -1 AND ret5 > 0 AND ret1 < 0 AND close < ma20
           UNION ALL
-          SELECT timestamp, 'zscore_mean_reversion', session_bucket, dow,
+          SELECT timestamp, future_ts, 'zscore_mean_reversion', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, -1, future_close, close
           FROM feats
           WHERE z50 >= 2 AND volume_bin <= 1
           UNION ALL
-          SELECT timestamp, 'zscore_mean_reversion', session_bucket, dow,
+          SELECT timestamp, future_ts, 'zscore_mean_reversion', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, 1, future_close, close
           FROM feats
           WHERE z50 <= -2 AND volume_bin <= 1
           UNION ALL
-          SELECT timestamp, 'volume_climax_reversion', session_bucket, dow,
+          SELECT timestamp, future_ts, 'volume_climax_reversion', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, -1, future_close, close
           FROM feats
           WHERE z50 >= 1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
           UNION ALL
-          SELECT timestamp, 'volume_climax_reversion', session_bucket, dow,
+          SELECT timestamp, future_ts, 'volume_climax_reversion', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, 1, future_close, close
           FROM feats
           WHERE z50 <= -1.5 AND volume_bin >= 2 AND abs(body_to_range) <= 0.35
           UNION ALL
-          SELECT timestamp, 'low_volume_drift', session_bucket, dow,
+          SELECT timestamp, future_ts, 'low_volume_drift', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, 1, future_close, close
           FROM feats
           WHERE trend_bin = 1 AND volume_bin = -1 AND ret1 > 0
           UNION ALL
-          SELECT timestamp, 'low_volume_drift', session_bucket, dow,
+          SELECT timestamp, future_ts, 'low_volume_drift', session_bucket, dow,
                  trend_bin, volume_bin, range_bin, -1, future_close, close
           FROM feats
           WHERE trend_bin = -1 AND volume_bin = -1 AND ret1 < 0
