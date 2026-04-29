@@ -144,6 +144,24 @@ def mine_databento_nq_profitable_strategies(
         ),
         reverse=True,
     )
+    adaptive_recent_regime_candidates = [
+        {
+            "basket_id": replay["basket_id"],
+            "basket_hash": replay["basket_hash"],
+            **candidate,
+        }
+        for replay in regime_basket_replays
+        for candidate in replay.get("adaptive_recent_regime_candidates", [])
+    ]
+    adaptive_recent_regime_candidates = sorted(
+        adaptive_recent_regime_candidates,
+        key=lambda row: (
+            _profit_factor_score(row["test"].get("profit_factor")),
+            float(row["test"].get("net_pnl") or 0),
+            _profit_factor_score(row["full_after_activation"].get("profit_factor")),
+        ),
+        reverse=True,
+    )
     regime_basket_found = bool(regime_first.get("qualified_regime_baskets"))
     report = {
         "schema_version": 1,
@@ -222,6 +240,10 @@ def mine_databento_nq_profitable_strategies(
             "optimized_regime_basket_subset_count": len(optimized_regime_basket_subsets),
             "best_optimized_regime_basket_subset": optimized_regime_basket_subsets[0]
             if optimized_regime_basket_subsets
+            else None,
+            "adaptive_recent_regime_candidate_count": len(adaptive_recent_regime_candidates),
+            "best_adaptive_recent_regime_candidate": adaptive_recent_regime_candidates[0]
+            if adaptive_recent_regime_candidates
             else None,
             "best_cost_adjusted_net_pnl": qualified[0]["net_pnl"] if qualified else None,
             "best_gross_net_pnl": gross_only[0]["gross_net_pnl"] if gross_only else None,
@@ -546,6 +568,7 @@ def _replay_regime_basket(
         "independent_rule_slots": independent,
         "one_trade_per_timestamp": one_trade,
         "optimized_subsets": _optimized_regime_basket_subsets(edges, signals, day_count, context),
+        "adaptive_recent_regime_candidates": _adaptive_recent_regime_candidates(edges, signals, context),
         "replay_mode_caveat": (
             "independent_rule_slots allows each constituent edge to trade; "
             "one_trade_per_timestamp keeps the first constituent edge per bar to reduce overlap."
@@ -607,6 +630,140 @@ def _optimized_regime_basket_subsets(
         ),
         reverse=True,
     )[:20]
+
+
+def _adaptive_recent_regime_candidates(
+    edges: Sequence[dict[str, Any]],
+    signals: Sequence[dict[str, Any]],
+    context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not edges or not signals:
+        return []
+    years = sorted({_signal_timestamp(signal).year for signal in signals})
+    if len(years) < 4:
+        return []
+    test_start_year = max(years) - 2
+    if test_start_year <= min(years):
+        return []
+
+    subset_specs = _adaptive_subset_specs(edges)
+    candidates = []
+    for subset, selection_rule in subset_specs.items():
+        subset_set = set(subset)
+        subset_signals = [signal for signal in signals if int(signal["rule_index"]) in subset_set]
+        for activation_start_year in years:
+            if activation_start_year >= test_start_year:
+                continue
+            active_signals = [
+                signal
+                for signal in subset_signals
+                if _signal_timestamp(signal).year >= activation_start_year
+            ]
+            train_signals = [
+                signal
+                for signal in active_signals
+                if _signal_timestamp(signal).year < test_start_year
+            ]
+            test_signals = [
+                signal
+                for signal in active_signals
+                if _signal_timestamp(signal).year >= test_start_year
+            ]
+            train_one_trade = _one_trade_per_timestamp(train_signals)
+            test_one_trade = _one_trade_per_timestamp(test_signals)
+            full_one_trade = _one_trade_per_timestamp(active_signals)
+            if not train_one_trade or not test_one_trade:
+                continue
+            train_metrics = _period_replay_metrics(train_one_trade, context)
+            test_metrics = _period_replay_metrics(test_one_trade, context)
+            full_metrics = _period_replay_metrics(full_one_trade, context)
+            if not _passes_open_regime_filter(train_metrics, test_metrics, full_metrics, context):
+                continue
+            payload = {
+                "selection_rule": selection_rule,
+                "activation_start_year": activation_start_year,
+                "train_period": _signals_period(train_one_trade),
+                "test_period": _signals_period(test_one_trade),
+                "edge_indexes": list(subset),
+                "edge_count": len(subset),
+                "train": train_metrics,
+                "test": test_metrics,
+                "full_after_activation": full_metrics,
+                "constituent_edges": [_edge_identity(edges[index]) for index in subset],
+                "caveat": (
+                    "Adaptive candidate selected from historical yearly behavior; "
+                    "treat as research until paper-traded forward."
+                ),
+            }
+            payload["candidate_hash"] = stable_hash(payload)
+            candidates.append(payload)
+
+    return sorted(
+        candidates,
+        key=lambda row: (
+            _profit_factor_score(row["test"].get("profit_factor")),
+            float(row["test"].get("net_pnl") or 0),
+            _profit_factor_score(row["full_after_activation"].get("profit_factor")),
+        ),
+        reverse=True,
+    )[:20]
+
+
+def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, ...], str]:
+    edge_indexes = list(range(len(edges)))
+    subset_specs: dict[tuple[int, ...], str] = {tuple(edge_indexes): "all_edges"}
+    for label, key in (
+        ("top_break_even_cost", lambda index: float(edges[index].get("break_even_cost_usd") or 0)),
+        ("top_win_probability", lambda index: float(edges[index].get("cost_adjusted_win_probability") or 0)),
+        ("top_net_pnl", lambda index: float(edges[index].get("cost_adjusted_net_pnl") or 0)),
+    ):
+        ordered = sorted(edge_indexes, key=key, reverse=True)
+        for size in range(1, len(ordered) + 1):
+            subset_specs.setdefault(tuple(sorted(ordered[:size])), label)
+    for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
+        subset = tuple(index for index in edge_indexes if str(edges[index].get("scan_type")) == scan_type)
+        subset_specs.setdefault(subset, f"scan_type:{scan_type}")
+    for session_bucket in sorted({str(edge.get("session_bucket")) for edge in edges}):
+        subset = tuple(index for index in edge_indexes if str(edges[index].get("session_bucket")) == session_bucket)
+        subset_specs.setdefault(subset, f"session_bucket:{session_bucket}")
+    return {subset: label for subset, label in subset_specs.items() if subset}
+
+
+def _passes_open_regime_filter(
+    train_metrics: dict[str, Any],
+    test_metrics: dict[str, Any],
+    full_metrics: dict[str, Any],
+    context: dict[str, Any],
+) -> bool:
+    return (
+        full_metrics["target_qualified"]
+        and train_metrics["net_pnl"] > 0
+        and test_metrics["net_pnl"] > 0
+        and _profit_factor_score(test_metrics["profit_factor"]) > 1.0
+        and test_metrics["annual_trades"] > float(context["min_annual_trades"]) * 0.5
+        and test_metrics["win_probability"] > 0.50
+    )
+
+
+def _period_replay_metrics(signals: Sequence[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any]:
+    ordered = sorted(signals, key=lambda signal: signal["timestamp"])
+    period_days = _signals_covered_days(ordered)
+    metrics = _signal_metrics(ordered, period_days)
+    return {
+        **metrics,
+        "target_qualified": (
+            metrics["annual_trades"] > float(context["min_annual_trades"])
+            and metrics["win_probability"] > float(context["min_win_probability"])
+            and metrics["net_pnl"] > 0
+        ),
+        "yearly_results": _yearly_signal_results(ordered),
+    }
+
+
+def _profit_factor_score(value: Any) -> float:
+    if value is None:
+        return float("inf")
+    return float(value)
 
 
 def _edge_identity(edge: dict[str, Any]) -> dict[str, Any]:
@@ -846,6 +1003,27 @@ def _yearly_signal_results(signals: Sequence[dict[str, Any]]) -> list[dict[str, 
             }
         )
     return results
+
+
+def _signals_period(signals: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    ordered = sorted(signals, key=lambda signal: signal["timestamp"])
+    if not ordered:
+        return {"from": None, "to": None, "covered_days": 0}
+    first_day = _signal_timestamp(ordered[0]).date()
+    last_day = _signal_timestamp(ordered[-1]).date()
+    return {
+        "from": first_day.isoformat(),
+        "to": last_day.isoformat(),
+        "covered_days": _signals_covered_days(ordered),
+    }
+
+
+def _signals_covered_days(signals: Sequence[dict[str, Any]]) -> int:
+    if not signals:
+        return 0
+    first_day = _signal_timestamp(signals[0]).date()
+    last_day = _signal_timestamp(signals[-1]).date()
+    return max(1, (last_day - first_day).days + 1)
 
 
 def _signal_timestamp(signal: dict[str, Any]) -> datetime:
