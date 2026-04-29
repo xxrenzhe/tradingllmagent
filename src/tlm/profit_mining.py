@@ -30,6 +30,7 @@ DEFAULT_TP_SL_PAIRS = (
 OHLCV_FAMILY_HORIZONS = (5, 15, 30, 60, 120)
 REGIME_REPLAY_BASKET_LIMIT = 6
 REGIME_REPLAY_EDGE_LIMIT = 12
+ADAPTIVE_PREFIX_EDGE_COUNTS = (1, 2, 3, 5, 8, 12)
 
 
 def _minute_horizon_specs(requested_minutes: Sequence[int], bar_minutes: int) -> list[tuple[int, int]]:
@@ -1025,13 +1026,14 @@ def _yearly_profitable_candidates(
 def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, ...], str]:
     edge_indexes = list(range(len(edges)))
     subset_specs: dict[tuple[int, ...], str] = {tuple(edge_indexes): "all_edges"}
+    prefix_sizes = _bounded_prefix_sizes(len(edge_indexes))
     for label, key in (
         ("top_break_even_cost", lambda index: float(edges[index].get("break_even_cost_usd") or 0)),
         ("top_win_probability", lambda index: float(edges[index].get("cost_adjusted_win_probability") or 0)),
         ("top_net_pnl", lambda index: float(edges[index].get("cost_adjusted_net_pnl") or 0)),
     ):
         ordered = sorted(edge_indexes, key=key, reverse=True)
-        for size in range(1, len(ordered) + 1):
+        for size in prefix_sizes:
             subset_specs.setdefault(tuple(sorted(ordered[:size])), label)
     for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
         subset = tuple(index for index in edge_indexes if str(edges[index].get("scan_type")) == scan_type)
@@ -1056,6 +1058,8 @@ def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, .
                 if str(edges[index].get("scan_type")) == scan_type
                 and str(edges[index].get("session_bucket")) == session_bucket
             )
+            if len(subset) < 2:
+                continue
             subset_specs.setdefault(subset, f"scan_type:{scan_type},session_bucket:{session_bucket}")
     for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
         for dow in sorted({str(edge.get("dow")) for edge in edges}):
@@ -1064,6 +1068,8 @@ def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, .
                 for index in edge_indexes
                 if str(edges[index].get("scan_type")) == scan_type and str(edges[index].get("dow")) == dow
             )
+            if len(subset) < 2:
+                continue
             subset_specs.setdefault(subset, f"scan_type:{scan_type},dow:{dow}")
     for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
         for direction_label in sorted({str(edge.get("direction_label")) for edge in edges}):
@@ -1073,6 +1079,8 @@ def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, .
                 if str(edges[index].get("scan_type")) == scan_type
                 and str(edges[index].get("direction_label")) == direction_label
             )
+            if len(subset) < 2:
+                continue
             subset_specs.setdefault(subset, f"scan_type:{scan_type},direction_label:{direction_label}")
     for scan_type in sorted({str(edge.get("scan_type")) for edge in edges}):
         for horizon_minutes in sorted({str(edge.get("horizon_minutes")) for edge in edges}):
@@ -1082,6 +1090,8 @@ def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, .
                 if str(edges[index].get("scan_type")) == scan_type
                 and str(edges[index].get("horizon_minutes")) == horizon_minutes
             )
+            if len(subset) < 2:
+                continue
             subset_specs.setdefault(subset, f"scan_type:{scan_type},horizon_minutes:{horizon_minutes}")
     for session_bucket in sorted({str(edge.get("session_bucket")) for edge in edges}):
         for dow in sorted({str(edge.get("dow")) for edge in edges}):
@@ -1090,6 +1100,8 @@ def _adaptive_subset_specs(edges: Sequence[dict[str, Any]]) -> dict[tuple[int, .
                 for index in edge_indexes
                 if str(edges[index].get("session_bucket")) == session_bucket and str(edges[index].get("dow")) == dow
             )
+            if len(subset) < 2:
+                continue
             subset_specs.setdefault(subset, f"session_bucket:{session_bucket},dow:{dow}")
     return {subset: label for subset, label in subset_specs.items() if subset}
 
@@ -1209,6 +1221,13 @@ def _profit_factor_score(value: Any) -> float:
     if value is None:
         return float("inf")
     return float(value)
+
+
+def _bounded_prefix_sizes(edge_count: int) -> list[int]:
+    sizes = sorted({size for size in ADAPTIVE_PREFIX_EDGE_COUNTS if size <= edge_count})
+    if edge_count > 0 and edge_count not in sizes:
+        sizes.append(edge_count)
+    return sizes
 
 
 def _edge_identity(edge: dict[str, Any]) -> dict[str, Any]:
