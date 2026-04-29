@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 import unittest
 
-from tlm.ibkr_gateway import IbkrPaperGateway
+from tlm.ibkr_gateway import IbkrContractSpec, IbkrPaperGateway
 from tlm.config import get_cost_model, get_symbol
 
 
@@ -13,10 +13,17 @@ class FakeIbkrAdapter:
         self.account_type = account_type
         self.connected = False
         self.disconnect_count = 0
+        self.submitted_orders: list[dict] = []
 
     def connect(self, host: str, port: int, client_id: int) -> dict:
         self.connected = True
-        return {"connected": True, "host": host, "port": port, "client_id": client_id}
+        return {
+            "connected": True,
+            "host": host,
+            "port": port,
+            "client_id": client_id,
+            "next_valid_order_id": 9001,
+        }
 
     def disconnect(self) -> dict:
         self.connected = False
@@ -25,6 +32,51 @@ class FakeIbkrAdapter:
 
     def account_summary(self) -> dict:
         return {"account_id": self.account_id, "account_type": self.account_type}
+
+    def request_contract_details(self, contract: dict) -> dict:
+        return {
+            "symbol": contract["symbol"],
+            "tick_size": 0.25,
+            "point_value": 2.0,
+            "exchange": contract["exchange"],
+            "currency": contract["currency"],
+            "local_symbol": contract.get("localSymbol") or "MNQM6",
+            "trading_class": contract.get("tradingClass") or "MNQ",
+        }
+
+    def request_market_data(self, contract: dict, timeout_seconds: int = 5) -> dict:
+        return {
+            "symbol": contract["symbol"],
+            "bid": 19000.0,
+            "ask": 19000.25,
+            "last": 19000.25,
+            "market_data_type": "real_time",
+            "snapshot_time": datetime.now(UTC).isoformat(),
+        }
+
+    def request_positions(self) -> list[dict]:
+        return [{"symbol": "MNQ", "quantity": 1, "average_cost": 19000.25, "recorded_at": datetime.now(UTC).isoformat()}]
+
+    def request_account_snapshot(self, account_id: str | None = None) -> dict:
+        return {
+            "net_liquidation": 100020.0,
+            "daily_pnl": 20.0,
+            "realized_pnl": 12.5,
+            "unrealized_pnl": 8.0,
+            "drawdown_usage": 0.02,
+            "recorded_at": datetime.now(UTC).isoformat(),
+        }
+
+    def submit_bracket_order(self, contract: dict, order: dict) -> dict:
+        payload = {
+            "symbol": contract["symbol"],
+            "parent_order_id": 9001,
+            "stop_order_id": 9002,
+            "take_profit_order_id": 9003,
+            "submitted": True,
+        }
+        self.submitted_orders.append(payload)
+        return payload
 
 
 class IbkrPaperGatewayTests(unittest.TestCase):
@@ -193,6 +245,24 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertTrue(gateway.read_only)
         self.assertEqual(adapter.disconnect_count, 1)
 
+    def test_sync_methods_use_adapter_snapshots(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+        gateway.connect()
+
+        contract = gateway.sync_contract_details("MNQ")
+        market = gateway.sync_market_data("MNQ")
+        positions = gateway.sync_positions()
+        account = gateway.sync_account_snapshot()
+
+        self.assertEqual(contract["event_type"], "contract_sync_completed")
+        self.assertEqual(market["event_type"], "market_data_sync_completed")
+        self.assertEqual(positions["event_type"], "positions_sync_completed")
+        self.assertEqual(account["event_type"], "account_snapshot_sync_completed")
+        self.assertEqual(gateway.contract_readiness("MNQ")["status"], "ready")
+        self.assertEqual(gateway.market_data_readiness("MNQ")["status"], "ready")
+        self.assertEqual(gateway.positions_report()["count"], 1)
+        self.assertEqual(gateway.account_snapshots_report()["count"], 1)
+
     def test_default_mnq_config_and_cost_model_are_available(self) -> None:
         symbol = get_symbol("MNQ_IBKR")
         cost_model = get_cost_model("mnq_futures_v1")
@@ -250,6 +320,39 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(report["open_bracket_order_count"], 1)
         self.assertEqual(report["open_bracket_orders"][0]["bracket_id"], draft["bracket_id"])
         self.assertEqual(report["order_event_count"], 1)
+
+    def test_submits_bracket_order_through_adapter_after_readiness(self) -> None:
+        gateway = self.ready_gateway()
+        gateway.register_contract_spec(
+            IbkrContractSpec(
+                symbol="MNQ",
+                sec_type="FUT",
+                exchange="CME",
+                currency="USD",
+                quantity=1,
+                last_trade_date_or_contract_month="202506",
+                local_symbol="MNQM6",
+                trading_class="MNQ",
+                expected_tick_size=0.25,
+                expected_point_value=2.0,
+            )
+        )
+        built = gateway.build_bracket_order(
+            {
+                "symbol": "MNQ",
+                "action": "BUY",
+                "quantity": 1,
+                "entry_order_type": "MKT",
+                "stop_price": 18995.0,
+                "take_profit_price": 19010.0,
+                "max_holding_minutes": 20,
+            }
+        )
+
+        submitted = gateway.submit_bracket_order(built["details"]["bracket_order"]["bracket_id"])
+
+        self.assertEqual(submitted["event_type"], "bracket_order_submitted")
+        self.assertTrue(submitted["details"]["broker_submission"]["submitted"])
 
     def test_rejects_risk_increasing_or_invalid_bracket_payloads(self) -> None:
         gateway = self.ready_gateway()
