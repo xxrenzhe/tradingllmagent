@@ -1047,11 +1047,22 @@ def _line_svg(points: Sequence[dict[str, Any]], *, title: str) -> str:
         return x, y
     poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in (xy(i, float(point["equity"])) for i, point in enumerate(points)))
     zero_y = xy(0, 0.0)[1] if low <= 0 <= high else height - pad
+    hover_targets = _hover_targets_svg(
+        width=width,
+        height=height,
+        pad=pad,
+        point_count=len(points),
+        labels=[
+            f"{str(point['timestamp'])} | 累计净收益 {fmt_usd(point['equity'])} | 单笔变动 {fmt_usd(point.get('pnl'))}"
+            for point in points
+        ],
+    )
     return (
         f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"{html.escape(title)}\">"
         f"<text x=\"{pad}\" y=\"22\" fill=\"#667085\" font-size=\"13\">{html.escape(title)}</text>"
         f"<line x1=\"{pad}\" y1=\"{zero_y:.1f}\" x2=\"{width-pad}\" y2=\"{zero_y:.1f}\" stroke=\"#d9e0ea\"/>"
         f"<polyline fill=\"none\" stroke=\"#1769aa\" stroke-width=\"2.2\" points=\"{poly}\"/>"
+        f"{hover_targets}"
         f"<text x=\"{pad}\" y=\"{height-8}\" fill=\"#667085\" font-size=\"12\">{html.escape(str(points[0]['timestamp'])[:10])}</text>"
         f"<text x=\"{width-pad-86}\" y=\"{height-8}\" fill=\"#667085\" font-size=\"12\">{html.escape(str(points[-1]['timestamp'])[:10])}</text>"
         f"<text x=\"{width-pad-112}\" y=\"22\" fill=\"#172033\" font-size=\"12\">max {fmt_usd(high)}</text>"
@@ -1076,11 +1087,22 @@ def _comparison_line_svg(strategy_points: Sequence[dict[str, Any]], benchmark_po
         return x, y
     strategy_poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in (xy(i, row["strategy"]) for i, row in enumerate(aligned)))
     benchmark_poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in (xy(i, row["benchmark"]) for i, row in enumerate(aligned)))
+    hover_targets = _hover_targets_svg(
+        width=width,
+        height=height,
+        pad=pad,
+        point_count=len(aligned),
+        labels=[
+            f"{row['timestamp']} | 策略累计净收益 {fmt_usd(row['strategy'])} | NQ累计净收益 {fmt_usd(row['benchmark'])} | NQ指数 {fmt_price(row.get('benchmark_close'))}"
+            for row in aligned
+        ],
+    )
     return (
         f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"策略与基准对比曲线\">"
         f"<text x=\"{pad}\" y=\"22\" fill=\"#667085\" font-size=\"13\">策略 vs NQ 持有累计收益</text>"
         f"<polyline fill=\"none\" stroke=\"#1769aa\" stroke-width=\"2.2\" points=\"{strategy_poly}\"/>"
         f"<polyline fill=\"none\" stroke=\"#a15c00\" stroke-width=\"2.2\" points=\"{benchmark_poly}\"/>"
+        f"{hover_targets}"
         f"<text x=\"{pad}\" y=\"{height-8}\" fill=\"#1769aa\" font-size=\"12\">策略</text>"
         f"<text x=\"{pad+48}\" y=\"{height-8}\" fill=\"#a15c00\" font-size=\"12\">基准</text>"
         f"</svg>"
@@ -1099,20 +1121,52 @@ def _aligned_equity_curves(
     ordered_benchmark = sorted(benchmark_points, key=lambda row: str(row["timestamp"]))
     benchmark_index = 0
     last_benchmark_equity = float(ordered_benchmark[0]["equity"])
+    last_benchmark_close = float(ordered_benchmark[0].get("close") or 0.0)
     aligned = []
     for point in ordered_strategy:
         strategy_ts = str(point["timestamp"])
         while benchmark_index < len(ordered_benchmark) and str(ordered_benchmark[benchmark_index]["timestamp"]) <= strategy_ts:
             last_benchmark_equity = float(ordered_benchmark[benchmark_index]["equity"])
+            last_benchmark_close = float(ordered_benchmark[benchmark_index].get("close") or last_benchmark_close)
             benchmark_index += 1
         aligned.append(
             {
                 "timestamp": strategy_ts,
                 "strategy": float(point["equity"]),
                 "benchmark": last_benchmark_equity,
+                "benchmark_close": last_benchmark_close,
             }
         )
     return _sample_series(aligned, max_points=max_points)
+
+
+def _hover_targets_svg(
+    *,
+    width: int,
+    height: int,
+    pad: int,
+    point_count: int,
+    labels: Sequence[str],
+) -> str:
+    if point_count <= 0:
+        return ""
+    segments = []
+    chart_width = width - pad * 2
+    for index, label in enumerate(labels):
+        if point_count == 1:
+            x = pad
+            rect_width = chart_width
+        else:
+            left_ratio = (index - 0.5) / (point_count - 1)
+            right_ratio = (index + 0.5) / (point_count - 1)
+            left = pad + max(0.0, left_ratio) * chart_width
+            right = pad + min(1.0, right_ratio) * chart_width
+            x = left
+            rect_width = max(1.0, right - left)
+        segments.append(
+            f"<rect x=\"{x:.1f}\" y=\"{pad:.1f}\" width=\"{rect_width:.1f}\" height=\"{height - pad * 2:.1f}\" fill=\"rgba(0,0,0,0)\" pointer-events=\"all\"><title>{html.escape(label)}</title></rect>"
+        )
+    return "".join(segments)
 
 
 def _bar_svg(rows: Sequence[dict[str, Any]], label_key: str, value_key: str) -> str:
@@ -1259,3 +1313,9 @@ def fmt_int(value: Any) -> str:
     if value is None:
         return "0"
     return f"{int(value):,}"
+
+
+def fmt_price(value: Any) -> str:
+    if value is None:
+        return "n/a"
+    return f"{float(value):,.2f}"

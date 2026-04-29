@@ -8,6 +8,8 @@ from tlm.top_strategy_report import (
     _benchmark_metrics,
     _benchmark_period_results,
     _candlestick_svg,
+    _comparison_line_svg,
+    _line_svg,
     _merge_period_results,
     _monthly_signal_results,
     _select_top_yearly_strategies,
@@ -449,6 +451,32 @@ class TopStrategyReportTests(unittest.TestCase):
 
         self.assertIn("ENTRY", svg)
         self.assertIn("EXIT", svg)
+
+    def test_line_svg_contains_hover_titles(self) -> None:
+        svg = _line_svg(
+            [
+                {"timestamp": "2025-01-01 09:30:00", "equity": 10.0, "pnl": 10.0},
+                {"timestamp": "2025-01-01 09:31:00", "equity": 15.0, "pnl": 5.0},
+            ],
+            title="累计净收益",
+        )
+
+        self.assertIn("<title>2025-01-01 09:30:00 | 累计净收益 $10 | 单笔变动 $10</title>", svg)
+
+    def test_comparison_line_svg_hover_title_contains_nq_index(self) -> None:
+        svg = _comparison_line_svg(
+            [
+                {"timestamp": "2025-01-01 09:31:00", "equity": 10.0},
+                {"timestamp": "2025-01-01 09:33:00", "equity": 20.0},
+            ],
+            [
+                {"timestamp": "2025-01-01 09:30:00", "equity": 1.0, "close": 17000.25},
+                {"timestamp": "2025-01-01 09:32:00", "equity": 2.0, "close": 17005.50},
+            ],
+        )
+
+        self.assertIn("NQ指数 17,000.25", svg)
+        self.assertIn("NQ指数 17,005.50", svg)
 
 
 if __name__ == "__main__":
