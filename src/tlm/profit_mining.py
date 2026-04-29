@@ -860,96 +860,21 @@ def _optimized_regime_basket_subsets(
     )[:20]
 
 
-def _adaptive_recent_regime_candidates(
+def _subset_activation_evaluations(
     edges: Sequence[dict[str, Any]],
     signals: Sequence[dict[str, Any]],
     context: dict[str, Any],
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[int]]:
     if not edges or not signals:
-        return []
+        return [], []
     years = sorted({_signal_timestamp(signal).year for signal in signals})
     if len(years) < 4:
-        return []
+        return [], years
     test_start_year = max(years) - 2
     if test_start_year <= min(years):
-        return []
-
+        return [], years
     subset_specs = _adaptive_subset_specs(edges)
-    candidates = []
-    for subset, selection_rule in subset_specs.items():
-        subset_set = set(subset)
-        subset_signals = [signal for signal in signals if int(signal["rule_index"]) in subset_set]
-        for activation_start_year in years:
-            if activation_start_year >= test_start_year:
-                continue
-            active_signals = [
-                signal
-                for signal in subset_signals
-                if _signal_timestamp(signal).year >= activation_start_year
-            ]
-            train_signals = [
-                signal
-                for signal in active_signals
-                if _signal_timestamp(signal).year < test_start_year
-            ]
-            test_signals = [
-                signal
-                for signal in active_signals
-                if _signal_timestamp(signal).year >= test_start_year
-            ]
-            train_one_trade = _one_trade_per_timestamp(train_signals)
-            test_one_trade = _one_trade_per_timestamp(test_signals)
-            full_one_trade = _one_trade_per_timestamp(active_signals)
-            if not train_one_trade or not test_one_trade:
-                continue
-            train_metrics = _period_replay_metrics(train_one_trade, context)
-            test_metrics = _period_replay_metrics(test_one_trade, context)
-            full_metrics = _period_replay_metrics(full_one_trade, context)
-            if not _passes_open_regime_filter(train_metrics, test_metrics, full_metrics, context):
-                continue
-            payload = {
-                "selection_rule": selection_rule,
-                "activation_start_year": activation_start_year,
-                "train_period": _signals_period(train_one_trade),
-                "test_period": _signals_period(test_one_trade),
-                "edge_indexes": list(subset),
-                "edge_count": len(subset),
-                "train": train_metrics,
-                "test": test_metrics,
-                "full_after_activation": full_metrics,
-                "constituent_edges": [_edge_identity(edges[index]) for index in subset],
-                "caveat": (
-                    "Adaptive candidate selected from historical yearly behavior; "
-                    "treat as research until paper-traded forward."
-                ),
-            }
-            payload["candidate_hash"] = stable_hash(payload)
-            candidates.append(payload)
-
-    return sorted(
-        candidates,
-        key=lambda row: (
-            _profit_factor_score(row["test"].get("profit_factor")),
-            float(row["test"].get("net_pnl") or 0),
-            _profit_factor_score(row["full_after_activation"].get("profit_factor")),
-        ),
-        reverse=True,
-    )[:20]
-
-
-def _yearly_profitable_candidates(
-    edges: Sequence[dict[str, Any]],
-    signals: Sequence[dict[str, Any]],
-    context: dict[str, Any],
-) -> list[dict[str, Any]]:
-    if not edges or not signals:
-        return []
-    years = sorted({_signal_timestamp(signal).year for signal in signals})
-    if len(years) < 4:
-        return []
-    test_start_year = max(years) - 2
-    subset_specs = _adaptive_subset_specs(edges)
-    candidates = []
+    evaluations = []
     for subset, selection_rule in subset_specs.items():
         subset_set = set(subset)
         subset_signals = [signal for signal in signals if int(signal["rule_index"]) in subset_set]
@@ -979,39 +904,111 @@ def _yearly_profitable_candidates(
             full_one_trade = _one_trade_per_timestamp(active_signals)
             if not train_one_trade or not test_one_trade:
                 continue
-            train_metrics = _period_replay_metrics(train_one_trade, context)
-            test_metrics = _period_replay_metrics(test_one_trade, context)
-            full_metrics = _period_replay_metrics(full_one_trade, context)
-            if not _passes_yearly_profitable_filter(train_metrics, test_metrics, full_metrics):
-                continue
-            payload = {
-                "selection_rule": selection_rule,
-                "activation_start_year": activation_start_year,
-                "full_history_candidate": activation_start_year == min(years),
-                "profitable_year_count": len(full_metrics["yearly_results"]),
-                "train_period": _signals_period(train_one_trade),
-                "test_period": _signals_period(test_one_trade),
-                "edge_indexes": list(subset),
-                "edge_count": len(subset),
-                "train": train_metrics,
-                "test": test_metrics,
-                "full_after_activation": full_metrics,
-                "constituent_edges": [_edge_identity(edges[index]) for index in subset],
-                "objective": "all_active_years_net_pnl_positive_then_maximize_full_net_pnl",
-                "caveat": (
-                    "Annual profitability is evaluated only from activation_start_year onward; "
-                    "full_history_candidate=true is required for all available history."
-                ),
-            }
-            payload["strategy_analysis"] = _strategy_analysis(
-                selection_rule,
-                full_metrics,
-                train_metrics,
-                test_metrics,
-                payload["constituent_edges"],
+            evaluations.append(
+                {
+                    "selection_rule": selection_rule,
+                    "activation_start_year": activation_start_year,
+                    "active_years": active_years,
+                    "full_history_candidate": activation_start_year == min(years),
+                    "train_period": _signals_period(train_one_trade),
+                    "test_period": _signals_period(test_one_trade),
+                    "edge_indexes": list(subset),
+                    "edge_count": len(subset),
+                    "train": _period_replay_metrics(train_one_trade, context),
+                    "test": _period_replay_metrics(test_one_trade, context),
+                    "full_after_activation": _period_replay_metrics(full_one_trade, context),
+                    "constituent_edges": [_edge_identity(edges[index]) for index in subset],
+                }
             )
-            payload["candidate_hash"] = stable_hash(payload)
-            candidates.append(payload)
+    return evaluations, years
+
+
+def _adaptive_recent_regime_candidates(
+    edges: Sequence[dict[str, Any]],
+    signals: Sequence[dict[str, Any]],
+    context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    evaluations, _ = _subset_activation_evaluations(edges, signals, context)
+    candidates = []
+    for evaluation in evaluations:
+        train_metrics = evaluation["train"]
+        test_metrics = evaluation["test"]
+        full_metrics = evaluation["full_after_activation"]
+        if not _passes_open_regime_filter(train_metrics, test_metrics, full_metrics, context):
+            continue
+        payload = {
+            "selection_rule": evaluation["selection_rule"],
+            "activation_start_year": evaluation["activation_start_year"],
+            "train_period": evaluation["train_period"],
+            "test_period": evaluation["test_period"],
+            "edge_indexes": evaluation["edge_indexes"],
+            "edge_count": evaluation["edge_count"],
+            "train": train_metrics,
+            "test": test_metrics,
+            "full_after_activation": full_metrics,
+            "constituent_edges": evaluation["constituent_edges"],
+            "caveat": (
+                "Adaptive candidate selected from historical yearly behavior; "
+                "treat as research until paper-traded forward."
+            ),
+        }
+        payload["candidate_hash"] = stable_hash(payload)
+        candidates.append(payload)
+
+    return sorted(
+        candidates,
+        key=lambda row: (
+            _profit_factor_score(row["test"].get("profit_factor")),
+            float(row["test"].get("net_pnl") or 0),
+            _profit_factor_score(row["full_after_activation"].get("profit_factor")),
+        ),
+        reverse=True,
+    )[:20]
+
+
+def _yearly_profitable_candidates(
+    edges: Sequence[dict[str, Any]],
+    signals: Sequence[dict[str, Any]],
+    context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    evaluations, years = _subset_activation_evaluations(edges, signals, context)
+    if not years:
+        return []
+    candidates = []
+    for evaluation in evaluations:
+        train_metrics = evaluation["train"]
+        test_metrics = evaluation["test"]
+        full_metrics = evaluation["full_after_activation"]
+        if not _passes_yearly_profitable_filter(train_metrics, test_metrics, full_metrics):
+            continue
+        payload = {
+            "selection_rule": evaluation["selection_rule"],
+            "activation_start_year": evaluation["activation_start_year"],
+            "full_history_candidate": evaluation["full_history_candidate"],
+            "profitable_year_count": len(full_metrics["yearly_results"]),
+            "train_period": evaluation["train_period"],
+            "test_period": evaluation["test_period"],
+            "edge_indexes": evaluation["edge_indexes"],
+            "edge_count": evaluation["edge_count"],
+            "train": train_metrics,
+            "test": test_metrics,
+            "full_after_activation": full_metrics,
+            "constituent_edges": evaluation["constituent_edges"],
+            "objective": "all_active_years_net_pnl_positive_then_maximize_full_net_pnl",
+            "caveat": (
+                "Annual profitability is evaluated only from activation_start_year onward; "
+                "full_history_candidate=true is required for all available history."
+            ),
+        }
+        payload["strategy_analysis"] = _strategy_analysis(
+            payload["selection_rule"],
+            full_metrics,
+            train_metrics,
+            test_metrics,
+            payload["constituent_edges"],
+        )
+        payload["candidate_hash"] = stable_hash(payload)
+        candidates.append(payload)
     return sorted(
         candidates,
         key=lambda row: (
