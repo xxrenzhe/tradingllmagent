@@ -551,9 +551,13 @@ class OfficialIbkrAdapter:
             code = int(error.get("error_code") or 0)
             message = str(error.get("error") or "")
             lowered = message.lower()
-            if context == "contract_details" and (code == 2157 or "sec-def" in lowered or "secdef" in lowered):
+            if _is_connectivity_restored_message(code, lowered):
+                continue
+            if context == "contract_details" and (
+                code == 2157 or _is_broken_farm_message(lowered, "secdef") or _is_broken_farm_message(lowered, "sec-def")
+            ):
                 return {"error_code": code, "message": f"ibkr_secdef_farm_unavailable:{message}"}
-            if context == "market_data" and (code == 2103 or "market data farm" in lowered):
+            if context == "market_data" and (code == 2103 or _is_broken_farm_message(lowered, "market data farm")):
                 return {"error_code": code, "message": f"ibkr_market_data_farm_unavailable:{message}"}
             if code == 2110:
                 return {"error_code": code, "message": f"ibkr_connectivity_broken:{message}"}
@@ -670,6 +674,16 @@ def _optional_broker_float(value: Any) -> float | None:
 def _is_not_connected_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return "not connected" in message or "error 504" in message or message.strip() == "504"
+
+
+def _is_connectivity_restored_message(error_code: int, message: str) -> bool:
+    if error_code in {2104, 2106, 2158}:
+        return True
+    return "connection is ok" in message or "connection is restored" in message
+
+
+def _is_broken_farm_message(message: str, farm_name: str) -> bool:
+    return farm_name in message and ("broken" in message or "inactive" in message or "disconnected" in message)
 
 
 def _is_recent_error(error: dict[str, Any], *, max_age_seconds: float = 120.0) -> bool:

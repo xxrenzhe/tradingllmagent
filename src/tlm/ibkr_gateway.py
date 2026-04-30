@@ -11,6 +11,7 @@ from uuid import uuid4
 
 IBKR_PROTOCOL_VERSION = "ibkr-paper.v1"
 _QUARTERLY_FUTURE_MONTH_CODES = {3: "H", 6: "M", 9: "U", 12: "Z"}
+DELAYED_MARKET_DATA_MIN_STALE_SECONDS = 30
 
 
 class IbkrGatewayAdapter(Protocol):
@@ -570,13 +571,16 @@ class IbkrPaperGateway:
             missing.append("spread_unavailable")
         elif snapshot.spread < 0:
             missing.append("negative_spread")
-        if snapshot.age_seconds(now) > max_stale_seconds:
+        effective_max_stale_seconds = max_stale_seconds
+        if snapshot.market_data_type in {"delayed", "delayed_frozen"}:
+            effective_max_stale_seconds = max(max_stale_seconds, DELAYED_MARKET_DATA_MIN_STALE_SECONDS)
+        if snapshot.age_seconds(now) > effective_max_stale_seconds:
             missing.append("market_data_stale")
         return {
             "status": "ready" if not missing else "blocked",
             "symbol": symbol,
             "snapshot": snapshot.to_dict(now),
-            "max_stale_seconds": max_stale_seconds,
+            "max_stale_seconds": effective_max_stale_seconds,
             "missing_requirements": missing,
         }
 

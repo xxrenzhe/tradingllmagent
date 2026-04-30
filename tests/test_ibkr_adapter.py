@@ -237,6 +237,26 @@ class OfficialIbkrAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "ibkr_secdef_farm_unavailable"):
             adapter.request_contract_details({"symbol": "MNQ", "lastTradeDateOrContractMonth": "202606"})
 
+    def test_market_data_farm_ok_message_is_not_recorded_as_error(self) -> None:
+        adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
+        adapter.connect("127.0.0.1", 7497, 11)
+        adapter.client.wrapper.error(-1, 2104, "Market data farm connection is OK:usfarm")
+
+        payload = adapter.request_market_data({"symbol": "MNQ"}, timeout_seconds=1)
+
+        self.assertEqual(payload["market_data_type"], "delayed")
+        self.assertIsNone(payload["error_code"])
+        self.assertIsNone(payload["error_message"])
+
+    def test_secdef_farm_ok_message_is_not_recorded_as_error(self) -> None:
+        adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
+        adapter.connect("127.0.0.1", 7497, 11)
+        adapter.client.wrapper.error(-1, 2158, "Sec-def data farm connection is OK:secdefhk")
+
+        payload = adapter.request_contract_details({"symbol": "MNQ", "lastTradeDateOrContractMonth": "202606"})
+
+        self.assertEqual(payload["symbol"], "MNQ")
+
     def test_delayed_tick_types_populate_bid_ask_and_last(self) -> None:
         adapter = OfficialIbkrAdapter()
         adapter._market_data[1] = {"symbol": "MNQ"}

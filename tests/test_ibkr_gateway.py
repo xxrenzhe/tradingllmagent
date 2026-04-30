@@ -250,6 +250,25 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertIn("spread_unavailable", readiness["missing_requirements"])
         self.assertIn("market_data_stale", readiness["missing_requirements"])
 
+    def test_market_data_readiness_allows_delayed_quotes_past_realtime_stale_limit(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+        old_time = datetime.now(UTC) - timedelta(seconds=10)
+
+        gateway.record_market_data(
+            {
+                "symbol": "MNQ",
+                "bid": 19000.0,
+                "ask": 19000.25,
+                "last": 19000.0,
+                "market_data_type": "delayed",
+                "snapshot_time": old_time.isoformat(),
+            }
+        )
+        readiness = gateway.market_data_readiness("MNQ", max_stale_seconds=5)
+
+        self.assertEqual(readiness["status"], "ready")
+        self.assertEqual(readiness["max_stale_seconds"], 30)
+
     def test_market_data_readiness_blocks_unknown_market_data_type(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
 
