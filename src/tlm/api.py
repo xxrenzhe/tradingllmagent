@@ -88,20 +88,40 @@ def _env_bool(name: str, default: bool = True) -> bool:
 
 
 def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
+    family = os.environ.get("TLM_IBKR_STRATEGY_FAMILY", "low_r_regime_basket").strip() or "low_r_regime_basket"
+    if family == "range_breakout":
+        return {
+            "strategy_id": "mnq_1m_breakout",
+            "strategy_spec_hash": "ibkr-paper-default",
+            "module_id": "ibkr_paper_loop",
+            "family": "range_breakout",
+            "symbol": symbol,
+            "timeframe": "1m",
+            "lookback_bars": 5,
+            "breakout_ticks": 1,
+            "enabled": True,
+            "tick_size": 0.25,
+            "stop_loss_ticks": 20,
+            "take_profit_ticks": 40,
+            "max_holding_minutes": 20,
+        }
+    preset = os.environ.get("TLM_IBKR_LOW_R_PRESET", "simple_robust_low_r").strip() or "simple_robust_low_r"
     return {
-        "strategy_id": "mnq_1m_breakout",
-        "strategy_spec_hash": "ibkr-paper-default",
-        "module_id": "ibkr_paper_loop",
-        "family": "range_breakout",
+        "strategy_id": f"{symbol.lower()}_1m_{preset}",
+        "strategy_spec_hash": f"ibkr-paper-low-r:{preset}",
+        "module_id": "low_r_regime_basket",
+        "family": "low_r_regime_basket",
         "symbol": symbol,
         "timeframe": "1m",
-        "lookback_bars": 5,
-        "breakout_ticks": 1,
+        "preset": preset,
         "enabled": True,
         "tick_size": 0.25,
-        "stop_loss_ticks": 20,
+        "stop_loss_ticks": 32,
         "take_profit_ticks": 40,
-        "max_holding_minutes": 20,
+        "stop_range_multiple": 10.0,
+        "min_stop_points": 8.0,
+        "max_stop_points": 90.0,
+        "max_holding_minutes": 300,
     }
 
 
@@ -205,9 +225,12 @@ def run_ibkr_decision_cycle(
         risk_context=risk_context,
         strategy_state={
             "tick_size": strategy.get("tick_size", 0.25),
-            "stop_loss_ticks": strategy.get("stop_loss_ticks", 20),
-            "take_profit_ticks": strategy.get("take_profit_ticks", 40),
-            "max_holding_minutes": strategy.get("max_holding_minutes", 20),
+            "stop_loss_ticks": signal.get("risk_context", {}).get("stop_loss_ticks", strategy.get("stop_loss_ticks", 20)),
+            "take_profit_ticks": signal.get("risk_context", {}).get("take_profit_ticks", strategy.get("take_profit_ticks", 40)),
+            "max_holding_minutes": signal.get("risk_context", {}).get(
+                "max_holding_minutes",
+                strategy.get("max_holding_minutes", 20),
+            ),
         },
         previous_reviews=review_history,
     )

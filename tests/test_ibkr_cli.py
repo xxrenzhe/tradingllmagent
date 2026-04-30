@@ -19,6 +19,8 @@ class IbkrCliTests(unittest.TestCase):
         self.assertTrue(args.connect)
         self.assertEqual(args.api_port, 8000)
         self.assertEqual(args.ibkr_port, 7497)
+        self.assertEqual(args.strategy_family, "low_r_regime_basket")
+        self.assertEqual(args.low_r_preset, "simple_robust_low_r")
 
     def test_parser_exposes_ibkr_soak_monitor(self) -> None:
         parser = build_parser()
@@ -83,6 +85,8 @@ class IbkrCliTests(unittest.TestCase):
                 self.assertEqual(result, 0)
                 self.assertEqual(os.environ["TLM_IBKR_POLLER_ENABLED"], "1")
                 self.assertEqual(os.environ["TLM_IBKR_POLL_SYMBOL"], "MNQ")
+                self.assertEqual(os.environ["TLM_IBKR_STRATEGY_FAMILY"], "low_r_regime_basket")
+                self.assertEqual(os.environ["TLM_IBKR_LOW_R_PRESET"], "simple_robust_low_r")
                 self.assertEqual(os.environ["TLM_IBKR_POLL_INTERVAL_SECONDS"], "3.0")
                 self.assertEqual(os.environ["TLM_IBKR_REVIEW_INTERVAL_SECONDS"], "120.0")
                 self.assertEqual(os.environ["TLM_IBKR_READINESS_MAX_STALE_SECONDS"], "9")

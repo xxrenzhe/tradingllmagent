@@ -34,6 +34,7 @@ from .feature_catalog import feature_readiness_report
 from .firstrate import import_firstrate_bars
 from .ibkr_adapter import build_ibkr_gateway_adapter
 from .ibkr_gateway import IbkrPaperGateway
+from .low_r_regime_basket import PRESETS as LOW_R_PRESETS
 from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
 from .ibkr_soak import run_ibkr_soak_monitor
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
@@ -1156,6 +1157,8 @@ def cmd_ibkr_report(args: argparse.Namespace) -> int:
 def cmd_ibkr_loop(args: argparse.Namespace) -> int:
     os.environ["TLM_IBKR_POLLER_ENABLED"] = "1"
     os.environ["TLM_IBKR_POLL_SYMBOL"] = args.symbol
+    os.environ["TLM_IBKR_STRATEGY_FAMILY"] = args.strategy_family
+    os.environ["TLM_IBKR_LOW_R_PRESET"] = args.low_r_preset
     os.environ["TLM_IBKR_POLL_INTERVAL_SECONDS"] = str(args.poll_interval_seconds)
     os.environ["TLM_IBKR_REVIEW_INTERVAL_SECONDS"] = str(args.review_interval_seconds)
     os.environ["TLM_IBKR_READINESS_MAX_STALE_SECONDS"] = str(args.max_stale_seconds)
@@ -1764,6 +1767,8 @@ def build_parser() -> argparse.ArgumentParser:
     ibkr_loop.add_argument("--ibkr-host", default="127.0.0.1")
     ibkr_loop.add_argument("--ibkr-port", type=int, default=7497)
     ibkr_loop.add_argument("--client-id", type=int, default=11)
+    ibkr_loop.add_argument("--strategy-family", choices=["low_r_regime_basket", "range_breakout"], default="low_r_regime_basket")
+    ibkr_loop.add_argument("--low-r-preset", choices=sorted(LOW_R_PRESETS), default="simple_robust_low_r")
     ibkr_loop.add_argument("--poll-interval-seconds", type=float, default=2.0)
     ibkr_loop.add_argument("--review-interval-seconds", type=float, default=300.0)
     ibkr_loop.add_argument("--max-stale-seconds", type=int, default=5)

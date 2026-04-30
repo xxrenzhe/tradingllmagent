@@ -7,12 +7,12 @@ import unittest
 
 import duckdb
 
-from tlm.api import run_ibkr_decision_cycle
+from tlm.api import _ibkr_default_strategy, run_ibkr_decision_cycle
 from tlm.ibkr_gateway import IbkrPaperGateway
 from tlm.ibkr_optimizer import apply_fast_path_control_diff
 from tlm.ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
 from tlm.ibkr_review import build_five_minute_review_request, deterministic_fallback_review
-from tlm.ibkr_signals import build_one_minute_bars, build_signal_candidate
+from tlm.ibkr_signals import OneMinuteBar, build_one_minute_bars, build_signal_candidate
 
 
 class FakeIbkrAdapter:
@@ -32,6 +32,31 @@ class FakeIbkrAdapter:
 
 
 class IbkrPaperLoopTests(unittest.TestCase):
+    def test_default_ibkr_strategy_uses_simple_robust_low_r(self) -> None:
+        strategy = _ibkr_default_strategy("MNQ")
+
+        self.assertEqual(strategy["family"], "low_r_regime_basket")
+        self.assertEqual(strategy["preset"], "simple_robust_low_r")
+        self.assertEqual(strategy["module_id"], "low_r_regime_basket")
+        self.assertEqual(strategy["max_holding_minutes"], 300)
+
+    def test_low_r_signal_candidate_matches_simple_robust_opening_range_edge(self) -> None:
+        strategy = _ibkr_default_strategy("MNQ")
+        signal = build_signal_candidate(
+            strategy,
+            _low_r_opening_range_bars(),
+            tick_size=0.25,
+            max_spread_ticks=2.0,
+        )
+
+        self.assertEqual(signal["signal_class"], "strong_review")
+        self.assertEqual(signal["family"], "low_r_regime_basket")
+        self.assertEqual(signal["side"], "BUY")
+        self.assertIn("low_r:opening_range_breakout", signal["trigger_reasons"])
+        self.assertEqual(signal["risk_context"]["preset"], "simple_robust_low_r")
+        self.assertEqual(signal["risk_context"]["edge_index"], 0)
+        self.assertGreaterEqual(signal["risk_context"]["stop_loss_ticks"], 32)
+
     def test_decision_cycle_runs_review_and_builds_bracket_draft(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
         gateway.connect()
@@ -352,6 +377,37 @@ def _breakout_snapshots() -> list[dict]:
             }
         )
     return snapshots
+
+
+def _low_r_opening_range_bars() -> list[OneMinuteBar]:
+    start = datetime(2026, 4, 29, 13, 30, tzinfo=UTC)
+    bars: list[OneMinuteBar] = []
+    for minute_offset in range(216):
+        bar_time = start + timedelta(minutes=minute_offset)
+        base = 100.0 + minute_offset * 0.02
+        bar_range = 0.2
+        high = base + 0.1
+        low = base - 0.1
+        close = base
+        tick_count = 10
+        if minute_offset == 215:
+            high = base + 0.1
+            low = base - 0.05
+            close = base + 0.08
+        bars.append(
+            OneMinuteBar(
+                symbol="MNQ",
+                bar_time=bar_time,
+                open=base - 0.05,
+                high=high,
+                low=low,
+                close=close,
+                bid=close - 0.25,
+                ask=close,
+                tick_count=tick_count,
+            )
+        )
+    return bars
 
 
 if __name__ == "__main__":
