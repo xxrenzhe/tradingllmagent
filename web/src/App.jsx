@@ -2076,6 +2076,7 @@ function IbkrPaperSummary({ overview }) {
   const reviewResult = overview.review?.review_result ?? {};
   const optimizer = overview.optimizer ?? {};
   const latestAccount = ledger.latest_account_snapshot ?? {};
+  const marketSnapshot = marketData.snapshot ?? null;
   const openPositionQuantity = (ledger.positions ?? []).reduce((total, position) => total + (Number(position.quantity) || 0), 0);
   const realizedPnl = latestAccount.realized_pnl ?? ledger.net_realized_pnl;
   const dailyPnl = latestAccount.daily_pnl ?? realizedPnl;
@@ -2093,8 +2094,9 @@ function IbkrPaperSummary({ overview }) {
       <div className="strict-validation-grid">
         <Metric label="Gateway" value={health.status ?? "-"} detail={health.paper_account_verified ? "paper account verified" : "paper account not verified"} />
         <Metric label="Contract" value={contracts.status ?? "-"} detail={contracts.contract?.localSymbol ?? contracts.contract?.symbol ?? "MNQ"} />
-        <Metric label="Market Data" value={marketData.status ?? "-"} detail={marketData.snapshot ? `${formatNumber(marketData.snapshot.spread)} spread, ${formatNumber(marketData.snapshot.age_seconds, 1)}s old` : "no real-time quote"} />
+        <Metric label="Market Data" value={marketData.status ?? "-"} detail={marketSnapshot ? `${marketSnapshot.market_data_type ?? "unknown"}, ${formatNumber(marketSnapshot.spread)} spread, ${formatNumber(marketSnapshot.age_seconds, 1)}s old` : "no order-ready quote"} />
         <Metric label="Open Brackets" value={formatCompact(bracketOrders.open_bracket_order_count ?? 0)} detail={`${formatCompact(bracketOrders.order_event_count ?? 0)} order events`} />
+        <Metric label="Completed Brackets" value={formatCompact(bracketOrders.completed_bracket_order_count ?? 0)} detail={`${formatCompact((bracketOrders.completed_bracket_orders ?? []).length)} retained`} />
         <Metric label="Fills" value={formatCompact(ledger.fill_count ?? 0)} detail={`${formatNumber(ledger.total_commission ?? 0)} commission`} />
         <Metric label="Real PnL" value={formatNumber(realizedPnl ?? 0)} detail={`${formatNumber(dailyPnl ?? 0)} daily PnL`} />
         <Metric label="Net PnL" value={formatNumber(metrics.net_pnl_after_commission ?? 0)} detail={`${formatNumber(metrics.expectancy ?? 0)} expectancy`} />
