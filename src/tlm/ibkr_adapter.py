@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+import socket
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -19,6 +20,10 @@ class OfficialIbkrAdapter:
     client: Any | None = None
     thread: threading.Thread | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
+    connection_host: str | None = None
+    connection_port: int | None = None
+    connection_client_id: int | None = None
+    socket_preflight_enabled: bool = True
     connected_event: threading.Event = field(default_factory=threading.Event)
     next_valid_id_event: threading.Event = field(default_factory=threading.Event)
     positions_event: threading.Event = field(default_factory=threading.Event)
@@ -46,6 +51,9 @@ class OfficialIbkrAdapter:
     def connect(self, host: str, port: int, client_id: int) -> dict[str, Any]:
         if self.client is None:
             self._init_client()
+        self.connection_host = host
+        self.connection_port = port
+        self.connection_client_id = client_id
         if self.client.isConnected():
             return {
                 "connected": True,
@@ -57,6 +65,7 @@ class OfficialIbkrAdapter:
             }
         self.connected_event.clear()
         self.next_valid_id_event.clear()
+        self._check_socket_available(host, port)
         self.client.connect(host, port, client_id)
         if self.thread is None or not self.thread.is_alive():
             self.thread = threading.Thread(target=self.client.run, name="ibkr-api", daemon=True)
@@ -80,15 +89,21 @@ class OfficialIbkrAdapter:
         return {"connected": False}
 
     def account_summary(self) -> dict[str, Any]:
+        self._ensure_connected()
         req_id = self._next_request_id()
         event = threading.Event()
         self._account_summary_events[req_id] = event
         self._account_summary[req_id] = {}
-        self.client.reqAccountSummary(req_id, "All", "AccountType,NetLiquidation,RealizedPnL,UnrealizedPnL")
-        self._wait(event, 10.0, "timed_out_waiting_for_account_summary")
-        self.client.cancelAccountSummary(req_id)
-        payload = self._account_summary.pop(req_id, {})
-        self._account_summary_events.pop(req_id, None)
+        try:
+            self.client.reqAccountSummary(req_id, "All", "AccountType,NetLiquidation,RealizedPnL,UnrealizedPnL")
+            self._wait(event, 10.0, "timed_out_waiting_for_account_summary")
+            self.client.cancelAccountSummary(req_id)
+            request_error = self._request_error(req_id)
+            if request_error is not None and int(request_error.get("error_code") or 0) == 504:
+                raise RuntimeError("not connected")
+            payload = self._account_summary.pop(req_id, {})
+        finally:
+            self._account_summary_events.pop(req_id, None)
         account_id = str(payload.get("account_id") or (self.managed_accounts[0] if self.managed_accounts else ""))
         return {
             "account_id": account_id,
@@ -99,6 +114,7 @@ class OfficialIbkrAdapter:
         }
 
     def request_contract_details(self, contract: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_connected()
         req_id = self._next_request_id()
         event = threading.Event()
         self._contract_detail_events[req_id] = event
@@ -112,6 +128,14 @@ class OfficialIbkrAdapter:
         return rows[0]
 
     def request_market_data(self, contract: dict[str, Any], timeout_seconds: int = 5) -> dict[str, Any]:
+        self._ensure_connected()
+        payload = self._request_market_data_once(contract, timeout_seconds=timeout_seconds)
+        if int(payload.get("error_code") or 0) == 504:
+            self._reconnect()
+            payload = self._request_market_data_once(contract, timeout_seconds=timeout_seconds)
+        return payload
+
+    def _request_market_data_once(self, contract: dict[str, Any], *, timeout_seconds: int) -> dict[str, Any]:
         req_id = self._next_request_id()
         event = threading.Event()
         self._market_data_events[req_id] = event
@@ -131,6 +155,10 @@ class OfficialIbkrAdapter:
         return payload
 
     def request_positions(self) -> list[dict[str, Any]]:
+        return self._retry_after_not_connected(self._request_positions_once)
+
+    def _request_positions_once(self) -> list[dict[str, Any]]:
+        self._ensure_connected()
         self.positions_event.clear()
         self._positions = []
         self.client.reqPositions()
@@ -139,6 +167,10 @@ class OfficialIbkrAdapter:
         return list(self._positions)
 
     def request_account_snapshot(self, account_id: str | None = None) -> dict[str, Any]:
+        return self._retry_after_not_connected(lambda: self._request_account_snapshot_once(account_id))
+
+    def _request_account_snapshot_once(self, account_id: str | None = None) -> dict[str, Any]:
+        self._ensure_connected()
         summary = self.account_summary()
         resolved_account_id = account_id or str(summary.get("account_id") or "")
         req_id = self._next_request_id()
@@ -395,6 +427,8 @@ class OfficialIbkrAdapter:
                         "created_at": _now(),
                     }
                 )
+                if errorCode == 504:
+                    adapter.connected_event.clear()
                 if reqId in adapter._account_summary_events:
                     adapter._account_summary_events[reqId].set()
                 if reqId in adapter._contract_detail_events:
@@ -408,6 +442,42 @@ class OfficialIbkrAdapter:
                     adapter._pnl_events[reqId].set()
 
         self.client = Client()
+
+    def _ensure_connected(self) -> None:
+        if self.client is None:
+            self._init_client()
+        if self.client.isConnected():
+            return
+        self._reconnect()
+
+    def _reconnect(self) -> None:
+        if self.connection_host is None or self.connection_port is None or self.connection_client_id is None:
+            raise RuntimeError("adapter_not_connected")
+        if self.client is None:
+            self._init_client()
+        try:
+            if self.client.isConnected():
+                self.client.disconnect()
+        except Exception:
+            pass
+        self.connected_event.clear()
+        self.next_valid_id_event.clear()
+        self._check_socket_available(self.connection_host, self.connection_port)
+        self.client.connect(self.connection_host, self.connection_port, self.connection_client_id)
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self.client.run, name="ibkr-api", daemon=True)
+            self.thread.start()
+        self._wait(self.next_valid_id_event, 10.0, "timed_out_waiting_for_next_valid_id")
+        self.connected_event.set()
+
+    def _retry_after_not_connected(self, operation):
+        try:
+            return operation()
+        except Exception as exc:
+            if not _is_not_connected_error(exc):
+                raise
+            self._reconnect()
+            return operation()
 
     def _next_request_id(self) -> int:
         with self.lock:
@@ -434,6 +504,21 @@ class OfficialIbkrAdapter:
             return
         if raise_on_timeout:
             raise RuntimeError(error_message)
+
+    def _request_error(self, req_id: int) -> dict[str, Any] | None:
+        for error in reversed(self.errors):
+            if int(error.get("req_id") or -1) == req_id:
+                return error
+        return None
+
+    def _check_socket_available(self, host: str, port: int) -> None:
+        if not self.socket_preflight_enabled:
+            return
+        try:
+            with socket.create_connection((host, port), timeout=2.0):
+                return
+        except OSError as exc:
+            raise RuntimeError(f"ibkr_api_socket_not_listening:{host}:{port}") from exc
 
     def _build_contract(self, payload: dict[str, Any]) -> Any:
         from ibapi.contract import Contract
@@ -532,6 +617,11 @@ def _optional_broker_float(value: Any) -> float | None:
     if abs(parsed) >= 1e307:
         return None
     return parsed
+
+
+def _is_not_connected_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "not connected" in message or "error 504" in message or message.strip() == "504"
 
 
 def _now() -> str:

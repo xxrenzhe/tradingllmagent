@@ -17,16 +17,25 @@ class FakeEClient:
     def __init__(self, wrapper) -> None:
         self.wrapper = wrapper
         self.connected = False
+        self.connect_calls: list[dict] = []
+        self.market_data_error_once = False
+        self.positions_error_once = False
+        self.account_summary_error_once = False
         self.market_data_types: list[int] = []
         self.market_data_requests: list[dict] = []
         self.cancelled_requests: list[int] = []
         self.placed_orders: list[dict] = []
+        self.position_requests = 0
+        self.account_summary_requests = 0
 
     def isConnected(self) -> bool:  # noqa: N802
         return self.connected
 
     def connect(self, host: str, port: int, client_id: int) -> None:
         self.connected = True
+        self.connect_calls.append({"host": host, "port": port, "client_id": client_id})
+        self.wrapper.nextValidId(100 + len(self.connect_calls))
+        self.wrapper.managedAccounts("DU1234567")
 
     def disconnect(self) -> None:
         self.connected = False
@@ -46,6 +55,15 @@ class FakeEClient:
                 "snapshot": snapshot,
             }
         )
+        if self.market_data_error_once:
+            self.market_data_error_once = False
+            self.connected = False
+            self.wrapper.error(req_id, 504, "Not connected")
+            return
+        self.wrapper.marketDataType(req_id, 3)
+        self.wrapper.tickPrice(req_id, 66, 19000.0, None)
+        self.wrapper.tickPrice(req_id, 67, 19000.25, None)
+        self.wrapper.tickPrice(req_id, 68, 19000.25, None)
 
     def cancelMktData(self, req_id: int) -> None:  # noqa: N802
         self.cancelled_requests.append(req_id)
@@ -61,6 +79,43 @@ class FakeEClient:
                 "order": order,
             }
         )
+
+    def reqPositions(self) -> None:  # noqa: N802
+        self.position_requests += 1
+        if self.positions_error_once:
+            self.positions_error_once = False
+            self.connected = False
+            raise RuntimeError("Not connected")
+        self.wrapper.position("DU1234567", SimpleNamespace(symbol="MNQ"), 0, 0.0)
+        self.wrapper.positionEnd()
+
+    def cancelPositions(self) -> None:  # noqa: N802
+        return
+
+    def reqAccountSummary(self, req_id: int, group_name: str, tags: str) -> None:  # noqa: N802
+        self.account_summary_requests += 1
+        if self.account_summary_error_once:
+            self.account_summary_error_once = False
+            self.connected = False
+            self.wrapper.error(req_id, 504, "Not connected")
+            return
+        for tag, value in {
+            "AccountType": "INDIVIDUAL",
+            "NetLiquidation": "100000.0",
+            "RealizedPnL": "10.0",
+            "UnrealizedPnL": "2.0",
+        }.items():
+            self.wrapper.accountSummary(req_id, "DU1234567", tag, value, "USD")
+        self.wrapper.accountSummaryEnd(req_id)
+
+    def cancelAccountSummary(self, req_id: int) -> None:  # noqa: N802
+        return
+
+    def reqPnL(self, req_id: int, account: str, model_code: str) -> None:  # noqa: N802
+        self.wrapper.pnl(req_id, 12.0, 2.0, 10.0)
+
+    def cancelPnL(self, req_id: int) -> None:  # noqa: N802
+        return
 
 
 class FakeContract:
@@ -102,13 +157,49 @@ class OfficialIbkrAdapterTests(unittest.TestCase):
         sys.modules.update(self.original_modules)
 
     def test_request_market_data_uses_delayed_market_data_type(self) -> None:
-        adapter = OfficialIbkrAdapter()
+        adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
+        adapter.connect("127.0.0.1", 7497, 11)
 
-        payload = adapter.request_market_data({"symbol": "MNQ"}, timeout_seconds=0)
+        payload = adapter.request_market_data({"symbol": "MNQ"}, timeout_seconds=1)
 
         self.assertEqual(adapter.client.market_data_types, [3])
         self.assertEqual(adapter.client.market_data_requests[0]["symbol"], "MNQ")
-        self.assertEqual(payload["market_data_type"], "unknown")
+        self.assertEqual(payload["market_data_type"], "delayed")
+
+    def test_request_market_data_reconnects_once_after_504(self) -> None:
+        adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
+        adapter.connect("127.0.0.1", 7497, 11)
+        adapter.client.market_data_error_once = True
+
+        payload = adapter.request_market_data({"symbol": "MNQ"}, timeout_seconds=1)
+
+        self.assertEqual(len(adapter.client.connect_calls), 2)
+        self.assertEqual(len(adapter.client.market_data_requests), 2)
+        self.assertEqual(payload["market_data_type"], "delayed")
+        self.assertEqual(payload["bid"], 19000.0)
+
+    def test_request_positions_reconnects_after_not_connected_exception(self) -> None:
+        adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
+        adapter.connect("127.0.0.1", 7497, 11)
+        adapter.client.positions_error_once = True
+
+        positions = adapter.request_positions()
+
+        self.assertEqual(len(adapter.client.connect_calls), 2)
+        self.assertEqual(adapter.client.position_requests, 2)
+        self.assertEqual(positions[0]["symbol"], "MNQ")
+
+    def test_account_snapshot_reconnects_after_account_summary_504(self) -> None:
+        adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
+        adapter.connect("127.0.0.1", 7497, 11)
+        adapter.client.account_summary_error_once = True
+
+        snapshot = adapter.request_account_snapshot()
+
+        self.assertEqual(len(adapter.client.connect_calls), 2)
+        self.assertEqual(adapter.client.account_summary_requests, 2)
+        self.assertEqual(snapshot["net_liquidation"], 100000.0)
+        self.assertEqual(snapshot["daily_pnl"], 12.0)
 
     def test_delayed_tick_types_populate_bid_ask_and_last(self) -> None:
         adapter = OfficialIbkrAdapter()
@@ -185,6 +276,12 @@ class OfficialIbkrAdapterTests(unittest.TestCase):
         self.assertEqual(first["executions"][0]["commission"], 0.62)
         self.assertEqual(first["executions"][0]["realized_pnl"], 1.5)
         self.assertEqual(second["executions"], [])
+
+    def test_connect_reports_api_socket_not_listening_before_ibapi_wait(self) -> None:
+        adapter = OfficialIbkrAdapter()
+
+        with self.assertRaisesRegex(RuntimeError, "ibkr_api_socket_not_listening:127.0.0.1:1"):
+            adapter.connect("127.0.0.1", 1, 11)
 
 
 if __name__ == "__main__":
