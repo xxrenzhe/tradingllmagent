@@ -36,7 +36,8 @@ class OfficialIbkrAdapter:
     _pnl_events: dict[int, threading.Event] = field(default_factory=dict)
     _positions: list[dict[str, Any]] = field(default_factory=list)
     _runtime_order_status: list[dict[str, Any]] = field(default_factory=list)
-    _pending_executions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    _executions_by_id: dict[str, dict[str, Any]] = field(default_factory=dict)
+    _undrained_execution_ids: set[str] = field(default_factory=set)
     _commission_reports: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -224,7 +225,10 @@ class OfficialIbkrAdapter:
     def drain_runtime_events(self) -> dict[str, Any]:
         with self.lock:
             executions = []
-            for execution_id, payload in list(self._pending_executions.items()):
+            for execution_id in sorted(self._undrained_execution_ids):
+                payload = self._executions_by_id.get(execution_id)
+                if payload is None:
+                    continue
                 commission = self._commission_reports.get(execution_id, {})
                 executions.append(
                     {
@@ -233,13 +237,14 @@ class OfficialIbkrAdapter:
                         "realized_pnl": _optional_float(commission.get("realized_pnl")),
                     }
                 )
+                if execution_id in self._commission_reports:
+                    self._commission_reports.pop(execution_id, None)
             drained = {
                 "order_status": list(self._runtime_order_status),
                 "executions": executions,
             }
             self._runtime_order_status.clear()
-            self._pending_executions.clear()
-            self._commission_reports.clear()
+            self._undrained_execution_ids.clear()
             return drained
 
     def _init_client(self) -> None:
@@ -358,7 +363,8 @@ class OfficialIbkrAdapter:
 
             def execDetails(self, reqId: int, contract: Any, execution: Any) -> None:  # noqa: N802
                 with adapter.lock:
-                    adapter._pending_executions[str(execution.execId)] = {
+                    execution_id = str(execution.execId)
+                    adapter._executions_by_id[execution_id] = {
                         "execution_id": str(execution.execId),
                         "order_id": int(execution.orderId),
                         "symbol": contract.symbol,
@@ -367,13 +373,17 @@ class OfficialIbkrAdapter:
                         "fill_price": float(execution.price),
                         "filled_at": _ibkr_time_to_iso(str(execution.time)),
                     }
+                    adapter._undrained_execution_ids.add(execution_id)
 
             def commissionReport(self, commissionReport: Any) -> None:  # noqa: N802
                 with adapter.lock:
-                    adapter._commission_reports[str(commissionReport.execId)] = {
+                    execution_id = str(commissionReport.execId)
+                    adapter._commission_reports[execution_id] = {
                         "commission": float(commissionReport.commission),
                         "realized_pnl": _optional_broker_float(commissionReport.realizedPNL),
                     }
+                    if execution_id in adapter._executions_by_id:
+                        adapter._undrained_execution_ids.add(execution_id)
 
             def error(self, reqId: int, errorCode: int, errorString: str, advancedOrderRejectJson: str = "") -> None:  # noqa: N802
                 adapter.errors.append(

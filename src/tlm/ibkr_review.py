@@ -75,7 +75,7 @@ def deterministic_fallback_review(request: dict[str, Any]) -> dict[str, Any]:
     fast_changes = []
     if risk_context.get("data_stale"):
         blocked_reasons.append("data_stale")
-        fast_changes.append({"change": "observe_only", "reason": "data_stale"})
+        fast_changes.append({"change": "safe_mode", "reason": "data_stale"})
     if risk_context.get("daily_loss_limit_hit"):
         blocked_reasons.append("daily_loss_limit_hit")
         fast_changes.append({"change": "safe_mode", "reason": "daily_loss_limit_hit"})

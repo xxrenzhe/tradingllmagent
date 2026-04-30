@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -304,6 +305,8 @@ class IbkrPaperGateway:
     paper_position_quantity: int = 0
     order_status_events: list[dict[str, Any]] = field(default_factory=list)
     executions: list[IbkrExecutionFill] = field(default_factory=list)
+    order_status_fingerprints: set[str] = field(default_factory=set)
+    execution_index: dict[str, int] = field(default_factory=dict)
     positions: dict[str, IbkrPositionSnapshot] = field(default_factory=dict)
     account_snapshots: list[IbkrAccountSnapshot] = field(default_factory=list)
 
@@ -636,17 +639,22 @@ class IbkrPaperGateway:
         }
 
     def record_order_status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = {
+            "order_id": int(payload["order_id"]),
+            "status": str(payload["status"]),
+            "filled": _optional_float(payload.get("filled")),
+            "remaining": _optional_float(payload.get("remaining")),
+            "average_fill_price": _optional_float(payload.get("average_fill_price")),
+            "why_held": payload.get("why_held"),
+        }
+        fingerprint = _stable_runtime_key(normalized)
+        if fingerprint in self.order_status_fingerprints:
+            return self._order_event("order_status_duplicate_ignored", normalized)
         event = self._order_event(
             "order_status_recorded",
-            {
-                "order_id": int(payload["order_id"]),
-                "status": str(payload["status"]),
-                "filled": _optional_float(payload.get("filled")),
-                "remaining": _optional_float(payload.get("remaining")),
-                "average_fill_price": _optional_float(payload.get("average_fill_price")),
-                "why_held": payload.get("why_held"),
-            },
+            normalized,
         )
+        self.order_status_fingerprints.add(fingerprint)
         self.order_status_events.append(event)
         return event
 
@@ -665,9 +673,28 @@ class IbkrPaperGateway:
         )
         if fill.side not in {"BUY", "SELL"}:
             return self._order_event("execution_fill_rejected", {"errors": [f"unsupported_side:{fill.side}"]})
+        existing_index = self.execution_index.get(fill.execution_id)
+        if existing_index is not None:
+            existing = self.executions[existing_index]
+            if existing.to_dict() == fill.to_dict():
+                return self._order_event("execution_fill_duplicate_ignored", {"fill": fill.to_dict()})
+            merged = IbkrExecutionFill(
+                execution_id=existing.execution_id,
+                order_id=existing.order_id,
+                symbol=existing.symbol,
+                side=existing.side,
+                quantity=existing.quantity,
+                fill_price=existing.fill_price,
+                commission=fill.commission if fill.commission or existing.commission == 0.0 else existing.commission,
+                realized_pnl=fill.realized_pnl if fill.realized_pnl is not None else existing.realized_pnl,
+                filled_at=fill.filled_at if fill.filled_at != existing.filled_at else existing.filled_at,
+            )
+            self.executions[existing_index] = merged
+            return self._order_event("execution_fill_updated", {"fill": merged.to_dict()})
         signed = fill.quantity if fill.side == "BUY" else -fill.quantity
         if fill.symbol == "MNQ":
             self.paper_position_quantity += signed
+        self.execution_index[fill.execution_id] = len(self.executions)
         self.executions.append(fill)
         return self._order_event("execution_fill_recorded", {"fill": fill.to_dict()})
 
@@ -878,6 +905,8 @@ class IbkrPaperGateway:
         if not self.account or not self.account.is_paper:
             return self._incident("safe_mode_exit_blocked", "paper_account_not_verified")
         self.safe_mode = False
+        if self.connected:
+            self.read_only = False
         return self._incident("safe_mode_exited", reason)
 
     def _status(self) -> str:
@@ -1034,6 +1063,10 @@ def _normalize_execution_side(value: Any) -> str:
     if side == "SLD":
         return "SELL"
     return side
+
+
+def _stable_runtime_key(payload: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
 def _positive_int(value: Any) -> int:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from types import ModuleType
 import sys
 import threading
@@ -153,6 +154,37 @@ class OfficialIbkrAdapterTests(unittest.TestCase):
         self.assertIsNone(_optional_broker_float(""))
         self.assertIsNone(_optional_broker_float(1.7976931348623157e308))
         self.assertEqual(_optional_broker_float("12.5"), 12.5)
+
+    def test_drain_runtime_events_merges_out_of_order_commission_reports(self) -> None:
+        adapter = OfficialIbkrAdapter()
+
+        adapter.client.commissionReport(
+            SimpleNamespace(
+                execId="exec-1",
+                commission=0.62,
+                realizedPNL=1.5,
+            )
+        )
+        adapter.client.execDetails(
+            1,
+            SimpleNamespace(symbol="MNQ"),
+            SimpleNamespace(
+                execId="exec-1",
+                orderId=91,
+                side="BOT",
+                shares=1,
+                price=19000.25,
+                time="20260430  10:00:00",
+            ),
+        )
+
+        first = adapter.drain_runtime_events()
+        second = adapter.drain_runtime_events()
+
+        self.assertEqual(len(first["executions"]), 1)
+        self.assertEqual(first["executions"][0]["commission"], 0.62)
+        self.assertEqual(first["executions"][0]["realized_pnl"], 1.5)
+        self.assertEqual(second["executions"], [])
 
 
 if __name__ == "__main__":

@@ -693,6 +693,93 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(gateway.executions[0].side, "BUY")
         self.assertEqual(gateway.executions[1].side, "SELL")
 
+    def test_duplicate_order_status_is_ignored(self) -> None:
+        gateway = self.ready_gateway()
+
+        first = gateway.record_order_status(
+            {
+                "order_id": 11,
+                "status": "Submitted",
+                "filled": 0,
+                "remaining": 1,
+                "average_fill_price": 0.0,
+            }
+        )
+        duplicate = gateway.record_order_status(
+            {
+                "order_id": 11,
+                "status": "Submitted",
+                "filled": 0,
+                "remaining": 1,
+                "average_fill_price": 0.0,
+            }
+        )
+
+        self.assertEqual(first["event_type"], "order_status_recorded")
+        self.assertEqual(duplicate["event_type"], "order_status_duplicate_ignored")
+        self.assertEqual(gateway.execution_ledger()["order_status_count"], 1)
+
+    def test_duplicate_execution_fill_updates_without_double_counting_position(self) -> None:
+        gateway = self.ready_gateway()
+
+        first = gateway.record_execution_fill(
+            {
+                "execution_id": "exec-dup",
+                "order_id": 21,
+                "symbol": "MNQ",
+                "side": "BUY",
+                "quantity": 1,
+                "fill_price": 19000.25,
+                "commission": 0.0,
+                "filled_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        updated = gateway.record_execution_fill(
+            {
+                "execution_id": "exec-dup",
+                "order_id": 21,
+                "symbol": "MNQ",
+                "side": "BUY",
+                "quantity": 1,
+                "fill_price": 19000.25,
+                "commission": 0.62,
+                "realized_pnl": 1.5,
+                "filled_at": datetime.now(UTC).isoformat(),
+            }
+        )
+
+        self.assertEqual(first["event_type"], "execution_fill_recorded")
+        self.assertEqual(updated["event_type"], "execution_fill_updated")
+        self.assertEqual(gateway.execution_ledger()["fill_count"], 1)
+        self.assertEqual(gateway.execution_ledger()["total_commission"], 0.62)
+        self.assertEqual(gateway.paper_position_quantity, 1)
+
+    def test_exit_safe_mode_restores_writable_paper_state(self) -> None:
+        gateway = self.ready_gateway()
+        gateway.enter_safe_mode("test")
+
+        event = gateway.exit_safe_mode("recovered")
+
+        self.assertEqual(event["event_type"], "safe_mode_exited")
+        self.assertFalse(gateway.safe_mode)
+        self.assertFalse(gateway.read_only)
+
+    def test_partial_fill_status_is_recorded_without_rejection(self) -> None:
+        gateway = self.ready_gateway()
+
+        event = gateway.record_order_status(
+            {
+                "order_id": 31,
+                "status": "PartiallyFilled",
+                "filled": 1,
+                "remaining": 1,
+                "average_fill_price": 19000.25,
+            }
+        )
+
+        self.assertEqual(event["event_type"], "order_status_recorded")
+        self.assertEqual(gateway.order_status_events[0]["details"]["remaining"], 1.0)
+
     def test_position_reconciliation_enters_safe_mode_on_drift(self) -> None:
         gateway = self.ready_gateway()
         gateway.record_position_snapshot({"symbol": "MNQ", "quantity": 1})

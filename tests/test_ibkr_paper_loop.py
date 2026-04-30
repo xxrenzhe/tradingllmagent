@@ -206,6 +206,76 @@ class IbkrPaperLoopTests(unittest.TestCase):
         self.assertFalse(loaded["live_execution_claim"])
         self.assertIn("contract:contract_details_missing", loaded["promotion_blockers"])
 
+    def test_decision_cycle_enters_safe_mode_when_market_data_is_stale(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+        gateway.connect()
+        gateway.record_contract_details(
+            {
+                "symbol": "MNQ",
+                "tick_size": 0.25,
+                "point_value": 2.0,
+                "exchange": "CME",
+                "currency": "USD",
+            }
+        )
+        stale_time = datetime.now(UTC) - timedelta(minutes=6)
+        for close in (100.0, 101.0, 102.0, 103.0, 104.0, 106.0):
+            gateway.record_market_data(
+                {
+                    "symbol": "MNQ",
+                    "bid": close - 0.25,
+                    "ask": close,
+                    "last": close,
+                    "market_data_type": "real_time",
+                    "snapshot_time": stale_time.isoformat(),
+                }
+            )
+
+        review_history: list[dict] = []
+        optimizer_history: list[dict] = []
+        state = {
+            "review_interval_seconds": 0,
+            "market_data_history_limit": 100,
+            "readiness_max_stale_seconds": 5,
+            "strategy": {
+                "strategy_id": "mnq_1m_breakout",
+                "strategy_spec_hash": "strategy-hash",
+                "module_id": "range_breakout",
+                "family": "range_breakout",
+                "symbol": "MNQ",
+                "timeframe": "1m",
+                "lookback_bars": 5,
+                "breakout_ticks": 1,
+                "enabled": True,
+                "tick_size": 0.25,
+                "stop_loss_ticks": 20,
+                "take_profit_ticks": 40,
+                "max_holding_minutes": 20,
+            },
+            "control_state": {
+                "mode": "paper",
+                "min_confidence": 0.55,
+                "max_spread_ticks": 2.0,
+                "daily_trade_cap": 6,
+                "strategies": {},
+                "trade_session": {"start": "09:30", "end": "15:55"},
+                "safe_mode": False,
+                "kill_switch": False,
+            },
+        }
+
+        decision = run_ibkr_decision_cycle(
+            gateway,
+            symbol="MNQ",
+            review_history=review_history,
+            optimizer_history=optimizer_history,
+            state=state,
+        )
+
+        self.assertEqual(decision["review_result_action"], "paper_block")
+        self.assertTrue(gateway.safe_mode)
+        self.assertEqual(optimizer_history[-1]["control_state"]["safe_mode"], True)
+
 
 def _breakout_snapshots() -> list[dict]:
     closes = [100.0, 101.0, 102.0, 103.0, 104.0, 106.0]

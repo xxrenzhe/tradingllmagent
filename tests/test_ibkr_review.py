@@ -45,7 +45,7 @@ class IbkrReviewTests(unittest.TestCase):
         result = deterministic_fallback_review(request)
 
         self.assertEqual(result["action"], "paper_block")
-        self.assertEqual(result["fast_path_control_diff"]["changes"][0]["change"], "observe_only")
+        self.assertEqual(result["fast_path_control_diff"]["changes"][0]["change"], "safe_mode")
         self.assertIn("data_stale", result["risk_review"]["blocked_reasons"])
 
     def test_validate_review_result_rejects_forbidden_changes_and_order_objects(self) -> None:
