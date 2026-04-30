@@ -24,11 +24,14 @@ This runbook is the minimum operating procedure for the Mac-local IBKR Paper loo
 
 1. Start TWS or IB Gateway in Paper Trading mode.
 2. Start FastAPI locally.
+   ```bash
+   tlm ibkr loop --symbol MNQ --auto-submit
+   ```
 3. Verify health:
    ```bash
    curl -s http://127.0.0.1:8000/api/gateways/ibkr/health
    ```
-4. Connect through the adapter layer only after paper account verification is available.
+4. The `tlm ibkr loop` command auto-connects to TWS Paper by default using `127.0.0.1:7497` and `client_id=11`. Override with `--ibkr-host`, `--ibkr-port`, `--client-id`, or disable startup connect with `--no-connect`.
 5. Record or verify contract details for `MNQ`; tick size must be `0.25`, point value must be `2.0`.
 6. Record or verify order-ready `bid`, `ask`, and `last`; spread must be non-negative and quote age must be within readiness limits.
 7. Verify readiness:

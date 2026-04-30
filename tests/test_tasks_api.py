@@ -6,6 +6,7 @@ import unittest
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import duckdb
 
@@ -1411,6 +1412,67 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/ibkr-paper/runs/{run_id}", paths)
         self.assertIn("/api/ibkr-paper/reviews", paths)
         self.assertIn("/api/ibkr-paper/reports/{run_id}", paths)
+
+    def test_fastapi_app_can_auto_connect_ibkr_on_startup(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ModuleNotFoundError:
+            self.skipTest("FastAPI is not installed")
+
+        class AutoConnectAdapter:
+            def connect(self, host: str, port: int, client_id: int) -> dict:
+                return {"connected": True, "host": host, "port": port, "client_id": client_id}
+
+            def disconnect(self) -> dict:
+                return {"connected": False}
+
+            def account_summary(self) -> dict:
+                return {"account_id": "DU1234567", "account_type": "paper"}
+
+            def request_contract_details(self, contract: dict) -> dict:
+                return {}
+
+            def request_market_data(self, contract: dict, timeout_seconds: int = 5) -> dict:
+                return {}
+
+            def request_positions(self) -> list[dict]:
+                return []
+
+            def request_account_snapshot(self, account_id: str | None = None) -> dict:
+                return {}
+
+            def submit_bracket_order(self, contract: dict, order: dict) -> dict:
+                return {}
+
+            def cancel_order(self, order_id: int) -> dict:
+                return {}
+
+            def submit_flatten_order(self, contract: dict, action: str, quantity: int) -> dict:
+                return {}
+
+            def drain_runtime_events(self) -> dict:
+                return {"order_status": [], "executions": []}
+
+        with patch.dict(
+            os.environ,
+            {
+                "TLM_IBKR_AUTO_CONNECT": "1",
+                "TLM_IBKR_HOST": "127.0.0.1",
+                "TLM_IBKR_PORT": "7497",
+                "TLM_IBKR_CLIENT_ID": "17",
+                "TLM_IBKR_POLLER_ENABLED": "0",
+            },
+            clear=False,
+        ):
+            with patch("tlm.api.build_ibkr_gateway_adapter", return_value=AutoConnectAdapter()):
+                app = create_app()
+                with TestClient(app) as client:
+                    health = client.get("/api/gateways/ibkr/health").json()
+                    poller = client.get("/api/gateways/ibkr/poller").json()
+
+        self.assertTrue(health["connected"])
+        self.assertTrue(health["paper_account_verified"])
+        self.assertEqual(poller["startup_connect_event"]["event_type"], "connected")
 
     def test_trigger_gate_api_helper_writes_simulation_artifacts_without_fastapi(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

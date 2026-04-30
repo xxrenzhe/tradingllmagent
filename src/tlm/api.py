@@ -744,6 +744,7 @@ def create_app():
         "last_run_at": None,
         "last_result": None,
         "last_error": None,
+        "startup_connect_event": None,
     }
 
     @asynccontextmanager
@@ -753,6 +754,20 @@ def create_app():
         ibkr_stop_event = asyncio.Event()
         worker = asyncio.create_task(worker_loop(task_db, stop_event))
         ibkr_poller = None
+        if _env_bool("TLM_IBKR_AUTO_CONNECT", False):
+            startup_connect_event = await asyncio.to_thread(
+                ibkr_gateway.connect,
+                {
+                    "host": os.environ.get("TLM_IBKR_HOST", ibkr_gateway.config.host),
+                    "port": int(os.environ.get("TLM_IBKR_PORT", str(ibkr_gateway.config.port))),
+                    "client_id": int(os.environ.get("TLM_IBKR_CLIENT_ID", str(ibkr_gateway.config.client_id))),
+                },
+            )
+            ibkr_poller_state["startup_connect_event"] = startup_connect_event
+            if startup_connect_event.get("event_type") != "connected":
+                details = startup_connect_event.get("details") or {}
+                errors = details.get("errors") or [startup_connect_event.get("event_type", "startup_connect_failed")]
+                ibkr_poller_state["last_error"] = ",".join(str(error) for error in errors)
         if bool(ibkr_poller_state["enabled"]):
             ibkr_poller = asyncio.create_task(
                 ibkr_poller_loop(

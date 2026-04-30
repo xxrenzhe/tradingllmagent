@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
+import os
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
@@ -1150,6 +1152,28 @@ def cmd_ibkr_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ibkr_loop(args: argparse.Namespace) -> int:
+    os.environ["TLM_IBKR_POLLER_ENABLED"] = "1"
+    os.environ["TLM_IBKR_POLL_SYMBOL"] = args.symbol
+    os.environ["TLM_IBKR_POLL_INTERVAL_SECONDS"] = str(args.poll_interval_seconds)
+    os.environ["TLM_IBKR_REVIEW_INTERVAL_SECONDS"] = str(args.review_interval_seconds)
+    os.environ["TLM_IBKR_READINESS_MAX_STALE_SECONDS"] = str(args.max_stale_seconds)
+    os.environ["TLM_IBKR_AUTO_SUBMIT"] = "1" if args.auto_submit else "0"
+    os.environ["TLM_IBKR_AUTO_CONNECT"] = "1" if args.connect else "0"
+    os.environ["TLM_IBKR_HOST"] = args.ibkr_host
+    os.environ["TLM_IBKR_PORT"] = str(args.ibkr_port)
+    os.environ["TLM_IBKR_CLIENT_ID"] = str(args.client_id)
+
+    try:
+        uvicorn = importlib.import_module("uvicorn")
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("uvicorn is not installed. Install the API extras before running the paper loop.") from exc
+    api_module = importlib.import_module("tlm.api")
+    app = api_module.create_app()
+    uvicorn.run(app, host=args.api_host, port=args.api_port)
+    return 0
+
+
 def _ibkr_cli_report(gateway: IbkrPaperGateway, run_id: str) -> dict:
     return build_ibkr_paper_report(
         run_id=run_id,
@@ -1717,6 +1741,19 @@ def build_parser() -> argparse.ArgumentParser:
     ibkr_report.add_argument("--run-id", required=True)
     ibkr_report.add_argument("--output-root", default="experiments/ibkr_paper")
     ibkr_report.set_defaults(func=cmd_ibkr_report)
+    ibkr_loop = ibkr_subparsers.add_parser("loop")
+    ibkr_loop.add_argument("--symbol", default="MNQ")
+    ibkr_loop.add_argument("--api-host", default="127.0.0.1")
+    ibkr_loop.add_argument("--api-port", type=int, default=8000)
+    ibkr_loop.add_argument("--ibkr-host", default="127.0.0.1")
+    ibkr_loop.add_argument("--ibkr-port", type=int, default=7497)
+    ibkr_loop.add_argument("--client-id", type=int, default=11)
+    ibkr_loop.add_argument("--poll-interval-seconds", type=float, default=2.0)
+    ibkr_loop.add_argument("--review-interval-seconds", type=float, default=300.0)
+    ibkr_loop.add_argument("--max-stale-seconds", type=int, default=5)
+    ibkr_loop.add_argument("--auto-submit", action="store_true")
+    ibkr_loop.add_argument("--no-connect", action="store_false", dest="connect")
+    ibkr_loop.set_defaults(func=cmd_ibkr_loop, connect=True)
 
     paper = subparsers.add_parser("paper")
     paper_subparsers = paper.add_subparsers(dest="paper_command", required=True)
