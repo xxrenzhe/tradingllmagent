@@ -280,6 +280,8 @@ def run_ibkr_poll_cycle(
     if gateway.account is None or not gateway.account.is_paper:
         return {"status": "skipped", "reason": "paper_account_not_verified", "actions": []}
 
+    prior_readiness_count = len(gateway.readiness_events)
+    prior_order_event_count = len(gateway.order_events)
     actions = []
     if gateway.contract_readiness(symbol)["details"] is None:
         actions.append(gateway.sync_contract_details(symbol))
@@ -287,8 +289,16 @@ def run_ibkr_poll_cycle(
     actions.append(gateway.sync_positions())
     actions.append(gateway.sync_account_snapshot())
     actions.append(gateway.sync_runtime_events())
+    readiness = gateway.readiness(
+        symbol=symbol,
+        max_stale_seconds=int((state or {}).get("readiness_max_stale_seconds", 5)),
+    )
     decision = None
     if review_history is not None and optimizer_history is not None and state is not None:
+        state["readiness_check_count"] = int(state.get("readiness_check_count", 0)) + max(
+            len(gateway.readiness_events) - prior_readiness_count,
+            0,
+        )
         decision = run_ibkr_decision_cycle(
             gateway,
             symbol=symbol,
@@ -296,12 +306,28 @@ def run_ibkr_poll_cycle(
             optimizer_history=optimizer_history,
             state=state,
         )
+        new_order_events = gateway.order_events[prior_order_event_count:]
+        state["live_order_attempt_count"] = int(state.get("live_order_attempt_count", 0)) + sum(
+            1
+            for event in new_order_events
+            if event.get("event_type") in {
+                "bracket_order_submitted",
+                "bracket_order_submit_failed",
+                "bracket_order_submit_rejected",
+            }
+        )
+        state["duplicate_order_event_count"] = int(state.get("duplicate_order_event_count", 0)) + sum(
+            1
+            for event in new_order_events
+            if event.get("event_type") in {"order_status_duplicate_ignored", "execution_fill_duplicate_ignored"}
+        )
     return {
         "status": "ok",
         "symbol": symbol,
         "action_count": len(actions),
         "actions": [action.get("event_type") for action in actions],
         "safe_mode": gateway.safe_mode,
+        "readiness": readiness,
         "decision": decision,
     }
 
@@ -701,7 +727,10 @@ def create_app():
         "readiness_max_stale_seconds": int(os.environ.get("TLM_IBKR_READINESS_MAX_STALE_SECONDS", "5")),
         "strategy": _ibkr_default_strategy(os.environ.get("TLM_IBKR_POLL_SYMBOL", "MNQ")),
         "control_state": _ibkr_default_control_state(),
+        "readiness_check_count": 0,
         "review_cycle_count": 0,
+        "live_order_attempt_count": 0,
+        "duplicate_order_event_count": 0,
         "last_review_at": None,
         "last_review_fill_count": 0,
         "latest_bars": [],

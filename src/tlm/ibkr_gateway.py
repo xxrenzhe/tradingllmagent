@@ -298,6 +298,7 @@ class IbkrPaperGateway:
     contract_details: dict[str, IbkrContractDetails] = field(default_factory=dict)
     market_data: dict[str, IbkrMarketDataSnapshot] = field(default_factory=dict)
     market_data_events: list[dict[str, Any]] = field(default_factory=list)
+    readiness_events: list[dict[str, Any]] = field(default_factory=list)
     bracket_orders: dict[str, IbkrBracketOrderDraft] = field(default_factory=dict)
     submitted_bracket_order_ids: set[str] = field(default_factory=set)
     order_events: list[dict[str, Any]] = field(default_factory=list)
@@ -345,7 +346,7 @@ class IbkrPaperGateway:
         market_report = self.market_data_readiness(symbol, max_stale_seconds=max_stale_seconds)
         missing.extend(f"contract:{item}" for item in contract_report["missing_requirements"])
         missing.extend(f"market_data:{item}" for item in market_report["missing_requirements"])
-        return {
+        report = {
             "status": "ready" if not missing else "blocked",
             "mode": "ibkr_paper",
             "paper_only": True,
@@ -354,6 +355,17 @@ class IbkrPaperGateway:
             "market_data": market_report,
             "checked_at": _now(),
         }
+        self.readiness_events.append(
+            {
+                "symbol": symbol,
+                "status": report["status"],
+                "missing_requirements": list(missing),
+                "checked_at": report["checked_at"],
+            }
+        )
+        if len(self.readiness_events) > 2048:
+            self.readiness_events = self.readiness_events[-2048:]
+        return report
 
     def connect(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = payload or {}

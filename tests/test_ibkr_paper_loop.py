@@ -206,6 +206,65 @@ class IbkrPaperLoopTests(unittest.TestCase):
         self.assertFalse(loaded["live_execution_claim"])
         self.assertIn("contract:contract_details_missing", loaded["promotion_blockers"])
 
+    def test_ibkr_paper_report_exposes_acceptance_evidence_gates(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+        gateway.connect()
+        acceptance_days = [
+            "2026-04-21T14:30:00+00:00",
+            "2026-04-22T14:30:00+00:00",
+            "2026-04-23T14:30:00+00:00",
+            "2026-04-24T14:30:00+00:00",
+            "2026-04-25T14:30:00+00:00",
+        ]
+        fills = [
+            {
+                "execution_id": f"exec-{index}",
+                "order_id": index,
+                "symbol": "MNQ",
+                "side": "BUY",
+                "quantity": 1,
+                "fill_price": 19000.0 + index,
+                "commission": 0.47,
+                "realized_pnl": 10.0,
+                "filled_at": filled_at,
+            }
+            for index, filled_at in enumerate(acceptance_days, start=1)
+        ]
+        report = build_ibkr_paper_report(
+            run_id="paper-run-acceptance",
+            health=gateway.health(),
+            readiness={"status": "ready", "missing_requirements": []},
+            contracts=gateway.contract_readiness(),
+            market_data={"status": "ready", "missing_requirements": []},
+            bracket_orders={"order_event_count": 20, "recent_order_events": []},
+            execution_ledger={
+                "fills": fills,
+                "latest_account_snapshot": {"recorded_at": acceptance_days[-1]},
+                "net_realized_pnl": 50.0,
+                "total_commission": 2.35,
+            },
+            incidents={"incidents": [], "count": 0},
+            reviews=[],
+            one_minute_bars=[],
+            poller={
+                "readiness_check_count": 100,
+                "review_cycle_count": 30,
+                "live_order_attempt_count": 0,
+                "duplicate_order_event_count": 0,
+            },
+        )
+
+        evidence = report["acceptance_evidence"]
+
+        self.assertEqual(evidence["status"], "ready")
+        self.assertEqual(evidence["trading_day_count"], 5)
+        self.assertEqual(evidence["readiness_check_count"], 100)
+        self.assertEqual(evidence["review_cycle_count"], 30)
+        self.assertEqual(evidence["paper_order_lifecycle_event_count"], 20)
+        self.assertEqual(evidence["gates"]["live_order_attempts"], "ready")
+        self.assertEqual(evidence["gates"]["unexplained_duplicate_orders"], "ready")
+        self.assertEqual(evidence["missing_requirements"], [])
+
     def test_decision_cycle_enters_safe_mode_when_market_data_is_stale(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
         gateway.connect()

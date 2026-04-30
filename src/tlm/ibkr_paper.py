@@ -61,6 +61,15 @@ def build_ibkr_paper_report(
         "paper_allow_would_have_lost_rate": None,
         "llm_action_confusion_matrix": {},
     }
+    acceptance_evidence = _acceptance_evidence(
+        readiness=readiness,
+        bracket_orders=bracket_orders,
+        execution_ledger=execution_ledger,
+        incidents=incidents,
+        reviews=reviews or [],
+        one_minute_bars=one_minute_bars or [],
+        poller=poller or {},
+    )
     report = {
         "schema_version": IBKR_PAPER_ARTIFACT_VERSION,
         "run_id": run_id,
@@ -82,6 +91,7 @@ def build_ibkr_paper_report(
         "strategy_state": strategy_state or {},
         "control_state": control_state or {},
         "poller": poller or {},
+        "acceptance_evidence": acceptance_evidence,
         "promotion_blockers": _promotion_blockers(health, readiness, market_data, bracket_orders, incidents),
         "metrics": metrics,
     }
@@ -114,6 +124,7 @@ def create_ibkr_paper_run_artifacts(
         "account_snapshots": _write_jsonl(run_dir / "account_snapshots.jsonl", daily_report.get("execution_ledger", {}).get("latest_account_snapshot") or {}, resolved_run_id, "ibkr_account_snapshots"),
         "risk_control_diffs": _write_jsonl(run_dir / "risk_control_diffs.jsonl", daily_report.get("optimizer_reports", []), resolved_run_id, "ibkr_fast_path_optimizer"),
         "incidents": _write_jsonl(run_dir / "incidents.jsonl", daily_report.get("incidents", {}).get("incidents", []), resolved_run_id, "ibkr_incidents"),
+        "acceptance_evidence": _write_json(run_dir / "acceptance_evidence.json", daily_report.get("acceptance_evidence", {}), resolved_run_id, "ibkr_acceptance_evidence"),
         "daily_report": _write_json(run_dir / "daily_report.json", daily_report, resolved_run_id, "ibkr_daily_report"),
     }
     return {
@@ -254,6 +265,101 @@ def _promotion_blockers(
     if incidents.get("count", 0):
         blockers.append("incident_review_required")
     return sorted(set(blockers))
+
+
+def _acceptance_evidence(
+    *,
+    readiness: dict[str, Any],
+    bracket_orders: dict[str, Any],
+    execution_ledger: dict[str, Any],
+    incidents: dict[str, Any],
+    reviews: list[dict[str, Any]],
+    one_minute_bars: list[dict[str, Any]],
+    poller: dict[str, Any],
+) -> dict[str, Any]:
+    readiness_checks = int(poller.get("readiness_check_count", 0))
+    review_cycles = int(poller.get("review_cycle_count", 0))
+    order_lifecycle_events = int(bracket_orders.get("order_event_count", 0))
+    live_order_attempts = int(poller.get("live_order_attempt_count", 0))
+    duplicate_order_events = int(poller.get("duplicate_order_event_count", 0))
+    acceptance_days = _acceptance_days(
+        fills=execution_ledger.get("fills", []),
+        latest_account=execution_ledger.get("latest_account_snapshot"),
+        reviews=reviews,
+        one_minute_bars=one_minute_bars,
+    )
+    gate_status = {
+        "trading_days": "ready" if len(acceptance_days) >= 5 else "pending",
+        "readiness_checks": "ready" if readiness_checks >= 100 else "pending",
+        "review_cycles": "ready" if review_cycles >= 30 else "pending",
+        "order_lifecycle_events": "ready" if order_lifecycle_events >= 20 else "pending",
+        "live_order_attempts": "ready" if live_order_attempts == 0 else "blocked",
+        "unexplained_duplicate_orders": "ready" if duplicate_order_events == 0 else "blocked",
+        "bracket_child_missing_after_accept": "ready" if _bracket_child_failure_count(bracket_orders) == 0 else "blocked",
+    }
+    missing = []
+    if len(acceptance_days) < 5:
+        missing.append("trading_days<5")
+    if readiness_checks < 100:
+        missing.append("readiness_checks<100")
+    if review_cycles < 30:
+        missing.append("review_cycles<30")
+    if order_lifecycle_events < 20:
+        missing.append("order_lifecycle_events<20")
+    if live_order_attempts != 0:
+        missing.append("live_order_attempts_nonzero")
+    if duplicate_order_events != 0:
+        missing.append("unexplained_duplicate_orders_nonzero")
+    if _bracket_child_failure_count(bracket_orders) != 0:
+        missing.append("bracket_child_missing_after_accept_nonzero")
+    return {
+        "status": "ready" if not missing else "pending",
+        "acceptance_days": acceptance_days,
+        "trading_day_count": len(acceptance_days),
+        "readiness_check_count": readiness_checks,
+        "review_cycle_count": review_cycles,
+        "paper_order_lifecycle_event_count": order_lifecycle_events,
+        "live_order_attempt_count": live_order_attempts,
+        "unexplained_duplicate_order_count": duplicate_order_events,
+        "bracket_child_missing_after_accept_count": _bracket_child_failure_count(bracket_orders),
+        "incident_count": int(incidents.get("count", 0)),
+        "current_readiness_status": readiness.get("status"),
+        "gates": gate_status,
+        "missing_requirements": missing,
+    }
+
+
+def _acceptance_days(
+    *,
+    fills: list[dict[str, Any]],
+    latest_account: dict[str, Any] | None,
+    reviews: list[dict[str, Any]],
+    one_minute_bars: list[dict[str, Any]],
+) -> list[str]:
+    days: set[str] = set()
+    for fill in fills:
+        if fill.get("filled_at"):
+            days.add(str(fill["filled_at"])[:10])
+    if latest_account and latest_account.get("recorded_at"):
+        days.add(str(latest_account["recorded_at"])[:10])
+    for review in reviews:
+        created_at = (review.get("review_result") or {}).get("created_at") or (review.get("review_request") or {}).get("created_at")
+        if created_at:
+            days.add(str(created_at)[:10])
+    for bar in one_minute_bars:
+        if bar.get("bar_time"):
+            days.add(str(bar["bar_time"])[:10])
+    return sorted(days)
+
+
+def _bracket_child_failure_count(bracket_orders: dict[str, Any]) -> int:
+    events = bracket_orders.get("recent_order_events") or []
+    return sum(
+        1
+        for event in events
+        if str(event.get("event_type", "")).startswith("bracket_order_")
+        and str(event.get("event_type", "")).endswith(("failed", "rejected"))
+    )
 
 
 def _now() -> str:
