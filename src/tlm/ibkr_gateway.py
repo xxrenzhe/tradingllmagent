@@ -4,12 +4,13 @@ import importlib.util
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 from uuid import uuid4
 
 
 IBKR_PROTOCOL_VERSION = "ibkr-paper.v1"
+_QUARTERLY_FUTURE_MONTH_CODES = {3: "H", 6: "M", 9: "U", 12: "Z"}
 
 
 class IbkrGatewayAdapter(Protocol):
@@ -62,6 +63,42 @@ class IbkrContractSpec:
             "expected_tick_size": self.expected_tick_size,
             "expected_point_value": self.expected_point_value,
         }
+
+
+def resolve_ibkr_front_month_contract(
+    payload: dict[str, Any],
+    *,
+    reference_date: date | None = None,
+) -> dict[str, Any]:
+    resolved = dict(payload)
+    symbol = str(resolved.get("symbol", "")).upper()
+    sec_type = str(resolved.get("secType") or resolved.get("sec_type") or "").upper()
+    if symbol != "MNQ" or sec_type != "FUT":
+        return resolved
+    if resolved.get("lastTradeDateOrContractMonth") or resolved.get("localSymbol"):
+        return resolved
+
+    year, month = _next_quarterly_futures_month(reference_date or datetime.now(UTC).date())
+    resolved["lastTradeDateOrContractMonth"] = f"{year}{month:02d}"
+    resolved["localSymbol"] = f"{symbol}{_QUARTERLY_FUTURE_MONTH_CODES[month]}{year % 10}"
+    return resolved
+
+
+def _next_quarterly_futures_month(reference_date: date) -> tuple[int, int]:
+    rollover_buffer = timedelta(days=1)
+    for year_offset in (0, 1):
+        year = reference_date.year + year_offset
+        for month in sorted(_QUARTERLY_FUTURE_MONTH_CODES):
+            expiry = _third_friday(year, month)
+            if expiry >= reference_date + rollover_buffer:
+                return year, month
+    return reference_date.year + 1, 3
+
+
+def _third_friday(year: int, month: int) -> date:
+    current = date(year, month, 1)
+    days_until_friday = (4 - current.weekday()) % 7
+    return current + timedelta(days=days_until_friday + 14)
 
 
 @dataclass(frozen=True)
@@ -419,7 +456,7 @@ class IbkrPaperGateway:
         if spec is None:
             return self._event("contract_sync_rejected", {"errors": [f"unknown_symbol:{symbol}"]})
         try:
-            payload = self.adapter.request_contract_details(spec.to_dict())
+            payload = self.adapter.request_contract_details(self.resolved_contract(symbol) or spec.to_dict())
         except Exception as exc:
             self.enter_safe_mode("adapter_contract_sync_failed")
             return self._event("contract_sync_failed", {"errors": [str(exc)], "symbol": symbol})
@@ -461,7 +498,7 @@ class IbkrPaperGateway:
         return {
             "status": "ready" if not missing and not errors else "blocked",
             "symbol": symbol,
-            "contract": spec.to_dict() if spec else None,
+            "contract": self.resolved_contract(symbol) if spec else None,
             "details": details.to_dict() if details else None,
             "missing_requirements": [*missing, *errors],
         }
@@ -884,6 +921,7 @@ class IbkrPaperGateway:
                 payload["localSymbol"] = details.local_symbol
             if not payload.get("tradingClass") and details.trading_class:
                 payload["tradingClass"] = details.trading_class
+        payload = resolve_ibkr_front_month_contract(payload)
         if require_concrete and not (payload.get("lastTradeDateOrContractMonth") or payload.get("localSymbol")):
             return None
         return payload

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 import unittest
 
-from tlm.ibkr_gateway import IbkrContractSpec, IbkrPaperGateway
+from tlm.ibkr_gateway import IbkrContractSpec, IbkrPaperGateway, resolve_ibkr_front_month_contract
 from tlm.config import get_cost_model, get_symbol
 
 
@@ -366,8 +366,26 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         gateway.sync_contract_details("MNQ")
         gateway.sync_market_data("MNQ")
 
-        self.assertEqual(adapter.market_data_requests[-1]["localSymbol"], "MNQM6")
-        self.assertEqual(adapter.market_data_requests[-1]["lastTradeDateOrContractMonth"], "202506")
+        self.assertTrue(adapter.market_data_requests[-1]["localSymbol"].startswith("MNQ"))
+        self.assertRegex(adapter.market_data_requests[-1]["lastTradeDateOrContractMonth"], r"^20\d{4}$")
+
+    def test_default_mnq_contract_resolves_current_front_month_for_ibkr(self) -> None:
+        contract = resolve_ibkr_front_month_contract(
+            IbkrContractSpec().to_dict(),
+            reference_date=date(2026, 4, 30),
+        )
+
+        self.assertEqual(contract["lastTradeDateOrContractMonth"], "202606")
+        self.assertEqual(contract["localSymbol"], "MNQM6")
+
+    def test_default_mnq_contract_rolls_after_quarterly_expiry(self) -> None:
+        contract = resolve_ibkr_front_month_contract(
+            IbkrContractSpec().to_dict(),
+            reference_date=date(2026, 6, 20),
+        )
+
+        self.assertEqual(contract["lastTradeDateOrContractMonth"], "202609")
+        self.assertEqual(contract["localSymbol"], "MNQU6")
 
     def test_sync_runtime_events_updates_local_execution_ledger(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())

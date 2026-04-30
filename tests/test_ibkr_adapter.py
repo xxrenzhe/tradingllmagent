@@ -21,6 +21,8 @@ class FakeEClient:
         self.market_data_error_once = False
         self.positions_error_once = False
         self.account_summary_error_once = False
+        self.account_summary_timeout = False
+        self.contract_details_requests: list[dict] = []
         self.market_data_types: list[int] = []
         self.market_data_requests: list[dict] = []
         self.cancelled_requests: list[int] = []
@@ -99,6 +101,8 @@ class FakeEClient:
             self.connected = False
             self.wrapper.error(req_id, 504, "Not connected")
             return
+        if self.account_summary_timeout:
+            return
         for tag, value in {
             "AccountType": "INDIVIDUAL",
             "NetLiquidation": "100000.0",
@@ -110,6 +114,19 @@ class FakeEClient:
 
     def cancelAccountSummary(self, req_id: int) -> None:  # noqa: N802
         return
+
+    def reqContractDetails(self, req_id: int, contract) -> None:  # noqa: N802
+        self.contract_details_requests.append(
+            {
+                "req_id": req_id,
+                "symbol": getattr(contract, "symbol", None),
+                "last_trade_date_or_contract_month": getattr(contract, "lastTradeDateOrContractMonth", None),
+                "local_symbol": getattr(contract, "localSymbol", None),
+            }
+        )
+        contract.multiplier = "2"
+        self.wrapper.contractDetails(req_id, SimpleNamespace(contract=contract, minTick=0.25))
+        self.wrapper.contractDetailsEnd(req_id)
 
     def reqPnL(self, req_id: int, account: str, model_code: str) -> None:  # noqa: N802
         self.wrapper.pnl(req_id, 12.0, 2.0, 10.0)
@@ -200,6 +217,25 @@ class OfficialIbkrAdapterTests(unittest.TestCase):
         self.assertEqual(adapter.client.account_summary_requests, 2)
         self.assertEqual(snapshot["net_liquidation"], 100000.0)
         self.assertEqual(snapshot["daily_pnl"], 12.0)
+
+    def test_account_summary_falls_back_to_managed_paper_account_on_timeout(self) -> None:
+        adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
+        adapter.connect("127.0.0.1", 7497, 11)
+        adapter.client.account_summary_timeout = True
+
+        summary = adapter.account_summary()
+
+        self.assertEqual(summary["account_id"], "DU1234567")
+        self.assertEqual(summary["account_type"], "paper")
+        self.assertIsNone(summary["net_liquidation"])
+
+    def test_contract_details_reports_secdef_farm_unavailable(self) -> None:
+        adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
+        adapter.connect("127.0.0.1", 7497, 11)
+        adapter.client.wrapper.error(-1, 2157, "Sec-def data farm connection is broken:secdefhk")
+
+        with self.assertRaisesRegex(RuntimeError, "ibkr_secdef_farm_unavailable"):
+            adapter.request_contract_details({"symbol": "MNQ", "lastTradeDateOrContractMonth": "202606"})
 
     def test_delayed_tick_types_populate_bid_ask_and_last(self) -> None:
         adapter = OfficialIbkrAdapter()

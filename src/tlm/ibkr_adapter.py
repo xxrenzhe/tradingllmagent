@@ -94,9 +94,15 @@ class OfficialIbkrAdapter:
         event = threading.Event()
         self._account_summary_events[req_id] = event
         self._account_summary[req_id] = {}
+        timed_out = False
         try:
             self.client.reqAccountSummary(req_id, "All", "AccountType,NetLiquidation,RealizedPnL,UnrealizedPnL")
-            self._wait(event, 10.0, "timed_out_waiting_for_account_summary")
+            try:
+                self._wait(event, 10.0, "timed_out_waiting_for_account_summary")
+            except RuntimeError as exc:
+                if str(exc) != "timed_out_waiting_for_account_summary":
+                    raise
+                timed_out = True
             self.client.cancelAccountSummary(req_id)
             request_error = self._request_error(req_id)
             if request_error is not None and int(request_error.get("error_code") or 0) == 504:
@@ -105,9 +111,11 @@ class OfficialIbkrAdapter:
         finally:
             self._account_summary_events.pop(req_id, None)
         account_id = str(payload.get("account_id") or (self.managed_accounts[0] if self.managed_accounts else ""))
+        if timed_out and not payload and not account_id:
+            raise RuntimeError("timed_out_waiting_for_account_summary")
         return {
             "account_id": account_id,
-            "account_type": str(payload.get("AccountType") or "unknown"),
+            "account_type": str(payload.get("AccountType") or ("paper" if account_id.upper().startswith("DU") else "unknown")),
             "net_liquidation": _optional_float(payload.get("NetLiquidation")),
             "realized_pnl": _optional_float(payload.get("RealizedPnL")),
             "unrealized_pnl": _optional_float(payload.get("UnrealizedPnL")),
@@ -119,10 +127,22 @@ class OfficialIbkrAdapter:
         event = threading.Event()
         self._contract_detail_events[req_id] = event
         self._contract_details[req_id] = []
-        self.client.reqContractDetails(req_id, self._build_contract(contract))
-        self._wait(event, 10.0, "timed_out_waiting_for_contract_details")
-        rows = self._contract_details.pop(req_id, [])
-        self._contract_detail_events.pop(req_id, None)
+        try:
+            self.client.reqContractDetails(req_id, self._build_contract(contract))
+            diagnostic = self._global_request_error("contract_details")
+            if diagnostic is not None:
+                raise RuntimeError(str(diagnostic["message"]))
+            try:
+                self._wait(event, 10.0, "timed_out_waiting_for_contract_details")
+            except RuntimeError as exc:
+                diagnostic = self._global_request_error("contract_details")
+                if diagnostic is not None:
+                    raise RuntimeError(str(diagnostic["message"])) from exc
+                raise
+            rows = self._contract_details.pop(req_id, [])
+        finally:
+            self._contract_details.pop(req_id, None)
+            self._contract_detail_events.pop(req_id, None)
         if not rows:
             raise RuntimeError("no_contract_details_returned")
         return rows[0]
@@ -148,6 +168,11 @@ class OfficialIbkrAdapter:
         }
         self.client.reqMarketDataType(3)
         self.client.reqMktData(req_id, self._build_contract(contract), "", False, False, [])
+        diagnostic = self._global_request_error("market_data")
+        if diagnostic is not None:
+            payload = self._market_data.setdefault(req_id, {})
+            payload["error_code"] = diagnostic["error_code"]
+            payload["error_message"] = diagnostic["message"]
         self._wait(event, float(timeout_seconds), "timed_out_waiting_for_market_data", raise_on_timeout=False)
         self.client.cancelMktData(req_id)
         payload = self._market_data.pop(req_id, {})
@@ -162,7 +187,13 @@ class OfficialIbkrAdapter:
         self.positions_event.clear()
         self._positions = []
         self.client.reqPositions()
-        self._wait(self.positions_event, 10.0, "timed_out_waiting_for_positions")
+        try:
+            self._wait(self.positions_event, 10.0, "timed_out_waiting_for_positions")
+        except RuntimeError as exc:
+            diagnostic = self._global_request_error("positions")
+            if diagnostic is not None:
+                raise RuntimeError(str(diagnostic["message"])) from exc
+            raise
         self.client.cancelPositions()
         return list(self._positions)
 
@@ -511,6 +542,23 @@ class OfficialIbkrAdapter:
                 return error
         return None
 
+    def _global_request_error(self, context: str) -> dict[str, Any] | None:
+        for error in reversed(self.errors):
+            if int(error.get("req_id") or -1) != -1:
+                continue
+            if not _is_recent_error(error):
+                continue
+            code = int(error.get("error_code") or 0)
+            message = str(error.get("error") or "")
+            lowered = message.lower()
+            if context == "contract_details" and (code == 2157 or "sec-def" in lowered or "secdef" in lowered):
+                return {"error_code": code, "message": f"ibkr_secdef_farm_unavailable:{message}"}
+            if context == "market_data" and (code == 2103 or "market data farm" in lowered):
+                return {"error_code": code, "message": f"ibkr_market_data_farm_unavailable:{message}"}
+            if code == 2110:
+                return {"error_code": code, "message": f"ibkr_connectivity_broken:{message}"}
+        return None
+
     def _check_socket_available(self, host: str, port: int) -> None:
         if not self.socket_preflight_enabled:
             return
@@ -622,6 +670,19 @@ def _optional_broker_float(value: Any) -> float | None:
 def _is_not_connected_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return "not connected" in message or "error 504" in message or message.strip() == "504"
+
+
+def _is_recent_error(error: dict[str, Any], *, max_age_seconds: float = 120.0) -> bool:
+    created_at = error.get("created_at")
+    if not created_at:
+        return True
+    try:
+        parsed = datetime.fromisoformat(str(created_at))
+    except ValueError:
+        return True
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - parsed).total_seconds() <= max_age_seconds
 
 
 def _now() -> str:
