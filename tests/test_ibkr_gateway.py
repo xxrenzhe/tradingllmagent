@@ -542,6 +542,39 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(cancelled["details"]["broker_cancellations"][0]["order_id"], 1)
         self.assertEqual(gateway.bracket_order_report()["open_bracket_order_count"], 0)
 
+    def test_filled_child_order_completes_open_bracket(self) -> None:
+        gateway = self.ready_gateway()
+        built = gateway.build_bracket_order(
+            {
+                "symbol": "MNQ",
+                "action": "BUY",
+                "quantity": 1,
+                "entry_order_type": "MKT",
+                "stop_price": 18995.0,
+                "take_profit_price": 19010.0,
+                "max_holding_minutes": 20,
+            }
+        )
+        bracket_id = built["details"]["bracket_order"]["bracket_id"]
+        gateway.submit_bracket_order(bracket_id)
+
+        status = gateway.record_order_status(
+            {
+                "order_id": 3,
+                "status": "Filled",
+                "filled": 1,
+                "remaining": 0,
+                "average_fill_price": 19010.0,
+            }
+        )
+        report = gateway.bracket_order_report()
+
+        self.assertEqual(status["event_type"], "order_status_recorded")
+        self.assertEqual(report["open_bracket_order_count"], 0)
+        self.assertEqual(report["completed_bracket_order_count"], 1)
+        self.assertEqual(report["completed_bracket_orders"][0]["bracket_id"], bracket_id)
+        self.assertEqual(report["completed_bracket_orders"][0]["completed_by"], "take_profit")
+
     def test_rejects_risk_increasing_or_invalid_bracket_payloads(self) -> None:
         gateway = self.ready_gateway()
 

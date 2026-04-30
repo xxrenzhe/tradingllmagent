@@ -339,6 +339,7 @@ class IbkrPaperGateway:
     readiness_events: list[dict[str, Any]] = field(default_factory=list)
     bracket_orders: dict[str, IbkrBracketOrderDraft] = field(default_factory=dict)
     submitted_bracket_order_ids: set[str] = field(default_factory=set)
+    completed_bracket_orders: list[dict[str, Any]] = field(default_factory=list)
     order_events: list[dict[str, Any]] = field(default_factory=list)
     next_order_id: int = 1
     paper_position_quantity: int = 0
@@ -709,6 +710,7 @@ class IbkrPaperGateway:
         )
         self.order_status_fingerprints.add(fingerprint)
         self.order_status_events.append(event)
+        self._reconcile_bracket_order_status(normalized)
         return event
 
     def record_execution_fill(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -877,6 +879,8 @@ class IbkrPaperGateway:
                 {**draft.to_dict(), "submitted": draft.bracket_id in self.submitted_bracket_order_ids}
                 for draft in self.bracket_orders.values()
             ],
+            "completed_bracket_order_count": len(self.completed_bracket_orders),
+            "completed_bracket_orders": self.completed_bracket_orders[-20:],
             "order_event_count": len(self.order_events),
             "recent_order_events": self.order_events[-20:],
         }
@@ -1020,6 +1024,46 @@ class IbkrPaperGateway:
         order_id = self.next_order_id
         self.next_order_id += 1
         return order_id
+
+    def _reconcile_bracket_order_status(self, status: dict[str, Any]) -> None:
+        order_id = int(status["order_id"])
+        normalized_status = str(status["status"]).lower()
+        for bracket_id, draft in list(self.bracket_orders.items()):
+            role = None
+            if order_id == draft.parent_order_id:
+                role = "entry"
+            elif order_id == draft.stop_order_id:
+                role = "stop_loss"
+            elif order_id == draft.take_profit_order_id:
+                role = "take_profit"
+            if role is None:
+                continue
+            if role in {"stop_loss", "take_profit"} and normalized_status == "filled":
+                self._complete_bracket_order(bracket_id, draft, role, status)
+            elif role == "entry" and normalized_status in {"cancelled", "apicancelled", "inactive"}:
+                self._complete_bracket_order(bracket_id, draft, role, status)
+            return
+
+    def _complete_bracket_order(
+        self,
+        bracket_id: str,
+        draft: IbkrBracketOrderDraft,
+        completed_by: str,
+        status: dict[str, Any],
+    ) -> None:
+        self.bracket_orders.pop(bracket_id, None)
+        self.submitted_bracket_order_ids.discard(bracket_id)
+        completed = {
+            **draft.to_dict(),
+            "submitted": True,
+            "completed_by": completed_by,
+            "terminal_order_status": status,
+            "completed_at": _now(),
+        }
+        self.completed_bracket_orders.append(completed)
+        if len(self.completed_bracket_orders) > 2048:
+            self.completed_bracket_orders = self.completed_bracket_orders[-2048:]
+        self._order_event("bracket_order_completed", {"bracket_order": completed})
 
     def _bracket_payload_errors(self, payload: dict[str, Any], symbol: str) -> list[str]:
         errors = []
