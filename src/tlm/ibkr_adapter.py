@@ -271,11 +271,11 @@ class OfficialIbkrAdapter:
 
             def tickPrice(self, reqId: int, tickType: int, price: float, attrib: Any) -> None:  # noqa: N802
                 payload = adapter._market_data.setdefault(reqId, {})
-                if tickType == 1:
+                if tickType in {1, 66}:
                     payload["bid"] = price
-                elif tickType == 2:
+                elif tickType in {2, 67}:
                     payload["ask"] = price
-                elif tickType == 4:
+                elif tickType in {4, 68}:
                     payload["last"] = price
                 payload["snapshot_time"] = _now()
                 event = adapter._market_data_events.get(reqId)
