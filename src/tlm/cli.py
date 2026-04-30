@@ -30,6 +30,7 @@ from .events import (
 )
 from .feature_catalog import feature_readiness_report
 from .firstrate import import_firstrate_bars
+from .ibkr_adapter import build_ibkr_gateway_adapter
 from .ibkr_gateway import IbkrPaperGateway
 from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
@@ -1084,19 +1085,19 @@ def cmd_report_experiment(args: argparse.Namespace) -> int:
 
 
 def cmd_ibkr_health(args: argparse.Namespace) -> int:
-    gateway = IbkrPaperGateway()
+    gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     print(json.dumps(gateway.health(), indent=2, sort_keys=True))
     return 0
 
 
 def cmd_ibkr_readiness(args: argparse.Namespace) -> int:
-    gateway = IbkrPaperGateway()
+    gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     print(json.dumps(gateway.readiness(symbol=args.symbol, max_stale_seconds=args.max_stale_seconds), indent=2, sort_keys=True))
     return 0
 
 
 def cmd_ibkr_contract_details(args: argparse.Namespace) -> int:
-    gateway = IbkrPaperGateway()
+    gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     if args.details:
         event = gateway.record_contract_details(json.loads(Path(args.details).read_text(encoding="utf-8")))
         payload = {"event": event, "readiness": gateway.contract_readiness(args.symbol)}
@@ -1107,7 +1108,7 @@ def cmd_ibkr_contract_details(args: argparse.Namespace) -> int:
 
 
 def cmd_ibkr_paper_run(args: argparse.Namespace) -> int:
-    gateway = IbkrPaperGateway()
+    gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     report = _ibkr_cli_report(gateway, args.run_id or "pending")
     run = create_ibkr_paper_run_artifacts(
         run_id=args.run_id,
@@ -1123,26 +1124,26 @@ def cmd_ibkr_paper_run(args: argparse.Namespace) -> int:
 
 
 def cmd_ibkr_safe_mode(args: argparse.Namespace) -> int:
-    gateway = IbkrPaperGateway()
+    gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     print(json.dumps(gateway.enter_safe_mode(args.reason), indent=2, sort_keys=True))
     return 0
 
 
 def cmd_ibkr_kill_switch(args: argparse.Namespace) -> int:
-    gateway = IbkrPaperGateway()
+    gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     print(json.dumps(gateway.kill_switch(args.reason), indent=2, sort_keys=True))
     return 0
 
 
 def cmd_ibkr_flatten(args: argparse.Namespace) -> int:
-    gateway = IbkrPaperGateway()
+    gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     print(json.dumps(gateway.flatten_paper_position(args.reason), indent=2, sort_keys=True))
     return 0
 
 
 def cmd_ibkr_report(args: argparse.Namespace) -> int:
     if args.run_id == "current":
-        payload = _ibkr_cli_report(IbkrPaperGateway(), "current")
+        payload = _ibkr_cli_report(IbkrPaperGateway(adapter=build_ibkr_gateway_adapter()), "current")
     else:
         payload = load_ibkr_paper_report(Path(args.output_root), args.run_id)
     print(json.dumps(payload, indent=2, sort_keys=True))

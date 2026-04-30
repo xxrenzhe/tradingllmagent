@@ -14,6 +14,7 @@ class FakeIbkrAdapter:
         self.connected = False
         self.disconnect_count = 0
         self.submitted_orders: list[dict] = []
+        self.market_data_requests: list[dict] = []
 
     def connect(self, host: str, port: int, client_id: int) -> dict:
         self.connected = True
@@ -40,11 +41,13 @@ class FakeIbkrAdapter:
             "point_value": 2.0,
             "exchange": contract["exchange"],
             "currency": contract["currency"],
+            "last_trade_date_or_contract_month": contract.get("lastTradeDateOrContractMonth") or "202506",
             "local_symbol": contract.get("localSymbol") or "MNQM6",
             "trading_class": contract.get("tradingClass") or "MNQ",
         }
 
     def request_market_data(self, contract: dict, timeout_seconds: int = 5) -> dict:
+        self.market_data_requests.append(dict(contract))
         return {
             "symbol": contract["symbol"],
             "bid": 19000.0,
@@ -70,6 +73,8 @@ class FakeIbkrAdapter:
     def submit_bracket_order(self, contract: dict, order: dict) -> dict:
         payload = {
             "symbol": contract["symbol"],
+            "last_trade_date_or_contract_month": contract.get("lastTradeDateOrContractMonth"),
+            "local_symbol": contract.get("localSymbol"),
             "parent_order_id": 9001,
             "stop_order_id": 9002,
             "take_profit_order_id": 9003,
@@ -116,6 +121,9 @@ class IbkrPaperGatewayTests(unittest.TestCase):
                 "point_value": 2.0,
                 "exchange": "CME",
                 "currency": "USD",
+                "last_trade_date_or_contract_month": "202506",
+                "local_symbol": "MNQM6",
+                "trading_class": "MNQ",
             }
         )
         gateway.record_market_data(
@@ -179,6 +187,7 @@ class IbkrPaperGatewayTests(unittest.TestCase):
                 "point_value": 2.0,
                 "exchange": "CME",
                 "currency": "USD",
+                "last_trade_date_or_contract_month": "202506",
                 "local_symbol": "MNQM6",
                 "trading_class": "MNQ",
             }
@@ -223,6 +232,23 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertIn("ask_missing", readiness["missing_requirements"])
         self.assertIn("spread_unavailable", readiness["missing_requirements"])
         self.assertIn("market_data_stale", readiness["missing_requirements"])
+
+    def test_market_data_readiness_surfaces_ibkr_error_code(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+
+        gateway.record_market_data(
+            {
+                "symbol": "MNQ",
+                "market_data_type": "unknown",
+                "snapshot_time": datetime.now(UTC).isoformat(),
+                "error_code": 10168,
+                "error_message": "Requested market data is not subscribed. Delayed market data is not enabled.",
+            }
+        )
+        readiness = gateway.market_data_readiness("MNQ", max_stale_seconds=5)
+
+        self.assertEqual(readiness["snapshot"]["error_code"], 10168)
+        self.assertIn("market_data_error:10168", readiness["missing_requirements"])
 
     def test_contract_readiness_blocks_wrong_tick_or_point_value(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
@@ -297,6 +323,17 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(gateway.positions_report()["count"], 1)
         self.assertEqual(gateway.account_snapshots_report()["count"], 1)
 
+    def test_sync_market_data_uses_resolved_front_month_contract(self) -> None:
+        adapter = FakeIbkrAdapter()
+        gateway = IbkrPaperGateway(adapter=adapter)
+        gateway.connect()
+
+        gateway.sync_contract_details("MNQ")
+        gateway.sync_market_data("MNQ")
+
+        self.assertEqual(adapter.market_data_requests[-1]["localSymbol"], "MNQM6")
+        self.assertEqual(adapter.market_data_requests[-1]["lastTradeDateOrContractMonth"], "202506")
+
     def test_sync_runtime_events_updates_local_execution_ledger(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
         gateway.connect()
@@ -367,20 +404,6 @@ class IbkrPaperGatewayTests(unittest.TestCase):
 
     def test_submits_bracket_order_through_adapter_after_readiness(self) -> None:
         gateway = self.ready_gateway()
-        gateway.register_contract_spec(
-            IbkrContractSpec(
-                symbol="MNQ",
-                sec_type="FUT",
-                exchange="CME",
-                currency="USD",
-                quantity=1,
-                last_trade_date_or_contract_month="202506",
-                local_symbol="MNQM6",
-                trading_class="MNQ",
-                expected_tick_size=0.25,
-                expected_point_value=2.0,
-            )
-        )
         built = gateway.build_bracket_order(
             {
                 "symbol": "MNQ",
@@ -397,6 +420,7 @@ class IbkrPaperGatewayTests(unittest.TestCase):
 
         self.assertEqual(submitted["event_type"], "bracket_order_submitted")
         self.assertTrue(submitted["details"]["broker_submission"]["submitted"])
+        self.assertEqual(submitted["details"]["broker_submission"]["local_symbol"], "MNQM6")
 
     def test_rejects_risk_increasing_or_invalid_bracket_payloads(self) -> None:
         gateway = self.ready_gateway()

@@ -78,6 +78,66 @@ from .vol import (
 from .worker import run_task, worker_loop
 
 
+def _env_bool(name: str, default: bool = True) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def run_ibkr_poll_cycle(gateway: IbkrPaperGateway, *, symbol: str = "MNQ") -> dict:
+    if gateway.adapter is None:
+        return {"status": "skipped", "reason": "adapter_not_configured", "actions": []}
+    if not gateway.connected:
+        return {"status": "skipped", "reason": "not_connected", "actions": []}
+    if gateway.account is None or not gateway.account.is_paper:
+        return {"status": "skipped", "reason": "paper_account_not_verified", "actions": []}
+
+    actions = []
+    if gateway.contract_readiness(symbol)["details"] is None:
+        actions.append(gateway.sync_contract_details(symbol))
+    actions.append(gateway.sync_market_data(symbol))
+    actions.append(gateway.sync_positions())
+    actions.append(gateway.sync_account_snapshot())
+    actions.append(gateway.sync_runtime_events())
+    return {
+        "status": "ok",
+        "symbol": symbol,
+        "action_count": len(actions),
+        "actions": [action.get("event_type") for action in actions],
+        "safe_mode": gateway.safe_mode,
+    }
+
+
+async def ibkr_poller_loop(
+    gateway: IbkrPaperGateway,
+    stop_event: asyncio.Event,
+    *,
+    interval_seconds: float,
+    symbol: str,
+    state: dict[str, object],
+) -> None:
+    state["running"] = True
+    try:
+        while not stop_event.is_set():
+            try:
+                result = await asyncio.to_thread(run_ibkr_poll_cycle, gateway, symbol=symbol)
+                state["last_result"] = result
+                state["last_error"] = None
+                state["last_run_at"] = datetime_iso_now()
+                state["iteration_count"] = int(state.get("iteration_count", 0)) + 1
+            except Exception as exc:
+                state["last_error"] = str(exc)
+                state["last_run_at"] = datetime_iso_now()
+                state["iteration_count"] = int(state.get("iteration_count", 0)) + 1
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+            except asyncio.TimeoutError:
+                continue
+    finally:
+        state["running"] = False
+
+
 def build_paper_replay_response(payload: dict) -> dict:
     strategy_id = payload.get("strategy_id")
     if not strategy_id:
@@ -403,6 +463,12 @@ def datetime_from_date(value: str, end_of_day: bool = False):
     return datetime.combine(date_value, time.max if end_of_day else time.min)
 
 
+def datetime_iso_now() -> str:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat()
+
+
 def create_app():
     try:
         from fastapi import Body, FastAPI, HTTPException
@@ -417,17 +483,42 @@ def create_app():
     ibkr_gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     ibkr_review_history: list[dict] = []
     ibkr_optimizer_history: list[dict] = []
+    ibkr_poller_state: dict[str, object] = {
+        "enabled": _env_bool("TLM_IBKR_POLLER_ENABLED", True),
+        "interval_seconds": float(os.environ.get("TLM_IBKR_POLL_INTERVAL_SECONDS", "2.0")),
+        "symbol": os.environ.get("TLM_IBKR_POLL_SYMBOL", "MNQ"),
+        "running": False,
+        "iteration_count": 0,
+        "last_run_at": None,
+        "last_result": None,
+        "last_error": None,
+    }
 
     @asynccontextmanager
     async def lifespan(_app):
         task_db = Path(os.environ.get("TLM_TASK_DB", "experiments/tasks.sqlite3"))
         stop_event = asyncio.Event()
+        ibkr_stop_event = asyncio.Event()
         worker = asyncio.create_task(worker_loop(task_db, stop_event))
+        ibkr_poller = None
+        if bool(ibkr_poller_state["enabled"]):
+            ibkr_poller = asyncio.create_task(
+                ibkr_poller_loop(
+                    ibkr_gateway,
+                    ibkr_stop_event,
+                    interval_seconds=float(ibkr_poller_state["interval_seconds"]),
+                    symbol=str(ibkr_poller_state["symbol"]),
+                    state=ibkr_poller_state,
+                )
+            )
         try:
             yield
         finally:
             stop_event.set()
+            ibkr_stop_event.set()
             await worker
+            if ibkr_poller is not None:
+                await ibkr_poller
 
     app = FastAPI(title="Trading LLM Agent", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
@@ -853,7 +944,9 @@ def create_app():
 
     @app.get("/api/gateways/ibkr/health")
     def ibkr_health() -> dict:
-        return ibkr_gateway.health()
+        payload = ibkr_gateway.health()
+        payload["poller"] = ibkr_poller_state
+        return payload
 
     @app.get("/api/gateways/ibkr/readiness")
     def ibkr_readiness(symbol: str = "MNQ", max_stale_seconds: int = 5) -> dict:
@@ -1003,6 +1096,10 @@ def create_app():
     @app.get("/api/gateways/ibkr/incidents")
     def ibkr_incidents() -> dict:
         return {"incidents": ibkr_gateway.incident_events, "count": len(ibkr_gateway.incident_events)}
+
+    @app.get("/api/gateways/ibkr/poller")
+    def ibkr_poller_status() -> dict:
+        return dict(ibkr_poller_state)
 
     def ibkr_runtime_report(run_id: str = "current") -> dict:
         return build_ibkr_paper_report(

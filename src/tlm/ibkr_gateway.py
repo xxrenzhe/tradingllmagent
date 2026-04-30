@@ -66,6 +66,7 @@ class IbkrContractDetails:
     point_value: float
     exchange: str
     currency: str
+    last_trade_date_or_contract_month: str | None = None
     local_symbol: str | None = None
     trading_class: str | None = None
 
@@ -90,6 +91,7 @@ class IbkrContractDetails:
             "point_value": self.point_value,
             "exchange": self.exchange,
             "currency": self.currency,
+            "last_trade_date_or_contract_month": self.last_trade_date_or_contract_month,
             "local_symbol": self.local_symbol,
             "trading_class": self.trading_class,
         }
@@ -103,6 +105,8 @@ class IbkrMarketDataSnapshot:
     last: float | None
     market_data_type: str
     snapshot_time: datetime
+    error_code: int | None = None
+    error_message: str | None = None
 
     @property
     def spread(self) -> float | None:
@@ -129,6 +133,8 @@ class IbkrMarketDataSnapshot:
             "real_time": self.real_time,
             "snapshot_time": self.snapshot_time.isoformat(),
             "age_seconds": self.age_seconds(now),
+            "error_code": self.error_code,
+            "error_message": self.error_message,
         }
 
 
@@ -401,6 +407,7 @@ class IbkrPaperGateway:
             point_value=float(payload["point_value"]),
             exchange=str(payload.get("exchange", "CME")),
             currency=str(payload.get("currency", "USD")),
+            last_trade_date_or_contract_month=_none_if_blank(payload.get("last_trade_date_or_contract_month")),
             local_symbol=payload.get("local_symbol"),
             trading_class=payload.get("trading_class"),
         )
@@ -442,6 +449,8 @@ class IbkrPaperGateway:
             last=_optional_float(payload.get("last")),
             market_data_type=str(payload.get("market_data_type", "unknown")),
             snapshot_time=_parse_datetime(payload.get("snapshot_time")),
+            error_code=_optional_int(payload.get("error_code")),
+            error_message=_none_if_blank(payload.get("error_message")),
         )
         self.market_data[symbol] = snapshot
         return self._event("market_data_recorded", {"snapshot": snapshot.to_dict()})
@@ -449,11 +458,11 @@ class IbkrPaperGateway:
     def sync_market_data(self, symbol: str = "MNQ", timeout_seconds: int = 5) -> dict[str, Any]:
         if self.adapter is None:
             return self._event("market_data_sync_rejected", {"errors": ["adapter_not_configured"]})
-        spec = self.contract_specs.get(symbol)
-        if spec is None:
+        resolved_contract = self.resolved_contract(symbol)
+        if resolved_contract is None:
             return self._event("market_data_sync_rejected", {"errors": [f"unknown_symbol:{symbol}"]})
         try:
-            payload = self.adapter.request_market_data(spec.to_dict(), timeout_seconds=timeout_seconds)
+            payload = self.adapter.request_market_data(resolved_contract, timeout_seconds=timeout_seconds)
         except Exception as exc:
             self.enter_safe_mode("adapter_market_data_sync_failed")
             return self._event("market_data_sync_failed", {"errors": [str(exc)], "symbol": symbol})
@@ -479,6 +488,8 @@ class IbkrPaperGateway:
             }
         if not snapshot.real_time:
             missing.append(f"market_data_not_real_time:{snapshot.market_data_type}")
+        if snapshot.error_code is not None:
+            missing.append(f"market_data_error:{snapshot.error_code}")
         if snapshot.bid is None:
             missing.append("bid_missing")
         if snapshot.ask is None:
@@ -735,16 +746,16 @@ class IbkrPaperGateway:
                 "bracket_order_submit_rejected",
                 {"errors": readiness["missing_requirements"], "readiness": readiness},
             )
-        spec = self.contract_specs.get(draft.symbol)
-        if spec is None:
+        resolved_contract = self.resolved_contract(draft.symbol, require_concrete=True)
+        if resolved_contract is None:
             return self._order_event("bracket_order_submit_rejected", {"errors": [f"unknown_symbol:{draft.symbol}"]})
-        if not spec.last_trade_date_or_contract_month and not spec.local_symbol:
+        if not resolved_contract.get("lastTradeDateOrContractMonth") and not resolved_contract.get("localSymbol"):
             return self._order_event(
                 "bracket_order_submit_rejected",
                 {"errors": ["contract_month_or_local_symbol_required_for_submit"]},
             )
         try:
-            submission = self.adapter.submit_bracket_order(spec.to_dict(), draft.to_dict())
+            submission = self.adapter.submit_bracket_order(resolved_contract, draft.to_dict())
         except Exception as exc:
             self.enter_safe_mode("adapter_bracket_submit_failed")
             return self._order_event("bracket_order_submit_failed", {"errors": [str(exc)], "bracket_id": bracket_id})
@@ -752,6 +763,23 @@ class IbkrPaperGateway:
             "bracket_order_submitted",
             {"bracket_id": bracket_id, "bracket_order": draft.to_dict(), "broker_submission": submission},
         )
+
+    def resolved_contract(self, symbol: str = "MNQ", *, require_concrete: bool = False) -> dict[str, Any] | None:
+        spec = self.contract_specs.get(symbol)
+        if spec is None:
+            return None
+        payload = spec.to_dict()
+        details = self.contract_details.get(symbol)
+        if details is not None:
+            if not payload.get("lastTradeDateOrContractMonth") and details.last_trade_date_or_contract_month:
+                payload["lastTradeDateOrContractMonth"] = details.last_trade_date_or_contract_month
+            if not payload.get("localSymbol") and details.local_symbol:
+                payload["localSymbol"] = details.local_symbol
+            if not payload.get("tradingClass") and details.trading_class:
+                payload["tradingClass"] = details.trading_class
+        if require_concrete and not (payload.get("lastTradeDateOrContractMonth") or payload.get("localSymbol")):
+            return None
+        return payload
 
     def reconcile_position(self, symbol: str = "MNQ", expected_quantity: int | None = None) -> dict[str, Any]:
         expected = self.paper_position_quantity if expected_quantity is None else expected_quantity
@@ -910,6 +938,19 @@ def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
+def _none_if_blank(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _positive_int(value: Any) -> int:

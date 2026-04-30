@@ -715,6 +715,12 @@ paths:
       responses:
         "200":
           description: IBKR incident timeline.
+  /api/gateways/ibkr/poller:
+    get:
+      summary: Report the in-process IBKR Paper runtime poller status.
+      responses:
+        "200":
+          description: IBKR poller state.
   /api/ibkr-paper/runs:
     post:
       summary: Create an append-only IBKR Paper run artifact bundle.

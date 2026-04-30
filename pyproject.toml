@@ -17,7 +17,7 @@ api = [
     "uvicorn>=0.30.0",
 ]
 ibkr = [
-    "ibapi>=10.19.1",
+    "ibapi>=9.81.1.post1",
 ]
 dev = [
     "pytest>=8.0.0",

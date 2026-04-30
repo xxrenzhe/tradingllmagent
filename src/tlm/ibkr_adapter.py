@@ -118,6 +118,8 @@ class OfficialIbkrAdapter:
             "symbol": str(contract.get("symbol", "MNQ")),
             "market_data_type": "unknown",
             "snapshot_time": _now(),
+            "error_code": None,
+            "error_message": None,
         }
         self.client.reqMarketDataType(1)
         self.client.reqMktData(req_id, self._build_contract(contract), "", False, False, [])
@@ -250,6 +252,9 @@ class OfficialIbkrAdapter:
                         "point_value": float(contractDetails.contract.multiplier or 0.0),
                         "exchange": contractDetails.contract.exchange,
                         "currency": contractDetails.contract.currency,
+                        "last_trade_date_or_contract_month": getattr(
+                            contractDetails.contract, "lastTradeDateOrContractMonth", None
+                        ),
                         "local_symbol": getattr(contractDetails.contract, "localSymbol", None),
                         "trading_class": getattr(contractDetails.contract, "tradingClass", None),
                     }
@@ -360,6 +365,9 @@ class OfficialIbkrAdapter:
                 if reqId in adapter._contract_detail_events:
                     adapter._contract_detail_events[reqId].set()
                 if reqId in adapter._market_data_events:
+                    payload = adapter._market_data.setdefault(reqId, {})
+                    payload["error_code"] = errorCode
+                    payload["error_message"] = errorString
                     adapter._market_data_events[reqId].set()
                 if reqId in adapter._pnl_events:
                     adapter._pnl_events[reqId].set()

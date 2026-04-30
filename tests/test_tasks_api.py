@@ -23,9 +23,11 @@ from tlm.api import (
     build_trigger_gate_simulation_response,
     build_vol_overview_response,
     create_app,
+    run_ibkr_poll_cycle,
 )
 from tlm.dukascopy import Tick
 from tlm.experiments import load_experiment_audit_logs, load_experiment_summary
+from tlm.ibkr_gateway import IbkrContractSpec, IbkrPaperGateway
 from tlm.storage import bar_path, normalized_quote_path, normalized_tick_path, write_ticks_parquet
 from tlm.tasks import (
     append_task_log,
@@ -860,6 +862,97 @@ class APIImportTests(unittest.TestCase):
             len(readiness["generated_strategy_manifest"]["strategies"]),
         )
 
+    def test_ibkr_poll_cycle_syncs_gateway_state(self) -> None:
+        class PollerAdapter:
+            def connect(self, host: str, port: int, client_id: int) -> dict:
+                return {"connected": True}
+
+            def disconnect(self) -> dict:
+                return {"connected": False}
+
+            def account_summary(self) -> dict:
+                return {"account_id": "DU1234567", "account_type": "individual"}
+
+            def request_contract_details(self, contract: dict) -> dict:
+                return {
+                    "symbol": contract["symbol"],
+                    "tick_size": 0.25,
+                    "point_value": 2.0,
+                    "exchange": contract["exchange"],
+                    "currency": contract["currency"],
+                    "local_symbol": "MNQM6",
+                    "trading_class": "MNQ",
+                }
+
+            def request_market_data(self, contract: dict, timeout_seconds: int = 5) -> dict:
+                return {
+                    "symbol": contract["symbol"],
+                    "bid": 19000.0,
+                    "ask": 19000.25,
+                    "last": 19000.25,
+                    "market_data_type": "real_time",
+                    "snapshot_time": datetime.now(UTC).isoformat(),
+                }
+
+            def request_positions(self) -> list[dict]:
+                return [{"symbol": "MNQ", "quantity": 1, "average_cost": 19000.25, "recorded_at": datetime.now(UTC).isoformat()}]
+
+            def request_account_snapshot(self, account_id: str | None = None) -> dict:
+                return {
+                    "net_liquidation": 100020.0,
+                    "daily_pnl": 20.0,
+                    "realized_pnl": 12.5,
+                    "unrealized_pnl": 8.0,
+                    "drawdown_usage": 0.02,
+                    "recorded_at": datetime.now(UTC).isoformat(),
+                }
+
+            def submit_bracket_order(self, contract: dict, order: dict) -> dict:
+                return {"submitted": True}
+
+            def drain_runtime_events(self) -> dict:
+                return {
+                    "order_status": [{"order_id": 1, "status": "Filled", "filled": 1, "remaining": 0, "average_fill_price": 19000.25}],
+                    "executions": [
+                        {
+                            "execution_id": "exec-1",
+                            "order_id": 1,
+                            "symbol": "MNQ",
+                            "side": "BUY",
+                            "quantity": 1,
+                            "fill_price": 19000.25,
+                            "commission": 0.47,
+                            "realized_pnl": 12.5,
+                            "filled_at": datetime.now(UTC).isoformat(),
+                        }
+                    ],
+                }
+
+        gateway = IbkrPaperGateway(adapter=PollerAdapter())
+        gateway.register_contract_spec(
+            IbkrContractSpec(
+                symbol="MNQ",
+                sec_type="FUT",
+                exchange="CME",
+                currency="USD",
+                quantity=1,
+                last_trade_date_or_contract_month="202506",
+                local_symbol="MNQM6",
+                trading_class="MNQ",
+                expected_tick_size=0.25,
+                expected_point_value=2.0,
+            )
+        )
+        gateway.connect()
+
+        result = run_ibkr_poll_cycle(gateway, symbol="MNQ")
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(gateway.contract_readiness("MNQ")["status"], "ready")
+        self.assertEqual(gateway.market_data_readiness("MNQ")["status"], "ready")
+        self.assertEqual(gateway.positions_report()["count"], 1)
+        self.assertEqual(gateway.execution_ledger()["fill_count"], 1)
+
     def test_feature_readiness_prefers_primary_nq_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             generated = Path(temp_dir) / "strategies" / "generated"
@@ -1022,6 +1115,7 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("/api/gateways/ibkr/positions/sync", paths)
         self.assertIn("/api/gateways/ibkr/account-snapshots", paths)
         self.assertIn("/api/gateways/ibkr/account-snapshots/sync", paths)
+        self.assertIn("/api/gateways/ibkr/poller", paths)
         self.assertIn("/api/gateways/ibkr/runtime-events/sync", paths)
         self.assertIn("/api/gateways/ibkr/reviews", paths)
         self.assertIn("/api/gateways/ibkr/fast-path-optimizer", paths)
@@ -1199,6 +1293,7 @@ class APIImportTests(unittest.TestCase):
             "/api/gateways/ibkr/positions/sync",
             "/api/gateways/ibkr/account-snapshots",
             "/api/gateways/ibkr/account-snapshots/sync",
+            "/api/gateways/ibkr/poller",
             "/api/gateways/ibkr/runtime-events/sync",
             "/api/gateways/ibkr/reviews",
             "/api/gateways/ibkr/fast-path-optimizer",

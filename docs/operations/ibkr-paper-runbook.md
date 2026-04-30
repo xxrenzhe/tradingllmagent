@@ -17,6 +17,7 @@ This runbook is the minimum operating procedure for the Mac-local IBKR Paper loo
 - Use a dedicated client id, default `11`, and avoid sharing it with manual tools.
 - Confirm the account is paper-only before arming the loop.
 - Confirm CME real-time market data permission for `MNQ`; delayed or frozen quotes are observation-only.
+- If readiness shows IBKR error `10168`, the account lacks subscribed real-time data and delayed data is not enabled in TWS.
 - Keep IBKR username, password, account number, and session details outside the repository.
 
 ## Startup Checks
@@ -45,6 +46,10 @@ Recommended adapter sync sequence after connect:
 - `POST /api/gateways/ibkr/account-snapshots/sync`
 - `POST /api/gateways/ibkr/runtime-events/sync`
 
+`contracts/sync` now resolves the active front-month `MNQ` contract and feeds its contract month or `localSymbol` into later market-data and bracket-order submits. Manual override is only needed when IBKR returns ambiguous contract details.
+
+When the API server is running, the in-process poller performs the same sync loop automatically. Inspect it with `GET /api/gateways/ibkr/poller`.
+
 ## Normal Loop
 
 - Build `1m` bars from IBKR snapshots.
@@ -52,7 +57,7 @@ Recommended adapter sync sequence after connect:
 - Every `5m`, build a structured review request with recent bars, signals, execution ledger, and risk context.
 - Only allow a paper order when review action is `paper_allow` and gateway readiness is `ready`.
 - Submit only deterministic bracket order drafts with entry, stop-loss, take-profit, and max holding minutes.
-- Use `POST /api/gateways/ibkr/bracket-orders/{bracket_id}/submit` only after the local draft is approved and the active `MNQ` contract month or local symbol is configured.
+- Use `POST /api/gateways/ibkr/bracket-orders/{bracket_id}/submit` only after the local draft is approved and `contracts/sync` has resolved the active `MNQ` contract month or `localSymbol`.
 - After submission, poll `POST /api/gateways/ibkr/runtime-events/sync` to ingest `orderStatus`, `execDetails`, and `commissionReport` into the local execution ledger.
 - Record order status, fills, commission, positions, and account snapshots from IBKR callbacks.
 - Use `/api/gateways/ibkr/execution-ledger` as the source of real paper PnL for strategy diagnosis.
