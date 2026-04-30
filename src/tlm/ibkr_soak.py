@@ -142,12 +142,214 @@ def summarize_soak_sample(sample: dict[str, Any]) -> dict[str, Any]:
 def write_soak_sample(output_dir: Path, sample: dict[str, Any]) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary = _dict(sample.get("summary"))
+    compact_sample = compact_soak_sample(sample)
     with (output_dir / "samples.jsonl").open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(sample, sort_keys=True) + "\n")
-    (output_dir / "latest_sample.json").write_text(json.dumps(sample, indent=2, sort_keys=True), encoding="utf-8")
+        handle.write(json.dumps(compact_sample, sort_keys=True) + "\n")
+    (output_dir / "latest_sample.json").write_text(
+        json.dumps(compact_sample, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     (output_dir / "latest_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     return summary
 
 
+def compact_soak_sample(sample: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "collected_at": sample.get("collected_at"),
+        "symbol": sample.get("symbol"),
+        "summary": _dict(sample.get("summary")),
+        "health": _compact_health_payload(_dict(sample.get("health"))),
+        "readiness": _compact_readiness_payload(_dict(sample.get("readiness"))),
+        "market_data": _compact_market_data_payload(_dict(sample.get("market_data"))),
+        "bracket_orders": _compact_bracket_orders_payload(_dict(sample.get("bracket_orders"))),
+        "execution_ledger": _compact_execution_ledger_payload(_dict(sample.get("execution_ledger"))),
+        "incidents": _compact_incidents_payload(_dict(sample.get("incidents"))),
+        "poller": _compact_poller_payload(_dict(sample.get("poller"))),
+        "report": _compact_report_payload(_dict(sample.get("report"))),
+    }
+
+
+def _compact_health_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return _pick(
+        payload,
+        "status",
+        "connected",
+        "paper_account_verified",
+        "safe_mode",
+        "live_trading_enabled",
+    )
+
+
+def _compact_readiness_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    compact = _pick(payload, "status", "mode", "paper_only", "checked_at")
+    contract = _dict(payload.get("contract"))
+    market_data = _dict(payload.get("market_data"))
+    compact["missing_requirements"] = list(payload.get("missing_requirements", []))
+    compact["contract"] = _pick(contract, "status", "symbol", "missing_requirements")
+    compact["market_data"] = {
+        **_pick(market_data, "status", "symbol", "max_stale_seconds", "missing_requirements"),
+        "snapshot": _compact_market_data_snapshot(_dict(market_data.get("snapshot"))),
+    }
+    return compact
+
+
+def _compact_market_data_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **_pick(payload, "status", "symbol", "max_stale_seconds", "missing_requirements"),
+        "snapshot": _compact_market_data_snapshot(_dict(payload.get("snapshot"))),
+    }
+
+
+def _compact_market_data_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    return _pick(
+        snapshot,
+        "symbol",
+        "bid",
+        "ask",
+        "last",
+        "spread",
+        "market_data_type",
+        "real_time",
+        "order_ready",
+        "snapshot_time",
+        "age_seconds",
+        "error_code",
+        "error_message",
+    )
+
+
+def _compact_bracket_orders_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return _pick(
+        payload,
+        "open_bracket_order_count",
+        "completed_bracket_order_count",
+        "order_event_count",
+        "accepted_parent_order_count",
+        "bracket_child_missing_after_accept_count",
+    )
+
+
+def _compact_execution_ledger_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    compact = _pick(
+        payload,
+        "fill_count",
+        "net_realized_pnl",
+        "total_commission",
+        "open_position_quantity",
+    )
+    compact["latest_account_snapshot"] = _compact_account_snapshot(_dict(payload.get("latest_account_snapshot")))
+    return compact
+
+
+def _compact_account_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    return _pick(
+        payload,
+        "net_liquidation",
+        "daily_pnl",
+        "realized_pnl",
+        "unrealized_pnl",
+        "drawdown_usage",
+        "recorded_at",
+    )
+
+
+def _compact_incidents_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    incidents = payload.get("incidents")
+    latest = incidents[-1] if isinstance(incidents, list) and incidents else {}
+    return {
+        "count": payload.get("count", 0),
+        "latest": _pick(_dict(latest), "event_type", "code", "message", "created_at"),
+    }
+
+
+def _compact_poller_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    compact = _pick(
+        payload,
+        "enabled",
+        "running",
+        "auto_submit",
+        "readiness_check_count",
+        "review_cycle_count",
+        "live_order_attempt_count",
+        "duplicate_order_event_count",
+        "last_review_at",
+        "last_review_fill_count",
+        "warm_start_bar_count",
+        "warm_start_source",
+        "iteration_count",
+        "last_run_at",
+    )
+    compact["strategy"] = _pick(
+        _dict(payload.get("strategy")),
+        "strategy_id",
+        "strategy_spec_hash",
+        "module_id",
+        "family",
+        "symbol",
+        "timeframe",
+        "preset",
+        "enabled",
+        "tick_size",
+        "stop_loss_ticks",
+        "take_profit_ticks",
+        "max_holding_minutes",
+    )
+    compact["control_state"] = _pick(
+        _dict(payload.get("control_state")),
+        "mode",
+        "min_confidence",
+        "max_spread_ticks",
+        "daily_trade_cap",
+        "trade_session",
+        "safe_mode",
+        "kill_switch",
+    )
+    compact["last_result"] = _compact_last_result(_dict(payload.get("last_result")))
+    compact["latest_signal"] = _compact_latest_signal(_dict(payload.get("latest_signal")))
+    return compact
+
+
+def _compact_last_result(payload: dict[str, Any]) -> dict[str, Any]:
+    compact = _pick(payload, "status", "symbol", "action_count", "actions", "safe_mode")
+    readiness = _dict(payload.get("readiness"))
+    decision = _dict(payload.get("decision"))
+    compact["readiness"] = {
+        "status": readiness.get("status"),
+        "missing_requirements": list(readiness.get("missing_requirements", [])),
+        "market_data": _pick(_dict(readiness.get("market_data")), "status", "missing_requirements"),
+    }
+    compact["decision"] = _pick(decision, "status", "symbol", "bars_count", "signal_class", "review_due")
+    return compact
+
+
+def _compact_latest_signal(payload: dict[str, Any]) -> dict[str, Any]:
+    return _pick(
+        payload,
+        "schema_version",
+        "source",
+        "strategy_id",
+        "strategy_spec_hash",
+        "module_id",
+        "symbol",
+        "timeframe",
+        "signal_class",
+        "blocked",
+        "reasons",
+        "created_at",
+    )
+
+
+def _compact_report_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "run_id": payload.get("run_id"),
+        "generated_at": payload.get("generated_at"),
+        "acceptance_evidence": _dict(payload.get("acceptance_evidence")),
+    }
+
+
 def _dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _pick(payload: dict[str, Any], *keys: str) -> dict[str, Any]:
+    return {key: payload.get(key) for key in keys if key in payload}

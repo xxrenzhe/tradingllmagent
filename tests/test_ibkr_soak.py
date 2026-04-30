@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from tlm.ibkr_soak import collect_soak_sample, run_ibkr_soak_monitor, summarize_soak_sample
+from tlm.ibkr_soak import compact_soak_sample, collect_soak_sample, run_ibkr_soak_monitor, summarize_soak_sample
 
 
 class IbkrSoakMonitorTests(unittest.TestCase):
@@ -97,6 +97,43 @@ class IbkrSoakMonitorTests(unittest.TestCase):
             self.assertEqual(len((output_dir / "samples.jsonl").read_text(encoding="utf-8").splitlines()), 1)
             latest = json.loads((output_dir / "latest_summary.json").read_text(encoding="utf-8"))
             self.assertEqual(latest["readiness_check_count"], 100)
+
+    def test_compact_sample_drops_growing_histories(self) -> None:
+        sample = {
+            "collected_at": "2026-04-30T12:00:00+00:00",
+            "symbol": "MNQ",
+            "summary": {"acceptance_status": "pending"},
+            "poller": {
+                "enabled": True,
+                "running": True,
+                "auto_submit": False,
+                "readiness_check_count": 10,
+                "review_cycle_count": 2,
+                "latest_bars": [{"bar_time": "2026-04-30T12:00:00+00:00"}],
+                "latest_review": {"review_result": {"action": "no_action"}},
+                "latest_optimizer": {"status": "no_change"},
+                "last_result": {"status": "ok", "actions": ["market_data_sync_completed"]},
+                "latest_signal": {"signal_class": "none", "reasons": ["no_low_r_match"]},
+            },
+            "report": {
+                "run_id": "current",
+                "generated_at": "2026-04-30T12:00:01+00:00",
+                "acceptance_evidence": {"status": "pending"},
+                "reviews": [{"review_result": {"action": "paper_allow"}}],
+                "one_minute_bars": [{"bar_time": "2026-04-30T12:00:00+00:00"}],
+            },
+        }
+
+        compact = compact_soak_sample(sample)
+
+        self.assertEqual(compact["summary"]["acceptance_status"], "pending")
+        self.assertEqual(compact["poller"]["readiness_check_count"], 10)
+        self.assertNotIn("latest_bars", compact["poller"])
+        self.assertNotIn("latest_review", compact["poller"])
+        self.assertNotIn("latest_optimizer", compact["poller"])
+        self.assertEqual(compact["report"]["acceptance_evidence"]["status"], "pending")
+        self.assertNotIn("reviews", compact["report"])
+        self.assertNotIn("one_minute_bars", compact["report"])
 
     def test_collect_sample_records_endpoint_errors(self) -> None:
         def fake_fetch(api_base: str, path: str, timeout_seconds: float) -> dict:
