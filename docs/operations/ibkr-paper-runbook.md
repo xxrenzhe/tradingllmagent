@@ -76,7 +76,7 @@ Run the loop and a separate monitor so acceptance evidence survives operator rev
 PYTHONPATH=src python3 -m tlm.cli ibkr loop \
   --symbol MNQ \
   --api-port 8000 \
-  --poll-interval-seconds 60 \
+  --poll-interval-seconds 15 \
   --review-interval-seconds 300 \
   --max-stale-seconds 30 \
   --auto-submit
