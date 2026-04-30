@@ -890,7 +890,7 @@ class APIImportTests(unittest.TestCase):
                     "bid": 19000.0,
                     "ask": 19000.25,
                     "last": 19000.25,
-                    "market_data_type": "real_time",
+                    "market_data_type": "delayed",
                     "snapshot_time": datetime.now(UTC).isoformat(),
                 }
 

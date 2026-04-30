@@ -16,8 +16,8 @@ This runbook is the minimum operating procedure for the Mac-local IBKR Paper loo
 - Enable TWS API socket on localhost and keep the API port fixed, default `7497` for paper.
 - Use a dedicated client id, default `11`, and avoid sharing it with manual tools.
 - Confirm the account is paper-only before arming the loop.
-- Confirm CME real-time market data permission for `MNQ`; delayed or frozen quotes are observation-only.
-- If readiness shows IBKR error `10168`, the account lacks subscribed real-time data and delayed data is not enabled in TWS.
+- Confirm `MNQ` market data is available in TWS. This gateway now requests delayed data by default and accepts `delayed` or `delayed_frozen` quotes for paper trading readiness.
+- If readiness shows IBKR error `10168`, delayed data is not enabled in TWS for the account/session.
 - Keep IBKR username, password, account number, and session details outside the repository.
 
 ## Startup Checks
@@ -30,7 +30,7 @@ This runbook is the minimum operating procedure for the Mac-local IBKR Paper loo
    ```
 4. Connect through the adapter layer only after paper account verification is available.
 5. Record or verify contract details for `MNQ`; tick size must be `0.25`, point value must be `2.0`.
-6. Record or verify real-time `bid`, `ask`, and `last`; spread must be non-negative and quote age must be within readiness limits.
+6. Record or verify order-ready `bid`, `ask`, and `last`; spread must be non-negative and quote age must be within readiness limits.
 7. Verify readiness:
    ```bash
    curl -s "http://127.0.0.1:8000/api/gateways/ibkr/readiness?symbol=MNQ&max_stale_seconds=5"

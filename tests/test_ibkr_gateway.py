@@ -176,7 +176,7 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(event["event_type"], "connected")
         self.assertTrue(gateway.account is not None and gateway.account.is_paper)
 
-    def test_contract_and_real_time_market_data_complete_readiness(self) -> None:
+    def test_contract_and_delayed_market_data_complete_readiness(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
 
         gateway.connect()
@@ -198,7 +198,7 @@ class IbkrPaperGatewayTests(unittest.TestCase):
                 "bid": 19000.0,
                 "ask": 19000.25,
                 "last": 19000.25,
-                "market_data_type": "real_time",
+                "market_data_type": "delayed",
                 "snapshot_time": datetime.now(UTC).isoformat(),
             }
         )
@@ -211,7 +211,7 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(readiness["contract"]["status"], "ready")
         self.assertEqual(readiness["market_data"]["status"], "ready")
 
-    def test_market_data_readiness_blocks_delayed_stale_or_incomplete_quotes(self) -> None:
+    def test_market_data_readiness_blocks_incomplete_stale_quotes_even_when_delayed(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
         old_time = datetime.now(UTC) - timedelta(seconds=60)
 
@@ -228,10 +228,27 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         readiness = gateway.market_data_readiness("MNQ", max_stale_seconds=5)
 
         self.assertEqual(readiness["status"], "blocked")
-        self.assertIn("market_data_not_real_time:delayed", readiness["missing_requirements"])
         self.assertIn("ask_missing", readiness["missing_requirements"])
         self.assertIn("spread_unavailable", readiness["missing_requirements"])
         self.assertIn("market_data_stale", readiness["missing_requirements"])
+
+    def test_market_data_readiness_blocks_unknown_market_data_type(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+
+        gateway.record_market_data(
+            {
+                "symbol": "MNQ",
+                "bid": 19000.0,
+                "ask": 19000.25,
+                "last": 19000.0,
+                "market_data_type": "unknown",
+                "snapshot_time": datetime.now(UTC).isoformat(),
+            }
+        )
+        readiness = gateway.market_data_readiness("MNQ", max_stale_seconds=5)
+
+        self.assertEqual(readiness["status"], "blocked")
+        self.assertIn("market_data_not_order_ready:unknown", readiness["missing_requirements"])
 
     def test_market_data_readiness_surfaces_ibkr_error_code(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())

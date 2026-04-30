@@ -121,7 +121,7 @@ class OfficialIbkrAdapter:
             "error_code": None,
             "error_message": None,
         }
-        self.client.reqMarketDataType(1)
+        self.client.reqMarketDataType(3)
         self.client.reqMktData(req_id, self._build_contract(contract), "", False, False, [])
         self._wait(event, float(timeout_seconds), "timed_out_waiting_for_market_data", raise_on_timeout=False)
         self.client.cancelMktData(req_id)

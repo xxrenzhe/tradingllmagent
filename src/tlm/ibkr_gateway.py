@@ -118,6 +118,10 @@ class IbkrMarketDataSnapshot:
     def real_time(self) -> bool:
         return self.market_data_type == "real_time"
 
+    @property
+    def order_ready(self) -> bool:
+        return self.market_data_type in {"real_time", "delayed", "delayed_frozen"}
+
     def age_seconds(self, now: datetime | None = None) -> float:
         current = now or datetime.now(UTC)
         return max((current - self.snapshot_time).total_seconds(), 0.0)
@@ -131,6 +135,7 @@ class IbkrMarketDataSnapshot:
             "spread": self.spread,
             "market_data_type": self.market_data_type,
             "real_time": self.real_time,
+            "order_ready": self.order_ready,
             "snapshot_time": self.snapshot_time.isoformat(),
             "age_seconds": self.age_seconds(now),
             "error_code": self.error_code,
@@ -486,8 +491,8 @@ class IbkrPaperGateway:
                 "snapshot": None,
                 "missing_requirements": missing,
             }
-        if not snapshot.real_time:
-            missing.append(f"market_data_not_real_time:{snapshot.market_data_type}")
+        if not snapshot.order_ready:
+            missing.append(f"market_data_not_order_ready:{snapshot.market_data_type}")
         if snapshot.error_code is not None:
             missing.append(f"market_data_error:{snapshot.error_code}")
         if snapshot.bid is None:
