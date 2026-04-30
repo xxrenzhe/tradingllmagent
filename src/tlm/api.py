@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import duckdb
 import json
 import os
 from contextlib import asynccontextmanager
@@ -23,7 +24,7 @@ from .ibkr_gateway import IbkrPaperGateway
 from .ibkr_optimizer import apply_fast_path_control_diff
 from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
 from .ibkr_review import build_five_minute_review_request, deterministic_fallback_review
-from .ibkr_signals import build_one_minute_bars, build_signal_candidate
+from .ibkr_signals import build_one_minute_bars, build_signal_candidate, merge_one_minute_bars
 from .execution import (
     build_execution_intent_response_with_registry,
     build_execution_intent_response,
@@ -167,9 +168,18 @@ def run_ibkr_decision_cycle(
         state["latest_decision"] = result
         return result
 
-    bars = build_one_minute_bars(recent_snapshots)
-    latest_bars = [bar.to_dict() for bar in bars[-10:]]
+    bars = merge_one_minute_bars(
+        state.get("warm_start_bars", []),
+        build_one_minute_bars(recent_snapshots),
+        limit=int(state.get("market_data_history_limit", 500)),
+    )
+    bar_history = [bar.to_dict() for bar in bars[-int(state.get("market_data_history_limit", 500)) :]]
+    latest_bars = bar_history[-10:]
+    state["bar_history"] = bar_history
     state["latest_bars"] = latest_bars
+    warm_start_root = state.get("warm_start_root")
+    if isinstance(warm_start_root, str) and warm_start_root:
+        _ibkr_write_warm_start_bars(Path(warm_start_root), symbol, bar_history)
     if not bars:
         result = {"status": "skipped", "reason": "no_one_minute_bars", "symbol": symbol}
         state["latest_decision"] = result
@@ -318,6 +328,7 @@ def run_ibkr_poll_cycle(
     )
     decision = None
     if review_history is not None and optimizer_history is not None and state is not None:
+        _ibkr_maybe_backfill_warm_start_bars(gateway, state)
         state["readiness_check_count"] = int(state.get("readiness_check_count", 0)) + max(
             len(gateway.readiness_events) - prior_readiness_count,
             0,
@@ -386,6 +397,10 @@ def _compact_ibkr_poller_state(state: dict[str, Any]) -> dict[str, Any]:
         "latest_review": _compact_ibkr_review(state.get("latest_review")),
         "latest_optimizer": state.get("latest_optimizer"),
         "latest_decision": state.get("latest_decision"),
+        "warm_start_bar_count": len(state.get("warm_start_bars", [])),
+        "warm_start_source": state.get("warm_start_source"),
+        "warm_start_backfill_attempted": state.get("warm_start_backfill_attempted"),
+        "warm_start_backfill_error": state.get("warm_start_backfill_error"),
         "running": state.get("running", False),
         "iteration_count": state.get("iteration_count", 0),
         "last_run_at": state.get("last_run_at"),
@@ -394,6 +409,183 @@ def _compact_ibkr_poller_state(state: dict[str, Any]) -> dict[str, Any]:
         "startup_connect_event": state.get("startup_connect_event"),
     }
     return {key: value for key, value in compact.items() if value is not None}
+
+
+def _ibkr_load_warm_start_bars(root: Path, symbol: str, limit: int) -> tuple[list[dict[str, Any]], str | None]:
+    if limit <= 0 or not root.exists():
+        return [], None
+    cache_path = _ibkr_warm_start_cache_path(root, symbol)
+    if cache_path.exists():
+        try:
+            payload = json.loads(cache_path.read_text(encoding="utf-8"))
+            rows = [
+                row
+                for row in payload.get("one_minute_bars", [])
+                if str(row.get("symbol", symbol)) == symbol
+            ][-limit:]
+            if rows:
+                return rows, str(cache_path)
+        except Exception:
+            pass
+    run_dirs = sorted(
+        [path for path in root.iterdir() if path.is_dir()],
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for run_dir in run_dirs:
+        daily_report_path = run_dir / "daily_report.json"
+        if daily_report_path.exists():
+            try:
+                payload = json.loads(daily_report_path.read_text(encoding="utf-8"))
+                report = payload.get("payload", payload)
+                rows = [
+                    row
+                    for row in report.get("one_minute_bars", [])
+                    if str(row.get("symbol", symbol)) == symbol
+                ][-limit:]
+                if rows:
+                    return rows, str(daily_report_path)
+            except Exception:
+                pass
+        parquet_path = run_dir / "one_minute_bars.parquet"
+        if not parquet_path.exists():
+            continue
+        connection = duckdb.connect()
+        try:
+            rows = connection.execute(
+                """
+                SELECT symbol, bar_time, open, high, low, close, bid, ask, tick_count
+                FROM read_parquet(?)
+                WHERE symbol = ?
+                ORDER BY bar_time DESC
+                LIMIT ?
+                """,
+                [str(parquet_path), symbol, limit],
+            ).fetchall()
+        finally:
+            connection.close()
+        if rows:
+            rows = list(reversed(rows))
+            return (
+                [
+                    {
+                        "symbol": str(row[0]),
+                        "bar_time": row[1].isoformat() if hasattr(row[1], "isoformat") else str(row[1]),
+                        "open": float(row[2]),
+                        "high": float(row[3]),
+                        "low": float(row[4]),
+                        "close": float(row[5]),
+                        "bid": float(row[6]) if row[6] is not None else None,
+                        "ask": float(row[7]) if row[7] is not None else None,
+                        "tick_count": int(row[8] or 0),
+                    }
+                    for row in rows
+                ],
+                str(parquet_path),
+            )
+    return [], None
+
+
+def _ibkr_write_warm_start_bars(root: Path, symbol: str, bars: list[dict[str, Any]]) -> None:
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        cache_path = _ibkr_warm_start_cache_path(root, symbol)
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "symbol": symbol,
+                    "updated_at": datetime_iso_now(),
+                    "one_minute_bars": bars,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        return
+
+
+def _ibkr_warm_start_cache_path(root: Path, symbol: str) -> Path:
+    return root / f"warm_start_{symbol.lower()}.json"
+
+
+def _ibkr_maybe_backfill_warm_start_bars(
+    gateway: IbkrPaperGateway,
+    state: dict[str, Any],
+) -> int:
+    existing_rows = state.get("warm_start_bars", [])
+    existing_count = len(existing_rows) if isinstance(existing_rows, list) else 0
+    min_bars = int(state.get("warm_start_min_bars", 50))
+    if existing_count >= min_bars:
+        return existing_count
+    if bool(state.get("warm_start_backfill_attempted")):
+        return existing_count
+    if gateway.adapter is None or not gateway.connected:
+        return existing_count
+    request_historical_bars = getattr(gateway.adapter, "request_historical_bars", None)
+    if not callable(request_historical_bars):
+        return existing_count
+    symbol = str(state.get("symbol", "MNQ"))
+    resolved_contract = gateway.resolved_contract(symbol, require_concrete=True)
+    if resolved_contract is None:
+        return existing_count
+    state["warm_start_backfill_attempted"] = True
+    try:
+        rows = request_historical_bars(
+            resolved_contract,
+            duration=str(state.get("warm_start_backfill_duration", "14400 S")),
+            bar_size="1 min",
+            what_to_show=str(state.get("warm_start_backfill_what_to_show", "TRADES")),
+            use_rth=bool(state.get("warm_start_backfill_use_rth", False)),
+            timeout_seconds=int(state.get("warm_start_backfill_timeout_seconds", 20)),
+        )
+    except Exception as exc:
+        state["warm_start_backfill_error"] = str(exc)
+        return existing_count
+    limit = int(state.get("warm_start_bar_limit", state.get("market_data_history_limit", 500)))
+    merged = [
+        bar.to_dict()
+        for bar in merge_one_minute_bars(
+            existing_rows if isinstance(existing_rows, list) else [],
+            rows if isinstance(rows, list) else [],
+            limit=limit,
+        )
+    ]
+    if not merged:
+        state["warm_start_backfill_error"] = "no_historical_bars_returned"
+        return existing_count
+    state["warm_start_bars"] = merged
+    state["warm_start_source"] = f"ibkr_historical:{symbol}"
+    state["warm_start_backfill_error"] = None
+    warm_start_root = state.get("warm_start_root")
+    if isinstance(warm_start_root, str) and warm_start_root:
+        _ibkr_write_warm_start_bars(Path(warm_start_root), symbol, merged)
+    return len(merged)
+
+
+def _ibkr_warm_start_rows_usable(
+    rows: list[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+    max_age_minutes: int = 180,
+    max_future_minutes: int = 5,
+) -> bool:
+    if not rows:
+        return False
+    bar_time = rows[-1].get("bar_time")
+    if not bar_time:
+        return False
+    try:
+        parsed = datetime.fromisoformat(str(bar_time))
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    current = now or datetime.now(UTC)
+    age_minutes = (current - parsed).total_seconds() / 60.0
+    return (-float(max_future_minutes)) <= age_minutes <= float(max_age_minutes)
 
 
 def _compact_ibkr_review(review: Any) -> dict[str, Any] | None:
@@ -817,6 +1009,18 @@ def create_app():
         "readiness_max_stale_seconds": int(os.environ.get("TLM_IBKR_READINESS_MAX_STALE_SECONDS", "5")),
         "strategy": _ibkr_default_strategy(os.environ.get("TLM_IBKR_POLL_SYMBOL", "MNQ")),
         "control_state": _ibkr_default_control_state(),
+        "warm_start_root": os.environ.get("TLM_IBKR_WARM_START_ROOT", "experiments/ibkr_paper"),
+        "warm_start_bar_limit": int(os.environ.get("TLM_IBKR_WARM_START_BAR_LIMIT", "240")),
+        "warm_start_min_bars": int(os.environ.get("TLM_IBKR_WARM_START_MIN_BARS", "50")),
+        "warm_start_backfill_duration": os.environ.get("TLM_IBKR_WARM_START_BACKFILL_DURATION", "14400 S"),
+        "warm_start_backfill_timeout_seconds": int(os.environ.get("TLM_IBKR_WARM_START_BACKFILL_TIMEOUT_SECONDS", "20")),
+        "warm_start_backfill_use_rth": _env_bool("TLM_IBKR_WARM_START_BACKFILL_USE_RTH", False),
+        "warm_start_backfill_what_to_show": os.environ.get("TLM_IBKR_WARM_START_BACKFILL_WHAT_TO_SHOW", "TRADES"),
+        "warm_start_bars": [],
+        "warm_start_source": None,
+        "warm_start_backfill_attempted": False,
+        "warm_start_backfill_error": None,
+        "bar_history": [],
         "readiness_check_count": 0,
         "review_cycle_count": 0,
         "live_order_attempt_count": 0,
@@ -836,6 +1040,16 @@ def create_app():
         "last_error": None,
         "startup_connect_event": None,
     }
+    warm_start_bars, warm_start_source = _ibkr_load_warm_start_bars(
+        Path(os.environ.get("TLM_IBKR_WARM_START_ROOT", "experiments/ibkr_paper")),
+        str(ibkr_poller_state["symbol"]),
+        int(ibkr_poller_state["warm_start_bar_limit"]),
+    )
+    if warm_start_bars and not _ibkr_warm_start_rows_usable(warm_start_bars):
+        warm_start_bars = []
+        warm_start_source = None
+    ibkr_poller_state["warm_start_bars"] = warm_start_bars
+    ibkr_poller_state["warm_start_source"] = warm_start_source
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -1474,7 +1688,7 @@ def create_app():
             incidents={"incidents": ibkr_gateway.incident_events, "count": len(ibkr_gateway.incident_events)},
             reviews=[review for review in compact_reviews if review is not None],
             optimizer_reports=ibkr_optimizer_history[-50:],
-            one_minute_bars=list(ibkr_poller_state.get("latest_bars", [])),
+            one_minute_bars=list(ibkr_poller_state.get("bar_history", [])),
             signals=list(ibkr_poller_state.get("latest_signals", [])),
             strategy_state=dict(ibkr_poller_state.get("strategy", {})),
             control_state=dict(ibkr_poller_state.get("control_state", {})),

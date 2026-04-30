@@ -25,6 +25,17 @@ class IbkrGatewayAdapter(Protocol):
 
     def request_market_data(self, contract: dict[str, Any], timeout_seconds: int = 5) -> dict[str, Any]: ...
 
+    def request_historical_bars(
+        self,
+        contract: dict[str, Any],
+        *,
+        duration: str = "14400 S",
+        bar_size: str = "1 min",
+        what_to_show: str = "TRADES",
+        use_rth: bool = False,
+        timeout_seconds: int = 20,
+    ) -> list[dict[str, Any]]: ...
+
     def request_positions(self) -> list[dict[str, Any]]: ...
 
     def request_account_snapshot(self, account_id: str | None = None) -> dict[str, Any]: ...

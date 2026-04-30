@@ -7,17 +7,18 @@ import unittest
 
 import duckdb
 
-from tlm.api import _ibkr_default_strategy, run_ibkr_decision_cycle
+from tlm.api import _ibkr_default_strategy, _ibkr_load_warm_start_bars, _ibkr_maybe_backfill_warm_start_bars, _ibkr_warm_start_rows_usable, run_ibkr_decision_cycle
 from tlm.ibkr_gateway import IbkrPaperGateway
 from tlm.ibkr_optimizer import apply_fast_path_control_diff
 from tlm.ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
 from tlm.ibkr_review import build_five_minute_review_request, deterministic_fallback_review
-from tlm.ibkr_signals import OneMinuteBar, build_one_minute_bars, build_signal_candidate
+from tlm.ibkr_signals import OneMinuteBar, build_one_minute_bars, build_signal_candidate, merge_one_minute_bars
 
 
 class FakeIbkrAdapter:
-    def __init__(self) -> None:
+    def __init__(self, *, historical_bars: list[dict] | None = None) -> None:
         self.connected = False
+        self.historical_bars = list(historical_bars or [])
 
     def connect(self, host: str, port: int, client_id: int) -> dict:
         self.connected = True
@@ -29,6 +30,19 @@ class FakeIbkrAdapter:
 
     def account_summary(self) -> dict:
         return {"account_id": "DU1234567", "account_type": "paper"}
+
+    def request_historical_bars(
+        self,
+        contract: dict,
+        *,
+        duration: str = "4 H",
+        bar_size: str = "1 min",
+        what_to_show: str = "TRADES",
+        use_rth: bool = False,
+        timeout_seconds: int = 20,
+    ) -> list[dict]:
+        symbol = str(contract.get("symbol", "MNQ"))
+        return [{**row, "symbol": str(row.get("symbol", symbol) or symbol)} for row in self.historical_bars]
 
 
 class IbkrPaperLoopTests(unittest.TestCase):
@@ -56,6 +70,164 @@ class IbkrPaperLoopTests(unittest.TestCase):
         self.assertEqual(signal["risk_context"]["preset"], "simple_robust_low_r")
         self.assertEqual(signal["risk_context"]["edge_index"], 0)
         self.assertGreaterEqual(signal["risk_context"]["stop_loss_ticks"], 32)
+
+    def test_load_warm_start_bars_uses_latest_artifact_report(self) -> None:
+        bars = [bar.to_dict() for bar in _low_r_opening_range_bars()[:60]]
+        report = build_ibkr_paper_report(
+            run_id="warm-start-test",
+            health={"status": "paper_armed"},
+            readiness={"status": "ready", "missing_requirements": []},
+            contracts={},
+            market_data={},
+            bracket_orders={},
+            execution_ledger={},
+            incidents={"incidents": [], "count": 0},
+            one_minute_bars=bars,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            create_ibkr_paper_run_artifacts(
+                run_id="warm-start-test",
+                root=Path(temp_dir),
+                report=report,
+            )
+            loaded, source = _ibkr_load_warm_start_bars(Path(temp_dir), "MNQ", 40)
+
+        self.assertEqual(len(loaded), 40)
+        self.assertTrue(source is not None and source.endswith("daily_report.json"))
+        self.assertEqual(loaded[-1]["bar_time"], bars[59]["bar_time"])
+
+    def test_decision_cycle_uses_warm_start_bars_for_low_r_history(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+        gateway.connect()
+        gateway.record_contract_details(
+            {
+                "symbol": "MNQ",
+                "tick_size": 0.25,
+                "point_value": 2.0,
+                "exchange": "CME",
+                "currency": "USD",
+            }
+        )
+        bars = _low_r_opening_range_bars()
+        for snapshot in _snapshots_from_bar(bars[-1]):
+            gateway.record_market_data(snapshot)
+
+        review_history: list[dict] = []
+        optimizer_history: list[dict] = []
+        state = {
+            "review_interval_seconds": 0,
+            "market_data_history_limit": 500,
+            "readiness_max_stale_seconds": 600,
+            "strategy": _ibkr_default_strategy("MNQ"),
+            "control_state": {
+                "mode": "paper",
+                "min_confidence": 0.55,
+                "max_spread_ticks": 2.0,
+                "daily_trade_cap": 6,
+                "strategies": {},
+                "trade_session": {"start": "09:30", "end": "15:55"},
+                "safe_mode": False,
+                "kill_switch": False,
+            },
+            "warm_start_bars": [bar.to_dict() for bar in bars[:-1]],
+        }
+
+        decision = run_ibkr_decision_cycle(
+            gateway,
+            symbol="MNQ",
+            review_history=review_history,
+            optimizer_history=optimizer_history,
+            state=state,
+        )
+
+        self.assertEqual(decision["status"], "review_completed")
+        self.assertEqual(state["latest_signal"]["signal_class"], "strong_review")
+        self.assertEqual(state["latest_signal"]["family"], "low_r_regime_basket")
+        self.assertNotIn("insufficient_low_r_history", state["latest_signal"].get("reasons", []))
+        self.assertGreaterEqual(len(merge_one_minute_bars(state["warm_start_bars"], [])), 50)
+
+    def test_decision_cycle_persists_warm_start_cache(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+        gateway.connect()
+        gateway.record_contract_details(
+            {
+                "symbol": "MNQ",
+                "tick_size": 0.25,
+                "point_value": 2.0,
+                "exchange": "CME",
+                "currency": "USD",
+            }
+        )
+        bars = _low_r_opening_range_bars()
+        for snapshot in _snapshots_from_bar(bars[-1]):
+            gateway.record_market_data(snapshot)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state = {
+                "review_interval_seconds": 0,
+                "market_data_history_limit": 500,
+                "readiness_max_stale_seconds": 600,
+                "strategy": _ibkr_default_strategy("MNQ"),
+                "control_state": {
+                    "mode": "paper",
+                    "min_confidence": 0.55,
+                    "max_spread_ticks": 2.0,
+                    "daily_trade_cap": 6,
+                    "strategies": {},
+                    "trade_session": {"start": "09:30", "end": "15:55"},
+                    "safe_mode": False,
+                    "kill_switch": False,
+                },
+                "warm_start_root": temp_dir,
+                "warm_start_bars": [bar.to_dict() for bar in bars[:-1]],
+            }
+            run_ibkr_decision_cycle(
+                gateway,
+                symbol="MNQ",
+                review_history=[],
+                optimizer_history=[],
+                state=state,
+            )
+            loaded, source = _ibkr_load_warm_start_bars(Path(temp_dir), "MNQ", 240)
+
+        self.assertTrue(source is not None and source.endswith("warm_start_mnq.json"))
+        self.assertGreaterEqual(len(loaded), 50)
+
+    def test_backfill_warm_start_bars_uses_ibkr_historical_data_when_cache_missing(self) -> None:
+        historical_bars = [bar.to_dict() for bar in _low_r_opening_range_bars()[:60]]
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter(historical_bars=historical_bars))
+        gateway.connect()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state = {
+                "symbol": "MNQ",
+                "warm_start_root": temp_dir,
+                "warm_start_bars": [],
+                "warm_start_bar_limit": 240,
+                "warm_start_min_bars": 50,
+                "warm_start_backfill_duration": "4 H",
+                "warm_start_backfill_timeout_seconds": 1,
+            }
+            count = _ibkr_maybe_backfill_warm_start_bars(gateway, state)
+            loaded, source = _ibkr_load_warm_start_bars(Path(temp_dir), "MNQ", 240)
+
+        self.assertEqual(count, 60)
+        self.assertTrue(state["warm_start_backfill_attempted"])
+        self.assertEqual(state["warm_start_source"], "ibkr_historical:MNQ")
+        self.assertIsNone(state["warm_start_backfill_error"])
+        self.assertTrue(source is not None and source.endswith("warm_start_mnq.json"))
+        self.assertEqual(len(loaded), 60)
+
+    def test_warm_start_rows_usable_rejects_future_or_stale_cache(self) -> None:
+        now = datetime(2026, 5, 1, 1, 30, tzinfo=UTC)
+        valid_rows = [{"bar_time": "2026-05-01T01:20:00+00:00"}]
+        future_rows = [{"bar_time": "2026-05-01T02:20:00+00:00"}]
+        stale_rows = [{"bar_time": "2026-04-30T20:00:00+00:00"}]
+
+        self.assertTrue(_ibkr_warm_start_rows_usable(valid_rows, now=now))
+        self.assertFalse(_ibkr_warm_start_rows_usable(future_rows, now=now))
+        self.assertFalse(_ibkr_warm_start_rows_usable(stale_rows, now=now))
 
     def test_decision_cycle_runs_review_and_builds_bracket_draft(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
@@ -408,6 +580,27 @@ def _low_r_opening_range_bars() -> list[OneMinuteBar]:
             )
         )
     return bars
+
+
+def _snapshots_from_bar(bar: OneMinuteBar) -> list[dict]:
+    tick_count = max(bar.tick_count, 4)
+    prices = [bar.open, bar.high, bar.low, bar.close]
+    if tick_count > 4:
+        prices.extend([bar.close] * (tick_count - 4))
+    snapshots = []
+    for index, price in enumerate(prices[:tick_count]):
+        snapshot_time = bar.bar_time + timedelta(seconds=min(index, 59))
+        snapshots.append(
+            {
+                "symbol": bar.symbol,
+                "bid": (bar.bid if bar.bid is not None else price - 0.25),
+                "ask": (bar.ask if bar.ask is not None else price),
+                "last": price,
+                "market_data_type": "delayed",
+                "snapshot_time": snapshot_time.isoformat(),
+            }
+        )
+    return snapshots
 
 
 if __name__ == "__main__":

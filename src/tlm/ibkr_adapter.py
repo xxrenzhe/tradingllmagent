@@ -37,6 +37,8 @@ class OfficialIbkrAdapter:
     _contract_detail_events: dict[int, threading.Event] = field(default_factory=dict)
     _market_data: dict[int, dict[str, Any]] = field(default_factory=dict)
     _market_data_events: dict[int, threading.Event] = field(default_factory=dict)
+    _historical_data: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
+    _historical_data_events: dict[int, threading.Event] = field(default_factory=dict)
     _pnl: dict[int, dict[str, Any]] = field(default_factory=dict)
     _pnl_events: dict[int, threading.Event] = field(default_factory=dict)
     _positions: list[dict[str, Any]] = field(default_factory=list)
@@ -155,6 +157,27 @@ class OfficialIbkrAdapter:
             payload = self._request_market_data_once(contract, timeout_seconds=timeout_seconds)
         return payload
 
+    def request_historical_bars(
+        self,
+        contract: dict[str, Any],
+        *,
+        duration: str = "14400 S",
+        bar_size: str = "1 min",
+        what_to_show: str = "TRADES",
+        use_rth: bool = False,
+        timeout_seconds: int = 20,
+    ) -> list[dict[str, Any]]:
+        return self._retry_after_not_connected(
+            lambda: self._request_historical_bars_once(
+                contract,
+                duration=duration,
+                bar_size=bar_size,
+                what_to_show=what_to_show,
+                use_rth=use_rth,
+                timeout_seconds=timeout_seconds,
+            )
+        )
+
     def _request_market_data_once(self, contract: dict[str, Any], *, timeout_seconds: int) -> dict[str, Any]:
         req_id = self._next_request_id()
         event = threading.Event()
@@ -178,6 +201,54 @@ class OfficialIbkrAdapter:
         payload = self._market_data.pop(req_id, {})
         self._market_data_events.pop(req_id, None)
         return payload
+
+    def _request_historical_bars_once(
+        self,
+        contract: dict[str, Any],
+        *,
+        duration: str,
+        bar_size: str,
+        what_to_show: str,
+        use_rth: bool,
+        timeout_seconds: int,
+    ) -> list[dict[str, Any]]:
+        self._ensure_connected()
+        req_id = self._next_request_id()
+        event = threading.Event()
+        self._historical_data_events[req_id] = event
+        self._historical_data[req_id] = []
+        try:
+            self.client.reqHistoricalData(
+                req_id,
+                self._build_contract(contract),
+                "",
+                _normalize_historical_duration(duration),
+                bar_size,
+                what_to_show,
+                1 if use_rth else 0,
+                1,
+                False,
+                [],
+            )
+            self._wait(event, float(timeout_seconds), "timed_out_waiting_for_historical_bars")
+            request_error = self._request_error(req_id)
+            rows = list(self._historical_data.pop(req_id, []))
+            if request_error is not None:
+                if int(request_error.get("error_code") or 0) == 504:
+                    raise RuntimeError("not connected")
+                if not rows:
+                    raise RuntimeError(str(request_error.get("error") or "historical_data_request_failed"))
+            symbol = str(contract.get("symbol", "MNQ"))
+            for row in rows:
+                row["symbol"] = str(row.get("symbol", symbol) or symbol)
+            return rows
+        finally:
+            try:
+                self.client.cancelHistoricalData(req_id)
+            except Exception:
+                pass
+            self._historical_data.pop(req_id, None)
+            self._historical_data_events.pop(req_id, None)
 
     def request_positions(self) -> list[dict[str, Any]]:
         return self._retry_after_not_connected(self._request_positions_once)
@@ -377,6 +448,26 @@ class OfficialIbkrAdapter:
                 if event is not None and all(payload.get(key) is not None for key in ("bid", "ask", "last")):
                     event.set()
 
+            def historicalData(self, reqId: int, bar: Any) -> None:  # noqa: N802
+                adapter._historical_data.setdefault(reqId, []).append(
+                    {
+                        "symbol": None,
+                        "bar_time": _ibkr_bar_time_to_iso(getattr(bar, "date", "")),
+                        "open": float(getattr(bar, "open", 0.0)),
+                        "high": float(getattr(bar, "high", 0.0)),
+                        "low": float(getattr(bar, "low", 0.0)),
+                        "close": float(getattr(bar, "close", 0.0)),
+                        "bid": None,
+                        "ask": None,
+                        "tick_count": int(getattr(bar, "barCount", 0) or getattr(bar, "volume", 0) or 0),
+                    }
+                )
+
+            def historicalDataEnd(self, reqId: int, start: str, end: str) -> None:  # noqa: N802
+                event = adapter._historical_data_events.get(reqId)
+                if event is not None:
+                    event.set()
+
             def position(self, account: str, contract: Any, pos: float, avgCost: float) -> None:  # noqa: N802
                 adapter._positions.append(
                     {
@@ -473,6 +564,8 @@ class OfficialIbkrAdapter:
                     payload["error_code"] = errorCode
                     payload["error_message"] = errorString
                     adapter._market_data_events[reqId].set()
+                if reqId in adapter._historical_data_events:
+                    adapter._historical_data_events[reqId].set()
                 if reqId in adapter._pnl_events:
                     adapter._pnl_events[reqId].set()
 
@@ -719,3 +812,43 @@ def _ibkr_time_to_iso(value: str) -> str:
         except ValueError:
             continue
     return _now()
+
+
+def _ibkr_bar_time_to_iso(value: Any) -> str:
+    if value is None:
+        return _now()
+    cleaned = str(value).strip()
+    if cleaned.isdigit():
+        try:
+            return datetime.fromtimestamp(int(cleaned), tz=UTC).isoformat()
+        except ValueError:
+            return _now()
+    local_tz = datetime.now().astimezone().tzinfo
+    for pattern in ("%Y%m%d  %H:%M:%S", "%Y%m%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            parsed = datetime.strptime(cleaned, pattern)
+            if local_tz is not None:
+                parsed = parsed.replace(tzinfo=local_tz).astimezone(UTC)
+            else:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.isoformat()
+        except ValueError:
+            continue
+    return _ibkr_time_to_iso(cleaned)
+
+
+def _normalize_historical_duration(value: str) -> str:
+    cleaned = str(value).strip().upper()
+    if not cleaned:
+        return "14400 S"
+    parts = cleaned.split()
+    if len(parts) == 2 and parts[0].isdigit():
+        quantity = int(parts[0])
+        unit = parts[1]
+        if unit in {"S", "D", "W", "M", "Y"}:
+            return f"{quantity} {unit}"
+        if unit == "H":
+            return f"{quantity * 3600} S"
+        if unit == "MIN":
+            return f"{quantity * 60} S"
+    return cleaned

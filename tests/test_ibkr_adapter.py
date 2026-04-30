@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from types import ModuleType
 import sys
 import threading
+from datetime import UTC, datetime
 import unittest
 
 from tlm.ibkr_adapter import OfficialIbkrAdapter, _optional_broker_float
@@ -25,6 +26,7 @@ class FakeEClient:
         self.contract_details_requests: list[dict] = []
         self.market_data_types: list[int] = []
         self.market_data_requests: list[dict] = []
+        self.historical_data_requests: list[dict] = []
         self.cancelled_requests: list[int] = []
         self.placed_orders: list[dict] = []
         self.position_requests = 0
@@ -68,6 +70,58 @@ class FakeEClient:
         self.wrapper.tickPrice(req_id, 68, 19000.25, None)
 
     def cancelMktData(self, req_id: int) -> None:  # noqa: N802
+        self.cancelled_requests.append(req_id)
+
+    def reqHistoricalData(  # noqa: N802
+        self,
+        req_id: int,
+        contract,
+        end_datetime: str,
+        duration: str,
+        bar_size: str,
+        what_to_show: str,
+        use_rth: int,
+        format_date: int,
+        keep_up_to_date: bool,
+        options,
+    ) -> None:
+        self.historical_data_requests.append(
+            {
+                "req_id": req_id,
+                "symbol": getattr(contract, "symbol", None),
+                "duration": duration,
+                "bar_size": bar_size,
+                "what_to_show": what_to_show,
+                "use_rth": use_rth,
+            }
+        )
+        self.wrapper.historicalData(
+            req_id,
+            SimpleNamespace(
+                date="20260430  09:30:00",
+                open=19000.0,
+                high=19005.0,
+                low=18998.0,
+                close=19004.0,
+                barCount=12,
+                volume=120,
+            ),
+        )
+        self.wrapper.historicalData(
+            req_id,
+            SimpleNamespace(
+                date="20260430  09:31:00",
+                open=19004.0,
+                high=19008.0,
+                low=19003.0,
+                close=19007.0,
+                barCount=10,
+                volume=100,
+            ),
+        )
+        self.wrapper.historicalDataEnd(req_id, "20260430 09:30:00", "20260430 09:31:00")
+
+    def cancelHistoricalData(self, req_id: int) -> None:  # noqa: N802
         self.cancelled_requests.append(req_id)
 
     def cancelOrder(self, order_id: int) -> None:  # noqa: N802
@@ -194,6 +248,24 @@ class OfficialIbkrAdapterTests(unittest.TestCase):
         self.assertEqual(len(adapter.client.market_data_requests), 2)
         self.assertEqual(payload["market_data_type"], "delayed")
         self.assertEqual(payload["bid"], 19000.0)
+
+    def test_request_historical_bars_returns_one_minute_rows(self) -> None:
+        adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
+        adapter.connect("127.0.0.1", 7497, 11)
+
+        rows = adapter.request_historical_bars({"symbol": "MNQ"}, duration="2 H", timeout_seconds=1)
+
+        self.assertEqual(len(adapter.client.historical_data_requests), 1)
+        self.assertEqual(adapter.client.historical_data_requests[0]["duration"], "7200 S")
+        self.assertEqual(rows[0]["symbol"], "MNQ")
+        expected_time = (
+            datetime.strptime("20260430  09:30:00", "%Y%m%d  %H:%M:%S")
+            .replace(tzinfo=datetime.now().astimezone().tzinfo)
+            .astimezone(UTC)
+            .isoformat()
+        )
+        self.assertEqual(rows[0]["bar_time"], expected_time)
+        self.assertEqual(rows[1]["tick_count"], 10)
 
     def test_request_positions_reconnects_after_not_connected_exception(self) -> None:
         adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)

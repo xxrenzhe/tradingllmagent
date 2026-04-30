@@ -74,6 +74,43 @@ def build_one_minute_bars(snapshots: Sequence[dict[str, Any]]) -> list[OneMinute
     return bars
 
 
+def coerce_one_minute_bars(rows: Sequence[dict[str, Any] | OneMinuteBar]) -> list[OneMinuteBar]:
+    coerced: list[OneMinuteBar] = []
+    for row in rows:
+        if isinstance(row, OneMinuteBar):
+            coerced.append(row)
+            continue
+        coerced.append(
+            OneMinuteBar(
+                symbol=str(row.get("symbol", "MNQ")),
+                bar_time=_parse_datetime(row.get("bar_time")),
+                open=float(row.get("open", row.get("close", 0.0))),
+                high=float(row.get("high", row.get("close", 0.0))),
+                low=float(row.get("low", row.get("close", 0.0))),
+                close=float(row.get("close", 0.0)),
+                bid=_optional_float(row.get("bid")),
+                ask=_optional_float(row.get("ask")),
+                tick_count=int(row.get("tick_count", 0) or 0),
+            )
+        )
+    return coerced
+
+
+def merge_one_minute_bars(
+    historical: Sequence[dict[str, Any] | OneMinuteBar],
+    live: Sequence[dict[str, Any] | OneMinuteBar],
+    *,
+    limit: int | None = None,
+) -> list[OneMinuteBar]:
+    merged: dict[tuple[str, datetime], OneMinuteBar] = {}
+    for bar in [*coerce_one_minute_bars(historical), *coerce_one_minute_bars(live)]:
+        merged[(bar.symbol, bar.bar_time)] = bar
+    rows = sorted(merged.values(), key=lambda bar: (bar.symbol, bar.bar_time))
+    if limit is not None and limit >= 0:
+        return rows[-limit:]
+    return rows
+
+
 def build_signal_candidate(
     strategy: dict[str, Any],
     bars: Sequence[OneMinuteBar],
