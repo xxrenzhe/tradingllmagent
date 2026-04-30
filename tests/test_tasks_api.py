@@ -1503,6 +1503,180 @@ class APIImportTests(unittest.TestCase):
         self.assertTrue(health["paper_account_verified"])
         self.assertEqual(poller["startup_connect_event"]["event_type"], "connected")
 
+    def test_ibkr_poller_update_blocks_auto_submit_until_acceptance_ready(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ModuleNotFoundError:
+            self.skipTest("FastAPI is not installed")
+
+        class PollerControlAdapter:
+            def connect(self, host: str, port: int, client_id: int) -> dict:
+                return {"connected": True, "host": host, "port": port, "client_id": client_id}
+
+            def disconnect(self) -> dict:
+                return {"connected": False}
+
+            def account_summary(self) -> dict:
+                return {"account_id": "DU1234567", "account_type": "paper"}
+
+            def request_contract_details(self, contract: dict) -> dict:
+                return {
+                    "symbol": contract["symbol"],
+                    "tick_size": 0.25,
+                    "point_value": 2.0,
+                    "exchange": contract["exchange"],
+                    "currency": contract["currency"],
+                    "last_trade_date_or_contract_month": "20260618",
+                    "local_symbol": "MNQM6",
+                    "trading_class": "MNQ",
+                }
+
+            def request_market_data(self, contract: dict, timeout_seconds: int = 5) -> dict:
+                return {
+                    "symbol": contract["symbol"],
+                    "bid": 19000.0,
+                    "ask": 19000.25,
+                    "last": 19000.25,
+                    "market_data_type": "delayed",
+                    "snapshot_time": datetime.now(UTC).isoformat(),
+                }
+
+            def request_positions(self) -> list[dict]:
+                return []
+
+            def request_account_snapshot(self, account_id: str | None = None) -> dict:
+                return {
+                    "net_liquidation": 100000.0,
+                    "daily_pnl": 0.0,
+                    "realized_pnl": 0.0,
+                    "unrealized_pnl": 0.0,
+                    "drawdown_usage": 0.0,
+                    "recorded_at": datetime.now(UTC).isoformat(),
+                }
+
+            def submit_bracket_order(self, contract: dict, order: dict) -> dict:
+                return {}
+
+            def cancel_order(self, order_id: int) -> dict:
+                return {}
+
+            def submit_flatten_order(self, contract: dict, action: str, quantity: int) -> dict:
+                return {}
+
+            def drain_runtime_events(self) -> dict:
+                return {"order_status": [], "executions": []}
+
+        with patch.dict(
+            os.environ,
+            {
+                "TLM_IBKR_AUTO_CONNECT": "1",
+                "TLM_IBKR_HOST": "127.0.0.1",
+                "TLM_IBKR_PORT": "7497",
+                "TLM_IBKR_CLIENT_ID": "18",
+                "TLM_IBKR_POLLER_ENABLED": "0",
+            },
+            clear=False,
+        ):
+            with patch("tlm.api.build_ibkr_gateway_adapter", return_value=PollerControlAdapter()):
+                app = create_app()
+                with TestClient(app) as client:
+                    client.post("/api/gateways/ibkr/contracts/sync")
+                    client.post("/api/gateways/ibkr/market-data/sync")
+                    blocked = client.post("/api/gateways/ibkr/poller", json={"auto_submit": True}).json()
+                    poller = client.get("/api/gateways/ibkr/poller").json()
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertFalse(blocked["auto_submit"])
+        self.assertIn("trading_days<5", blocked["blockers"])
+        self.assertFalse(poller["auto_submit"])
+
+    def test_ibkr_poller_update_force_enables_auto_submit(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ModuleNotFoundError:
+            self.skipTest("FastAPI is not installed")
+
+        class PollerControlAdapter:
+            def connect(self, host: str, port: int, client_id: int) -> dict:
+                return {"connected": True, "host": host, "port": port, "client_id": client_id}
+
+            def disconnect(self) -> dict:
+                return {"connected": False}
+
+            def account_summary(self) -> dict:
+                return {"account_id": "DU1234567", "account_type": "paper"}
+
+            def request_contract_details(self, contract: dict) -> dict:
+                return {
+                    "symbol": contract["symbol"],
+                    "tick_size": 0.25,
+                    "point_value": 2.0,
+                    "exchange": contract["exchange"],
+                    "currency": contract["currency"],
+                    "last_trade_date_or_contract_month": "20260618",
+                    "local_symbol": "MNQM6",
+                    "trading_class": "MNQ",
+                }
+
+            def request_market_data(self, contract: dict, timeout_seconds: int = 5) -> dict:
+                return {
+                    "symbol": contract["symbol"],
+                    "bid": 19000.0,
+                    "ask": 19000.25,
+                    "last": 19000.25,
+                    "market_data_type": "delayed",
+                    "snapshot_time": datetime.now(UTC).isoformat(),
+                }
+
+            def request_positions(self) -> list[dict]:
+                return []
+
+            def request_account_snapshot(self, account_id: str | None = None) -> dict:
+                return {
+                    "net_liquidation": 100000.0,
+                    "daily_pnl": 0.0,
+                    "realized_pnl": 0.0,
+                    "unrealized_pnl": 0.0,
+                    "drawdown_usage": 0.0,
+                    "recorded_at": datetime.now(UTC).isoformat(),
+                }
+
+            def submit_bracket_order(self, contract: dict, order: dict) -> dict:
+                return {}
+
+            def cancel_order(self, order_id: int) -> dict:
+                return {}
+
+            def submit_flatten_order(self, contract: dict, action: str, quantity: int) -> dict:
+                return {}
+
+            def drain_runtime_events(self) -> dict:
+                return {"order_status": [], "executions": []}
+
+        with patch.dict(
+            os.environ,
+            {
+                "TLM_IBKR_AUTO_CONNECT": "1",
+                "TLM_IBKR_HOST": "127.0.0.1",
+                "TLM_IBKR_PORT": "7497",
+                "TLM_IBKR_CLIENT_ID": "19",
+                "TLM_IBKR_POLLER_ENABLED": "0",
+            },
+            clear=False,
+        ):
+            with patch("tlm.api.build_ibkr_gateway_adapter", return_value=PollerControlAdapter()):
+                app = create_app()
+                with TestClient(app) as client:
+                    client.post("/api/gateways/ibkr/contracts/sync")
+                    client.post("/api/gateways/ibkr/market-data/sync")
+                    updated = client.post("/api/gateways/ibkr/poller", json={"auto_submit": True, "force": True}).json()
+                    poller = client.get("/api/gateways/ibkr/poller").json()
+
+        self.assertEqual(updated["status"], "updated")
+        self.assertTrue(updated["auto_submit"])
+        self.assertTrue(updated["force"])
+        self.assertTrue(poller["auto_submit"])
+
     def test_trigger_gate_api_helper_writes_simulation_artifacts_without_fastapi(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

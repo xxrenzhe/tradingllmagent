@@ -588,6 +588,20 @@ def _ibkr_warm_start_rows_usable(
     return (-float(max_future_minutes)) <= age_minutes <= float(max_age_minutes)
 
 
+def _ibkr_auto_submit_blockers(report: dict[str, Any]) -> list[str]:
+    blockers: list[str] = []
+    readiness = report.get("readiness") or {}
+    if readiness.get("status") != "ready":
+        blockers.extend(f"readiness:{item}" for item in readiness.get("missing_requirements", []))
+    acceptance = report.get("acceptance_evidence") or {}
+    blockers.extend(str(item) for item in acceptance.get("missing_requirements", []))
+    unique: list[str] = []
+    for item in blockers:
+        if item not in unique:
+            unique.append(item)
+    return unique
+
+
 def _compact_ibkr_review(review: Any) -> dict[str, Any] | None:
     if not isinstance(review, dict):
         return None
@@ -1673,6 +1687,47 @@ def create_app():
     @app.get("/api/gateways/ibkr/poller")
     def ibkr_poller_status() -> dict:
         return _compact_ibkr_poller_state(ibkr_poller_state)
+
+    @app.post("/api/gateways/ibkr/poller")
+    def ibkr_poller_update(payload: dict = Body(default={})) -> dict:
+        desired_auto_submit = payload.get("auto_submit")
+        reason = str(payload.get("reason", "manual"))
+        force = bool(payload.get("force", False))
+        if desired_auto_submit is None:
+            return {
+                "status": "no_change",
+                "reason": reason,
+                "force": force,
+                "auto_submit": bool(ibkr_poller_state.get("auto_submit", False)),
+                "poller": _compact_ibkr_poller_state(ibkr_poller_state),
+            }
+        desired = bool(desired_auto_submit)
+        report = ibkr_runtime_report("current") if desired else None
+        blockers = _ibkr_auto_submit_blockers(report) if isinstance(report, dict) else []
+        if desired and blockers and not force:
+            return {
+                "status": "blocked",
+                "reason": reason,
+                "force": force,
+                "requested_auto_submit": desired,
+                "auto_submit": bool(ibkr_poller_state.get("auto_submit", False)),
+                "blockers": blockers,
+                "acceptance_evidence": report.get("acceptance_evidence"),
+                "readiness": report.get("readiness"),
+                "poller": _compact_ibkr_poller_state(ibkr_poller_state),
+            }
+        ibkr_poller_state["auto_submit"] = desired
+        return {
+            "status": "updated",
+            "reason": reason,
+            "force": force,
+            "requested_auto_submit": desired,
+            "auto_submit": desired,
+            "blockers": blockers,
+            "acceptance_evidence": report.get("acceptance_evidence") if isinstance(report, dict) else None,
+            "readiness": report.get("readiness") if isinstance(report, dict) else None,
+            "poller": _compact_ibkr_poller_state(ibkr_poller_state),
+        }
 
     def ibkr_runtime_report(run_id: str = "current") -> dict:
         compact_reviews = [_compact_ibkr_review(review) for review in ibkr_review_history[-50:]]
