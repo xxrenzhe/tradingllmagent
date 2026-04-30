@@ -493,6 +493,8 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(submitted["event_type"], "bracket_order_submitted")
         self.assertTrue(submitted["details"]["broker_submission"]["submitted"])
         self.assertEqual(submitted["details"]["broker_submission"]["local_symbol"], "MNQM6")
+        self.assertEqual(submitted["details"]["bracket_order"]["parent_order_id"], 9001)
+        self.assertEqual(submitted["details"]["bracket_order"]["take_profit_order_id"], 9003)
 
     def test_cancel_open_orders_calls_broker_for_submitted_brackets(self) -> None:
         adapter = FakeIbkrAdapter()
@@ -538,8 +540,8 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         cancelled = gateway.cancel_open_orders("test_cancel")
 
         self.assertEqual(cancelled["event_type"], "open_orders_cancelled")
-        self.assertEqual(adapter.cancelled_orders, [1, 2, 3])
-        self.assertEqual(cancelled["details"]["broker_cancellations"][0]["order_id"], 1)
+        self.assertEqual(adapter.cancelled_orders, [9001, 9002, 9003])
+        self.assertEqual(cancelled["details"]["broker_cancellations"][0]["order_id"], 9001)
         self.assertEqual(gateway.bracket_order_report()["open_bracket_order_count"], 0)
 
     def test_filled_child_order_completes_open_bracket(self) -> None:
@@ -560,7 +562,7 @@ class IbkrPaperGatewayTests(unittest.TestCase):
 
         status = gateway.record_order_status(
             {
-                "order_id": 3,
+                "order_id": 9003,
                 "status": "Filled",
                 "filled": 1,
                 "remaining": 0,

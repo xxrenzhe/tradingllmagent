@@ -1238,8 +1238,8 @@ class APIImportTests(unittest.TestCase):
         self.assertEqual(result["readiness"]["status"], "ready")
         self.assertEqual(state["readiness_check_count"], 1)
         self.assertEqual(state["review_cycle_count"], 1)
-        self.assertEqual(state["live_order_attempt_count"], 1)
-        self.assertEqual(state["duplicate_order_event_count"], 2)
+        self.assertEqual(state["live_order_attempt_count"], 0)
+        self.assertEqual(state["duplicate_order_event_count"], 0)
         self.assertEqual(result["decision"]["submit_event_type"], "bracket_order_submitted")
 
     def test_feature_readiness_prefers_primary_nq_manifest(self) -> None:

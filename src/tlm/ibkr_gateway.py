@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 from uuid import uuid4
@@ -910,6 +910,13 @@ class IbkrPaperGateway:
         except Exception as exc:
             self.enter_safe_mode("adapter_bracket_submit_failed")
             return self._order_event("bracket_order_submit_failed", {"errors": [str(exc)], "bracket_id": bracket_id})
+        draft = replace(
+            draft,
+            parent_order_id=int(submission.get("parent_order_id", draft.parent_order_id)),
+            stop_order_id=int(submission.get("stop_order_id", draft.stop_order_id)),
+            take_profit_order_id=int(submission.get("take_profit_order_id", draft.take_profit_order_id)),
+        )
+        self.bracket_orders[bracket_id] = draft
         self.submitted_bracket_order_ids.add(bracket_id)
         return self._order_event(
             "bracket_order_submitted",

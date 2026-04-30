@@ -308,18 +308,10 @@ def run_ibkr_poll_cycle(
         )
         new_order_events = gateway.order_events[prior_order_event_count:]
         state["live_order_attempt_count"] = int(state.get("live_order_attempt_count", 0)) + sum(
-            1
-            for event in new_order_events
-            if event.get("event_type") in {
-                "bracket_order_submitted",
-                "bracket_order_submit_failed",
-                "bracket_order_submit_rejected",
-            }
+            1 for event in new_order_events if _ibkr_live_order_attempt_event(event)
         )
         state["duplicate_order_event_count"] = int(state.get("duplicate_order_event_count", 0)) + sum(
-            1
-            for event in new_order_events
-            if event.get("event_type") in {"order_status_duplicate_ignored", "execution_fill_duplicate_ignored"}
+            1 for event in new_order_events if _ibkr_unexplained_duplicate_order_event(event)
         )
     return {
         "status": "ok",
@@ -329,6 +321,20 @@ def run_ibkr_poll_cycle(
         "safe_mode": gateway.safe_mode,
         "readiness": readiness,
         "decision": decision,
+    }
+
+
+def _ibkr_live_order_attempt_event(event: dict[str, Any]) -> bool:
+    return event.get("mode") == "ibkr_live" or event.get("event_type") in {
+        "live_order_attempted",
+        "live_order_attempt_blocked",
+    }
+
+
+def _ibkr_unexplained_duplicate_order_event(event: dict[str, Any]) -> bool:
+    return event.get("event_type") in {
+        "order_status_duplicate_conflict",
+        "execution_fill_duplicate_conflict",
     }
 
 

@@ -36,16 +36,24 @@ This report captures the first end-to-end IBKR Paper execution drill for `docs/p
 - Market data sync waits for `bid`, `ask`, and `last` before marking a snapshot complete.
 - Delayed market data has a 30 second minimum stale tolerance for paper readiness.
 - Bracket lifecycle audit now closes local open bracket records when a stop or take-profit child order reaches terminal `Filled` status.
+- IBKR broker-assigned bracket order ids are now written back to local bracket drafts after submission, so later `orderStatus` and `execDetails` callbacks reconcile against the actual TWS ids.
+- Acceptance counters now treat legitimate IBKR Paper bracket submissions as paper lifecycle events, not live order attempts. Normal duplicate IBKR callbacks are ignored and do not count as unexplained duplicates.
+
+## WebUI QA
+
+- Local WebUI served from `http://127.0.0.1:5173` with the Vite proxy pointing to the running API on `127.0.0.1:8000`.
+- Browser QA opened the `Execution` section and clicked `Refresh IBKR Paper`.
+- The IBKR Paper panel rendered `ready`, `paper gateway ready`, delayed market data, account/PnL, review, optimizer, promotion gate, and incident fields from current API endpoints.
+- Browser console check reported zero errors.
+- Screenshot evidence: `docs/operations/ibkr-paper-webui-qa-2026-04-30.png`.
 
 ## Validation Commands
 
-- `PYTHONPATH=tests python3 -m unittest tests.test_ibkr_gateway tests.test_ibkr_adapter tests.test_tasks_api tests.test_ibkr_paper_loop tests.test_ibkr_cli`
+- `PYTHONPATH=tests python3 -m unittest tests.test_ibkr_gateway tests.test_tasks_api tests.test_ibkr_paper_loop tests.test_ibkr_soak tests.test_ibkr_cli`
 - `python3 -m compileall src/tlm tests`
 
 ## Remaining Acceptance Gates
 
 - Five trading day paper-only soak is not yet complete.
 - Thirty 5 minute review cycles are not yet complete in one retained run.
-- Twenty paper order lifecycle events are not yet complete.
-- Full WebUI runtime view needs a browser QA pass against current IBKR endpoints.
-- Beads Dolt remote sync is not configured; `bd dolt push` cannot complete until a remote is added.
+- At least 100 readiness checks are not yet complete in the corrected retained soak run.
