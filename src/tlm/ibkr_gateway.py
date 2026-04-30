@@ -296,6 +296,7 @@ class IbkrPaperGateway:
     contract_specs: dict[str, IbkrContractSpec] = field(default_factory=lambda: {"MNQ": IbkrContractSpec()})
     contract_details: dict[str, IbkrContractDetails] = field(default_factory=dict)
     market_data: dict[str, IbkrMarketDataSnapshot] = field(default_factory=dict)
+    market_data_events: list[dict[str, Any]] = field(default_factory=list)
     bracket_orders: dict[str, IbkrBracketOrderDraft] = field(default_factory=dict)
     submitted_bracket_order_ids: set[str] = field(default_factory=set)
     order_events: list[dict[str, Any]] = field(default_factory=list)
@@ -463,7 +464,14 @@ class IbkrPaperGateway:
             error_message=_none_if_blank(payload.get("error_message")),
         )
         self.market_data[symbol] = snapshot
+        self.market_data_events.append(snapshot.to_dict())
+        if len(self.market_data_events) > 2048:
+            self.market_data_events = self.market_data_events[-2048:]
         return self._event("market_data_recorded", {"snapshot": snapshot.to_dict()})
+
+    def recent_market_data(self, symbol: str = "MNQ", limit: int = 500) -> list[dict[str, Any]]:
+        rows = [row for row in self.market_data_events if str(row.get("symbol", "MNQ")) == symbol]
+        return rows[-max(limit, 0) :]
 
     def sync_market_data(self, symbol: str = "MNQ", timeout_seconds: int = 5) -> dict[str, Any]:
         if self.adapter is None:
@@ -880,7 +888,13 @@ class IbkrPaperGateway:
         if self.read_only:
             return "connected_readonly"
         if self.account and self.account.is_paper:
-            return "paper_connected"
+            contract_ready = self.contract_readiness("MNQ")["status"] == "ready"
+            market_ready = self.market_data_readiness("MNQ")["status"] == "ready"
+            if contract_ready and market_ready:
+                return "paper_armed"
+            if contract_ready or market_ready:
+                return "data_ready"
+            return "blocked"
         return "blocked"
 
     def _event(self, event_type: str, details: dict[str, Any]) -> dict[str, Any]:

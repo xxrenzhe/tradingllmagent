@@ -337,33 +337,8 @@ export default function App() {
       apiRequest(apiBase, API_PATHS.ibkrIncidents),
       apiRequest(apiBase, API_PATHS.ibkrPaperReport())
     ]);
-    const review = await apiRequest(apiBase, API_PATHS.ibkrReviews, {
-      method: "POST",
-      body: JSON.stringify({
-        execution_ledger: ledger,
-        risk_context: { data_stale: marketData.status !== "ready" },
-        strategy_state: {
-          tick_size: contracts.contract?.expected_tick_size ?? 0.25,
-          stop_loss_ticks: 20,
-          take_profit_ticks: 40,
-          max_holding_minutes: 20
-        }
-      })
-    });
-    const optimizer = await apiRequest(apiBase, API_PATHS.ibkrFastPathOptimizer, {
-      method: "POST",
-      body: JSON.stringify({
-        control_state: {
-          mode: "paper",
-          min_confidence: 0.55,
-          max_spread_ticks: 3,
-          daily_trade_cap: 6,
-          strategies: {},
-          trade_session: { start: "09:30", end: "15:55" }
-        },
-        review_result: review.review_result
-      })
-    });
+    const review = (report.reviews ?? []).at(-1) ?? null;
+    const optimizer = (report.optimizer_reports ?? []).at(-1) ?? null;
     setIbkrOverview({ health, readiness, contracts, marketData, bracketOrders, ledger, incidents, report, review, optimizer });
     return { task_id: "ibkr paper overview refreshed" };
   }
@@ -2104,6 +2079,10 @@ function IbkrPaperSummary({ overview }) {
   const openPositionQuantity = (ledger.positions ?? []).reduce((total, position) => total + (Number(position.quantity) || 0), 0);
   const realizedPnl = latestAccount.realized_pnl ?? ledger.net_realized_pnl;
   const dailyPnl = latestAccount.daily_pnl ?? realizedPnl;
+  const latestBars = report.one_minute_bars ?? [];
+  const recentReviews = (report.reviews ?? []).slice(-5).reverse();
+  const strategyState = report.strategy_state ?? {};
+  const controlState = report.control_state ?? {};
   return (
     <div className="readiness-grid">
       <div className="readiness-banner">
@@ -2124,6 +2103,21 @@ function IbkrPaperSummary({ overview }) {
         <Metric label="Fast Path" value={optimizer.status ?? "-"} detail={`${formatCompact((optimizer.applied ?? []).length)} applied, ${formatCompact((optimizer.rejected ?? []).length)} rejected`} />
         <Metric label="Promotion" value={formatCompact((report.promotion_blockers ?? []).length)} detail={(report.promotion_blockers ?? []).slice(0, 2).join(", ") || "no blockers"} />
         <Metric label="Incidents" value={formatCompact(incidents.count ?? 0)} detail={health.safe_mode ? "safe mode active" : "normal paper mode"} />
+      </div>
+      <div className="json-grid">
+        <JsonBlock payload={{ latest_bars: latestBars }} />
+        <JsonBlock
+          payload={{
+            strategy_state: strategyState,
+            control_state: controlState,
+            recent_reviews: recentReviews.map((entry) => ({
+              action: entry?.review_result?.action,
+              confidence: entry?.review_result?.confidence,
+              next_check: entry?.review_result?.final_summary?.next_check,
+              created_at: entry?.review_result?.created_at ?? entry?.review_request?.created_at
+            }))
+          }}
+        />
       </div>
       <JsonBlock payload={overview} />
     </div>

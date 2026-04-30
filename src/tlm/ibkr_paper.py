@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import duckdb
+
 
 IBKR_PAPER_ARTIFACT_VERSION = 1
 
@@ -23,6 +25,11 @@ def build_ibkr_paper_report(
     incidents: dict[str, Any],
     reviews: list[dict[str, Any]] | None = None,
     optimizer_reports: list[dict[str, Any]] | None = None,
+    one_minute_bars: list[dict[str, Any]] | None = None,
+    signals: list[dict[str, Any]] | None = None,
+    strategy_state: dict[str, Any] | None = None,
+    control_state: dict[str, Any] | None = None,
+    poller: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     fills = execution_ledger.get("fills") or []
     order_events = bracket_orders.get("recent_order_events") or []
@@ -70,6 +77,11 @@ def build_ibkr_paper_report(
         "incidents": incidents,
         "reviews": reviews or [],
         "optimizer_reports": optimizer_reports or [],
+        "one_minute_bars": one_minute_bars or [],
+        "signals": signals or [],
+        "strategy_state": strategy_state or {},
+        "control_state": control_state or {},
+        "poller": poller or {},
         "promotion_blockers": _promotion_blockers(health, readiness, market_data, bracket_orders, incidents),
         "metrics": metrics,
     }
@@ -93,7 +105,8 @@ def create_ibkr_paper_run_artifacts(
         "gateway_events": _write_jsonl(run_dir / "gateway_events.jsonl", daily_report.get("health", {}), resolved_run_id, "ibkr_gateway_health"),
         "market_data_readiness": _write_json(run_dir / "market_data_readiness.json", daily_report.get("market_data", {}), resolved_run_id, "ibkr_market_data_readiness"),
         "contract_details": _write_json(run_dir / "contract_details.json", daily_report.get("contracts", {}), resolved_run_id, "ibkr_contract_details"),
-        "signals": _write_jsonl(run_dir / "signals.jsonl", {}, resolved_run_id, "ibkr_local_signal_engine"),
+        "one_minute_bars": _write_parquet(run_dir / "one_minute_bars.parquet", daily_report.get("one_minute_bars", []), resolved_run_id, "ibkr_one_minute_bars"),
+        "signals": _write_jsonl(run_dir / "signals.jsonl", daily_report.get("signals", []), resolved_run_id, "ibkr_local_signal_engine"),
         "llm_reviews": _write_jsonl(run_dir / "llm_reviews.jsonl", daily_report.get("reviews", []), resolved_run_id, "ibkr_5m_review_loop"),
         "orders": _write_jsonl(run_dir / "orders.jsonl", daily_report.get("bracket_orders", {}), resolved_run_id, "ibkr_bracket_order_report"),
         "executions": _write_jsonl(run_dir / "executions.jsonl", daily_report.get("execution_ledger", {}).get("fills", []), resolved_run_id, "ibkr_execution_fills"),
@@ -138,6 +151,29 @@ def _write_jsonl(path: Path, payload: Any, run_id: str, source: str) -> str:
     return str(path)
 
 
+def _write_parquet(path: Path, payload: Any, run_id: str, source: str) -> str:
+    rows = payload if isinstance(payload, list) else [payload]
+    if not rows:
+        rows = [{}]
+    temp_path = path.with_suffix(".jsonl")
+    try:
+        with temp_path.open("w", encoding="utf-8") as file:
+            for row in rows:
+                file.write(json.dumps(_parquet_row(run_id, source, row), sort_keys=True) + "\n")
+        connection = duckdb.connect()
+        try:
+            connection.execute(
+                f"COPY (SELECT * FROM read_json_auto('{_duckdb_literal(str(temp_path))}')) "
+                f"TO '{_duckdb_literal(str(path))}' (FORMAT PARQUET)"
+            )
+        finally:
+            connection.close()
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+    return str(path)
+
+
 def _envelope(run_id: str, source: str, payload: Any) -> dict[str, Any]:
     envelope = {
         "schema_version": IBKR_PAPER_ARTIFACT_VERSION,
@@ -153,6 +189,20 @@ def _envelope(run_id: str, source: str, payload: Any) -> dict[str, Any]:
     }
     envelope["payload_hash"] = stable_hash({"payload": payload})
     return envelope
+
+
+def _parquet_row(run_id: str, source: str, payload: Any) -> dict[str, Any]:
+    envelope = _envelope(run_id, source, payload)
+    row = {key: value for key, value in envelope.items() if key != "payload"}
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            row.setdefault(key, value)
+    row["payload_json"] = json.dumps(payload, sort_keys=True, default=str)
+    return row
+
+
+def _duckdb_literal(value: str) -> str:
+    return value.replace("'", "''")
 
 
 def _extract(payload: Any, key: str) -> Any:

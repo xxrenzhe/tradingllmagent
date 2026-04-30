@@ -953,6 +953,121 @@ class APIImportTests(unittest.TestCase):
         self.assertEqual(gateway.positions_report()["count"], 1)
         self.assertEqual(gateway.execution_ledger()["fill_count"], 1)
 
+    def test_ibkr_poll_cycle_can_run_decision_loop(self) -> None:
+        class PollerAdapter:
+            def __init__(self) -> None:
+                self.connected = False
+
+            def connect(self, host: str, port: int, client_id: int) -> dict:
+                self.connected = True
+                return {"connected": True, "host": host, "port": port, "client_id": client_id}
+
+            def disconnect(self) -> dict:
+                self.connected = False
+                return {"connected": False}
+
+            def account_summary(self) -> dict:
+                return {"account_id": "DU1234567", "account_type": "paper"}
+
+            def request_contract_details(self, contract: dict) -> dict:
+                return {
+                    "symbol": "MNQ",
+                    "tick_size": 0.25,
+                    "point_value": 2.0,
+                    "exchange": "CME",
+                    "currency": "USD",
+                }
+
+            def request_market_data(self, contract: dict, timeout_seconds: int = 5) -> dict:
+                return {
+                    "symbol": "MNQ",
+                    "bid": 19005.75,
+                    "ask": 19006.0,
+                    "last": 19006.0,
+                    "market_data_type": "real_time",
+                    "snapshot_time": datetime.now(UTC).isoformat(),
+                }
+
+            def request_positions(self) -> list[dict]:
+                return [{"symbol": "MNQ", "quantity": 0, "average_cost": 0.0, "recorded_at": datetime.now(UTC).isoformat()}]
+
+            def request_account_snapshot(self, account_id: str | None = None) -> dict:
+                return {
+                    "net_liquidation": 100020.0,
+                    "daily_pnl": 0.0,
+                    "realized_pnl": 0.0,
+                    "unrealized_pnl": 0.0,
+                    "drawdown_usage": 0.0,
+                    "recorded_at": datetime.now(UTC).isoformat(),
+                }
+
+            def submit_bracket_order(self, contract: dict, order: dict) -> dict:
+                return {"submitted": True}
+
+            def drain_runtime_events(self) -> dict:
+                return {"order_status": [], "executions": []}
+
+        gateway = IbkrPaperGateway(adapter=PollerAdapter())
+        gateway.connect()
+        for minute, last in enumerate((19000.0, 19001.0, 19002.0, 19003.0, 19004.0, 19006.0)):
+            gateway.record_market_data(
+                {
+                    "symbol": "MNQ",
+                    "bid": last - 0.25,
+                    "ask": last,
+                    "last": last,
+                    "market_data_type": "real_time",
+                    "snapshot_time": (datetime.now(UTC) - timedelta(minutes=5 - minute)).isoformat(),
+                }
+            )
+
+        review_history: list[dict] = []
+        optimizer_history: list[dict] = []
+        state = {
+            "review_interval_seconds": 0,
+            "market_data_history_limit": 100,
+            "readiness_max_stale_seconds": 600,
+            "strategy": {
+                "strategy_id": "mnq_1m_breakout",
+                "strategy_spec_hash": "strategy-hash",
+                "module_id": "range_breakout",
+                "family": "range_breakout",
+                "symbol": "MNQ",
+                "timeframe": "1m",
+                "lookback_bars": 5,
+                "breakout_ticks": 1,
+                "enabled": True,
+                "tick_size": 0.25,
+                "stop_loss_ticks": 20,
+                "take_profit_ticks": 40,
+                "max_holding_minutes": 20,
+            },
+            "control_state": {
+                "mode": "paper",
+                "min_confidence": 0.55,
+                "max_spread_ticks": 2.0,
+                "daily_trade_cap": 6,
+                "strategies": {},
+                "trade_session": {"start": "09:30", "end": "15:55"},
+                "safe_mode": False,
+                "kill_switch": False,
+            },
+        }
+
+        result = run_ibkr_poll_cycle(
+            gateway,
+            symbol="MNQ",
+            review_history=review_history,
+            optimizer_history=optimizer_history,
+            state=state,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["decision"]["status"], "review_completed")
+        self.assertEqual(result["decision"]["review_result_action"], "paper_allow")
+        self.assertEqual(len(review_history), 1)
+        self.assertEqual(gateway.bracket_order_report()["open_bracket_order_count"], 1)
+
     def test_feature_readiness_prefers_primary_nq_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             generated = Path(temp_dir) / "strategies" / "generated"

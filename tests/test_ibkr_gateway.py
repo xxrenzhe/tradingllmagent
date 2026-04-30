@@ -178,7 +178,7 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         readiness = gateway.readiness()
 
         self.assertEqual(event["event_type"], "connected")
-        self.assertEqual(health["status"], "paper_connected")
+        self.assertEqual(health["status"], "blocked")
         self.assertTrue(health["paper_account_verified"])
         self.assertEqual(health["account"]["account_type"], "paper")
         self.assertEqual(readiness["status"], "blocked")
@@ -224,6 +224,7 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(contract_event["event_type"], "contract_details_recorded")
         self.assertEqual(contract_event["details"]["errors"], [])
         self.assertEqual(market_event["event_type"], "market_data_recorded")
+        self.assertEqual(gateway.health()["status"], "paper_armed")
         self.assertEqual(readiness["status"], "ready")
         self.assertEqual(readiness["contract"]["status"], "ready")
         self.assertEqual(readiness["market_data"]["status"], "ready")

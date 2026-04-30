@@ -4,9 +4,10 @@ import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import sleep
+from typing import Any
 
 from .calibration import build_cost_calibration_artifact
 from .config import get_cost_model, get_symbol, load_symbols
@@ -22,6 +23,7 @@ from .ibkr_gateway import IbkrPaperGateway
 from .ibkr_optimizer import apply_fast_path_control_diff
 from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
 from .ibkr_review import build_five_minute_review_request, deterministic_fallback_review
+from .ibkr_signals import build_one_minute_bars, build_signal_candidate
 from .execution import (
     build_execution_intent_response_with_registry,
     build_execution_intent_response,
@@ -85,7 +87,192 @@ def _env_bool(name: str, default: bool = True) -> bool:
     return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
-def run_ibkr_poll_cycle(gateway: IbkrPaperGateway, *, symbol: str = "MNQ") -> dict:
+def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
+    return {
+        "strategy_id": "mnq_1m_breakout",
+        "strategy_spec_hash": "ibkr-paper-default",
+        "module_id": "ibkr_paper_loop",
+        "family": "range_breakout",
+        "symbol": symbol,
+        "timeframe": "1m",
+        "lookback_bars": 5,
+        "breakout_ticks": 1,
+        "enabled": True,
+        "tick_size": 0.25,
+        "stop_loss_ticks": 20,
+        "take_profit_ticks": 40,
+        "max_holding_minutes": 20,
+    }
+
+
+def _ibkr_default_control_state() -> dict[str, Any]:
+    return {
+        "mode": "paper",
+        "min_confidence": 0.55,
+        "max_spread_ticks": 2.0,
+        "daily_trade_cap": 6,
+        "strategies": {},
+        "trade_session": {"start": "09:30", "end": "15:55"},
+        "safe_mode": False,
+        "kill_switch": False,
+    }
+
+
+def _parse_state_time(value: object) -> datetime | None:
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def run_ibkr_decision_cycle(
+    gateway: IbkrPaperGateway,
+    *,
+    symbol: str,
+    review_history: list[dict[str, Any]],
+    optimizer_history: list[dict[str, Any]],
+    state: dict[str, Any],
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    current = now or datetime.now(UTC)
+    strategy = state.setdefault("strategy", _ibkr_default_strategy(symbol))
+    control_state = state.setdefault("control_state", _ibkr_default_control_state())
+    review_interval_seconds = float(state.get("review_interval_seconds", 300.0))
+    auto_submit = bool(state.get("auto_submit", False))
+    recent_snapshots = gateway.recent_market_data(symbol, limit=int(state.get("market_data_history_limit", 500)))
+    if not recent_snapshots:
+        result = {"status": "skipped", "reason": "no_market_data_history", "symbol": symbol}
+        state["latest_decision"] = result
+        return result
+
+    bars = build_one_minute_bars(recent_snapshots)
+    latest_bars = [bar.to_dict() for bar in bars[-10:]]
+    state["latest_bars"] = latest_bars
+    if not bars:
+        result = {"status": "skipped", "reason": "no_one_minute_bars", "symbol": symbol}
+        state["latest_decision"] = result
+        return result
+
+    signal = build_signal_candidate(
+        strategy,
+        bars,
+        tick_size=float(strategy.get("tick_size", 0.25)),
+        max_spread_ticks=float(control_state.get("max_spread_ticks", 2.0)),
+    )
+    signals = [signal] if signal.get("signal_class") in {"strong_review", "blocked"} else []
+    state["latest_signal"] = signal
+    state["latest_signals"] = signals[-10:]
+
+    ledger = gateway.execution_ledger()
+    market_data = gateway.market_data_readiness(
+        symbol,
+        max_stale_seconds=int(state.get("readiness_max_stale_seconds", 5)),
+    )
+    latest_account = ledger.get("latest_account_snapshot") or {}
+    daily_pnl = latest_account.get("daily_pnl")
+    daily_loss_limit = state.get("daily_loss_limit")
+    risk_context = {
+        "data_stale": market_data.get("status") != "ready",
+        "daily_loss_limit_hit": (
+            daily_loss_limit is not None
+            and daily_pnl is not None
+            and float(daily_pnl) <= -abs(float(daily_loss_limit))
+        ),
+        "safe_mode": gateway.safe_mode,
+        "open_bracket_order_count": gateway.bracket_order_report().get("open_bracket_order_count", 0),
+    }
+
+    last_review_at = _parse_state_time(state.get("last_review_at"))
+    due_by_time = last_review_at is None or (current - last_review_at).total_seconds() >= review_interval_seconds
+    triggered = bool(signals) or int(ledger.get("fill_count", 0)) != int(state.get("last_review_fill_count", 0)) or gateway.safe_mode
+    if not due_by_time and not triggered:
+        result = {
+            "status": "monitor_only",
+            "symbol": symbol,
+            "bars_count": len(bars),
+            "signal_class": signal.get("signal_class"),
+            "review_due": False,
+        }
+        state["latest_decision"] = result
+        return result
+
+    request = build_five_minute_review_request(
+        bars_1m=[bar.to_dict() for bar in bars[-5:]],
+        signals=signals,
+        execution_ledger=ledger,
+        risk_context=risk_context,
+        strategy_state={
+            "tick_size": strategy.get("tick_size", 0.25),
+            "stop_loss_ticks": strategy.get("stop_loss_ticks", 20),
+            "take_profit_ticks": strategy.get("take_profit_ticks", 40),
+            "max_holding_minutes": strategy.get("max_holding_minutes", 20),
+        },
+        previous_reviews=review_history,
+    )
+    review = {"review_request": request, "review_result": deterministic_fallback_review(request)}
+    review_history.append(review)
+    if len(review_history) > int(state.get("max_review_history", 200)):
+        del review_history[:-int(state.get("max_review_history", 200))]
+    state["last_review_at"] = current.isoformat()
+    state["last_review_fill_count"] = ledger.get("fill_count", 0)
+    state["review_cycle_count"] = int(state.get("review_cycle_count", 0)) + 1
+
+    optimizer = apply_fast_path_control_diff(control_state, review["review_result"])
+    optimizer_history.append(optimizer)
+    if len(optimizer_history) > int(state.get("max_optimizer_history", 200)):
+        del optimizer_history[:-int(state.get("max_optimizer_history", 200))]
+    state["control_state"] = optimizer["control_state"]
+
+    if optimizer["control_state"].get("kill_switch") and not gateway.safe_mode:
+        gateway.kill_switch("ibkr_fast_path")
+    elif optimizer["control_state"].get("safe_mode") and not gateway.safe_mode:
+        gateway.enter_safe_mode("ibkr_fast_path")
+
+    bracket_event = None
+    submit_event = None
+    plan = review["review_result"].get("paper_plan")
+    signal_hash = signal.get("signal_hash")
+    if (
+        review["review_result"].get("action") == "paper_allow"
+        and plan
+        and signal_hash
+        and signal_hash != state.get("last_planned_signal_hash")
+        and gateway.bracket_order_report().get("open_bracket_order_count", 0) == 0
+        and sum(int(position.get("quantity", 0)) for position in ledger.get("positions", [])) == 0
+    ):
+        bracket_event = gateway.build_bracket_order(plan)
+        if bracket_event.get("event_type") == "bracket_order_built":
+            state["last_planned_signal_hash"] = signal_hash
+            if auto_submit:
+                bracket_id = bracket_event["details"]["bracket_order"]["bracket_id"]
+                submit_event = gateway.submit_bracket_order(bracket_id)
+
+    result = {
+        "status": "review_completed",
+        "symbol": symbol,
+        "bars_count": len(bars),
+        "signal_class": signal.get("signal_class"),
+        "review_result_action": review["review_result"].get("action"),
+        "optimizer_status": optimizer.get("status"),
+        "bracket_event_type": bracket_event.get("event_type") if bracket_event else None,
+        "submit_event_type": submit_event.get("event_type") if submit_event else None,
+    }
+    state["latest_review"] = review
+    state["latest_optimizer"] = optimizer
+    state["latest_decision"] = result
+    return result
+
+
+def run_ibkr_poll_cycle(
+    gateway: IbkrPaperGateway,
+    *,
+    symbol: str = "MNQ",
+    review_history: list[dict[str, Any]] | None = None,
+    optimizer_history: list[dict[str, Any]] | None = None,
+    state: dict[str, Any] | None = None,
+) -> dict:
     if gateway.adapter is None:
         return {"status": "skipped", "reason": "adapter_not_configured", "actions": []}
     if not gateway.connected:
@@ -100,12 +287,22 @@ def run_ibkr_poll_cycle(gateway: IbkrPaperGateway, *, symbol: str = "MNQ") -> di
     actions.append(gateway.sync_positions())
     actions.append(gateway.sync_account_snapshot())
     actions.append(gateway.sync_runtime_events())
+    decision = None
+    if review_history is not None and optimizer_history is not None and state is not None:
+        decision = run_ibkr_decision_cycle(
+            gateway,
+            symbol=symbol,
+            review_history=review_history,
+            optimizer_history=optimizer_history,
+            state=state,
+        )
     return {
         "status": "ok",
         "symbol": symbol,
         "action_count": len(actions),
         "actions": [action.get("event_type") for action in actions],
         "safe_mode": gateway.safe_mode,
+        "decision": decision,
     }
 
 
@@ -116,12 +313,21 @@ async def ibkr_poller_loop(
     interval_seconds: float,
     symbol: str,
     state: dict[str, object],
+    review_history: list[dict[str, Any]],
+    optimizer_history: list[dict[str, Any]],
 ) -> None:
     state["running"] = True
     try:
         while not stop_event.is_set():
             try:
-                result = await asyncio.to_thread(run_ibkr_poll_cycle, gateway, symbol=symbol)
+                result = await asyncio.to_thread(
+                    run_ibkr_poll_cycle,
+                    gateway,
+                    symbol=symbol,
+                    review_history=review_history,
+                    optimizer_history=optimizer_history,
+                    state=state,
+                )
                 state["last_result"] = result
                 state["last_error"] = None
                 state["last_run_at"] = datetime_iso_now()
@@ -486,7 +692,24 @@ def create_app():
     ibkr_poller_state: dict[str, object] = {
         "enabled": _env_bool("TLM_IBKR_POLLER_ENABLED", True),
         "interval_seconds": float(os.environ.get("TLM_IBKR_POLL_INTERVAL_SECONDS", "2.0")),
+        "review_interval_seconds": float(os.environ.get("TLM_IBKR_REVIEW_INTERVAL_SECONDS", "300.0")),
         "symbol": os.environ.get("TLM_IBKR_POLL_SYMBOL", "MNQ"),
+        "auto_submit": _env_bool("TLM_IBKR_AUTO_SUBMIT", False),
+        "market_data_history_limit": int(os.environ.get("TLM_IBKR_MARKET_DATA_HISTORY_LIMIT", "500")),
+        "max_review_history": int(os.environ.get("TLM_IBKR_MAX_REVIEW_HISTORY", "200")),
+        "max_optimizer_history": int(os.environ.get("TLM_IBKR_MAX_OPTIMIZER_HISTORY", "200")),
+        "readiness_max_stale_seconds": int(os.environ.get("TLM_IBKR_READINESS_MAX_STALE_SECONDS", "5")),
+        "strategy": _ibkr_default_strategy(os.environ.get("TLM_IBKR_POLL_SYMBOL", "MNQ")),
+        "control_state": _ibkr_default_control_state(),
+        "review_cycle_count": 0,
+        "last_review_at": None,
+        "last_review_fill_count": 0,
+        "latest_bars": [],
+        "latest_signal": None,
+        "latest_signals": [],
+        "latest_review": None,
+        "latest_optimizer": None,
+        "latest_decision": None,
         "running": False,
         "iteration_count": 0,
         "last_run_at": None,
@@ -509,6 +732,8 @@ def create_app():
                     interval_seconds=float(ibkr_poller_state["interval_seconds"]),
                     symbol=str(ibkr_poller_state["symbol"]),
                     state=ibkr_poller_state,
+                    review_history=ibkr_review_history,
+                    optimizer_history=ibkr_optimizer_history,
                 )
             )
         try:
@@ -1113,6 +1338,11 @@ def create_app():
             incidents={"incidents": ibkr_gateway.incident_events, "count": len(ibkr_gateway.incident_events)},
             reviews=ibkr_review_history[-50:],
             optimizer_reports=ibkr_optimizer_history[-50:],
+            one_minute_bars=list(ibkr_poller_state.get("latest_bars", [])),
+            signals=list(ibkr_poller_state.get("latest_signals", [])),
+            strategy_state=dict(ibkr_poller_state.get("strategy", {})),
+            control_state=dict(ibkr_poller_state.get("control_state", {})),
+            poller=dict(ibkr_poller_state),
         )
 
     @app.post("/api/ibkr-paper/runs")

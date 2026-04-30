@@ -54,6 +54,7 @@ When the API server is running, the in-process poller performs the same sync loo
 
 - Build `1m` bars from IBKR snapshots.
 - Generate deterministic signal candidates locally.
+- The in-process IBKR poller now composes the decision loop automatically: sync broker state, build `1m` bars, evaluate the local strategy, and run a structured `5m` review on cadence or when a strong trigger appears.
 - Every `5m`, build a structured review request with recent bars, signals, execution ledger, and risk context.
 - Only allow a paper order when review action is `paper_allow` and gateway readiness is `ready`.
 - Submit only deterministic bracket order drafts with entry, stop-loss, take-profit, and max holding minutes.
@@ -71,7 +72,7 @@ Enter safe mode immediately when any of these occur:
 - Non-paper account detected.
 - Live trading flag is requested.
 - Contract tick size, point value, exchange, or currency mismatches expected `MNQ` spec.
-- Market data is delayed, frozen, stale, missing bid/ask/last, or has negative spread.
+- Market data is stale, missing bid/ask/last, has negative spread, or is not one of `real_time`, `delayed`, or `delayed_frozen`.
 - Parent/child bracket state is inconsistent.
 - Position reconciliation drifts from expected state.
 - Daily loss limit, drawdown limit, or manual kill switch is triggered.
@@ -98,7 +99,7 @@ In safe mode:
 
 - Paper account guard blocks a live account fixture.
 - Missing `ibapi` or adapter blocks readiness.
-- Delayed, stale, and incomplete market data block paper orders.
+- Unknown, stale, and incomplete market data block paper orders; `delayed` and `delayed_frozen` remain valid for paper readiness.
 - Wrong tick size or point value enters safe mode.
 - A strong `1m` breakout signal produces a `5m` review request.
 - LLM fallback can allow a paper plan but cannot emit IBKR order objects.

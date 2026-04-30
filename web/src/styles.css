@@ -900,6 +900,12 @@ tr.compare-selected td {
   max-height: 320px;
 }
 
+.json-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
 .readiness-banner {
   display: grid;
   gap: 8px;
