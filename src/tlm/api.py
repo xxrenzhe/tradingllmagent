@@ -259,7 +259,7 @@ def run_ibkr_decision_cycle(
         "bracket_event_type": bracket_event.get("event_type") if bracket_event else None,
         "submit_event_type": submit_event.get("event_type") if submit_event else None,
     }
-    state["latest_review"] = review
+    state["latest_review"] = _compact_ibkr_review(review)
     state["latest_optimizer"] = optimizer
     state["latest_decision"] = result
     return result
@@ -335,6 +335,67 @@ def _ibkr_unexplained_duplicate_order_event(event: dict[str, Any]) -> bool:
     return event.get("event_type") in {
         "order_status_duplicate_conflict",
         "execution_fill_duplicate_conflict",
+    }
+
+
+def _compact_ibkr_poller_state(state: dict[str, Any]) -> dict[str, Any]:
+    compact = {
+        "enabled": state.get("enabled"),
+        "interval_seconds": state.get("interval_seconds"),
+        "review_interval_seconds": state.get("review_interval_seconds"),
+        "symbol": state.get("symbol"),
+        "auto_submit": state.get("auto_submit"),
+        "market_data_history_limit": state.get("market_data_history_limit"),
+        "max_review_history": state.get("max_review_history"),
+        "max_optimizer_history": state.get("max_optimizer_history"),
+        "readiness_max_stale_seconds": state.get("readiness_max_stale_seconds"),
+        "strategy": state.get("strategy"),
+        "control_state": state.get("control_state"),
+        "readiness_check_count": state.get("readiness_check_count", 0),
+        "review_cycle_count": state.get("review_cycle_count", 0),
+        "live_order_attempt_count": state.get("live_order_attempt_count", 0),
+        "duplicate_order_event_count": state.get("duplicate_order_event_count", 0),
+        "last_review_at": state.get("last_review_at"),
+        "last_review_fill_count": state.get("last_review_fill_count", 0),
+        "latest_bars": list(state.get("latest_bars", []))[-10:],
+        "latest_signal": state.get("latest_signal"),
+        "latest_signals": list(state.get("latest_signals", []))[-10:],
+        "latest_review": _compact_ibkr_review(state.get("latest_review")),
+        "latest_optimizer": state.get("latest_optimizer"),
+        "latest_decision": state.get("latest_decision"),
+        "running": state.get("running", False),
+        "iteration_count": state.get("iteration_count", 0),
+        "last_run_at": state.get("last_run_at"),
+        "last_result": state.get("last_result"),
+        "last_error": state.get("last_error"),
+        "startup_connect_event": state.get("startup_connect_event"),
+    }
+    return {key: value for key, value in compact.items() if value is not None}
+
+
+def _compact_ibkr_review(review: Any) -> dict[str, Any] | None:
+    if not isinstance(review, dict):
+        return None
+    request = review.get("review_request") or {}
+    result = review.get("review_result") or {}
+    compact_request = {
+        "schema_version": request.get("schema_version"),
+        "source": request.get("source"),
+        "review_window": request.get("review_window"),
+        "created_at": request.get("created_at"),
+        "bars_1m": list(request.get("bars_1m") or [])[-5:],
+        "signals": list(request.get("signals") or [])[-10:],
+        "strong_signal_count": request.get("strong_signal_count", 0),
+        "blocked_signal_count": request.get("blocked_signal_count", 0),
+        "execution_ledger_summary": request.get("execution_ledger_summary"),
+        "risk_context": request.get("risk_context"),
+        "strategy_state": request.get("strategy_state"),
+        "previous_review_summaries": list(request.get("previous_review_summaries") or [])[-3:],
+        "review_request_hash": request.get("review_request_hash"),
+    }
+    return {
+        "review_request": {key: value for key, value in compact_request.items() if value is not None},
+        "review_result": result,
     }
 
 
@@ -1220,7 +1281,7 @@ def create_app():
     @app.get("/api/gateways/ibkr/health")
     def ibkr_health() -> dict:
         payload = ibkr_gateway.health()
-        payload["poller"] = ibkr_poller_state
+        payload["poller"] = _compact_ibkr_poller_state(ibkr_poller_state)
         return payload
 
     @app.get("/api/gateways/ibkr/readiness")
@@ -1374,9 +1435,11 @@ def create_app():
 
     @app.get("/api/gateways/ibkr/poller")
     def ibkr_poller_status() -> dict:
-        return dict(ibkr_poller_state)
+        return _compact_ibkr_poller_state(ibkr_poller_state)
 
     def ibkr_runtime_report(run_id: str = "current") -> dict:
+        compact_reviews = [_compact_ibkr_review(review) for review in ibkr_review_history[-50:]]
+        compact_poller = _compact_ibkr_poller_state(ibkr_poller_state)
         return build_ibkr_paper_report(
             run_id=run_id,
             health=ibkr_gateway.health(),
@@ -1386,13 +1449,13 @@ def create_app():
             bracket_orders=ibkr_gateway.bracket_order_report(),
             execution_ledger=ibkr_gateway.execution_ledger(),
             incidents={"incidents": ibkr_gateway.incident_events, "count": len(ibkr_gateway.incident_events)},
-            reviews=ibkr_review_history[-50:],
+            reviews=[review for review in compact_reviews if review is not None],
             optimizer_reports=ibkr_optimizer_history[-50:],
             one_minute_bars=list(ibkr_poller_state.get("latest_bars", [])),
             signals=list(ibkr_poller_state.get("latest_signals", [])),
             strategy_state=dict(ibkr_poller_state.get("strategy", {})),
             control_state=dict(ibkr_poller_state.get("control_state", {})),
-            poller=dict(ibkr_poller_state),
+            poller=compact_poller,
         )
 
     @app.post("/api/ibkr-paper/runs")
@@ -1413,7 +1476,8 @@ def create_app():
 
     @app.get("/api/ibkr-paper/reviews")
     def ibkr_paper_reviews(limit: int = 50) -> dict:
-        return {"reviews": ibkr_review_history[-limit:], "count": len(ibkr_review_history)}
+        reviews = [_compact_ibkr_review(review) for review in ibkr_review_history[-limit:]]
+        return {"reviews": [review for review in reviews if review is not None], "count": len(ibkr_review_history)}
 
     @app.get("/api/ibkr-paper/reports/{run_id}")
     def ibkr_paper_reports(run_id: str, root: str = "experiments/ibkr_paper") -> dict:

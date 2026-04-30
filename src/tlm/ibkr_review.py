@@ -58,7 +58,7 @@ def build_five_minute_review_request(
         "execution_ledger_summary": _ledger_summary(execution_ledger),
         "risk_context": risk_context or {},
         "strategy_state": strategy_state or {},
-        "previous_review_summaries": list(previous_reviews)[-3:],
+        "previous_review_summaries": [_review_summary(review) for review in list(previous_reviews)[-3:]],
         "allowed_actions": sorted(ALLOWED_REVIEW_ACTIONS),
         "allowed_fast_path_changes": sorted(ALLOWED_FAST_PATH_CHANGES),
         "allowed_mutation_changes": sorted(ALLOWED_MUTATION_CHANGES),
@@ -148,6 +148,23 @@ def _ledger_summary(ledger: dict[str, Any]) -> dict[str, Any]:
         "total_commission": float(ledger.get("total_commission", 0.0)),
         "open_position_quantity": open_qty,
         "latest_account_snapshot": ledger.get("latest_account_snapshot"),
+    }
+
+
+def _review_summary(review: dict[str, Any]) -> dict[str, Any]:
+    request = review.get("review_request") or {}
+    result = review.get("review_result") or {}
+    final_summary = result.get("final_summary") or {}
+    return {
+        "created_at": result.get("created_at") or request.get("created_at"),
+        "action": result.get("action"),
+        "confidence": result.get("confidence"),
+        "decision_reason": final_summary.get("decision_reason"),
+        "next_check": final_summary.get("next_check"),
+        "strong_signal_count": request.get("strong_signal_count", 0),
+        "blocked_signal_count": request.get("blocked_signal_count", 0),
+        "review_request_hash": request.get("review_request_hash"),
+        "review_result_hash": result.get("review_result_hash"),
     }
 
 

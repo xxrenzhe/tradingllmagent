@@ -11,6 +11,7 @@ from unittest.mock import patch
 import duckdb
 
 from tlm.api import (
+    _compact_ibkr_poller_state,
     build_leaderboard_response,
     build_cost_calibration_response,
     build_experiment_artifacts_response,
@@ -1241,6 +1242,34 @@ class APIImportTests(unittest.TestCase):
         self.assertEqual(state["live_order_attempt_count"], 0)
         self.assertEqual(state["duplicate_order_event_count"], 0)
         self.assertEqual(result["decision"]["submit_event_type"], "bracket_order_submitted")
+
+    def test_ibkr_poller_state_compacts_recursive_review_payloads(self) -> None:
+        state = {
+            "enabled": True,
+            "latest_review": {
+                "review_request": {
+                    "created_at": "2026-04-30T14:00:00+00:00",
+                    "bars_1m": [{"bar_time": f"t{index}"} for index in range(7)],
+                    "signals": [{"signal_id": f"s{index}"} for index in range(12)],
+                    "previous_review_summaries": [
+                        {"review_request": {"previous_review_summaries": [{"large": "nested"}]}}
+                    ],
+                    "review_request_hash": "request-hash",
+                },
+                "review_result": {
+                    "action": "no_action",
+                    "confidence": "medium",
+                    "final_summary": {"decision_reason": "no_action"},
+                },
+            },
+        }
+
+        compact = _compact_ibkr_poller_state(state)
+
+        request = compact["latest_review"]["review_request"]
+        self.assertEqual(len(request["bars_1m"]), 5)
+        self.assertEqual(len(request["signals"]), 10)
+        self.assertLess(len(json.dumps(compact)), 3000)
 
     def test_feature_readiness_prefers_primary_nq_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

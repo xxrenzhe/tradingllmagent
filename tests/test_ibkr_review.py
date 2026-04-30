@@ -69,6 +69,37 @@ class IbkrReviewTests(unittest.TestCase):
                 }
             )
 
+    def test_previous_reviews_are_summarized_without_recursive_payloads(self) -> None:
+        previous = {
+            "review_request": {
+                "created_at": "2026-04-30T14:00:00+00:00",
+                "strong_signal_count": 1,
+                "blocked_signal_count": 0,
+                "previous_review_summaries": [{"nested": {"review_request": {"large": "payload"}}}],
+                "review_request_hash": "request-hash",
+            },
+            "review_result": {
+                "action": "paper_allow",
+                "confidence": "low",
+                "final_summary": {"decision_reason": "paper_allow", "next_check": "next_5m_close"},
+                "created_at": "2026-04-30T14:00:01+00:00",
+                "review_result_hash": "result-hash",
+            },
+        }
+
+        request = build_five_minute_review_request(
+            bars_1m=[],
+            signals=[],
+            execution_ledger={"positions": [], "fill_count": 0, "net_realized_pnl": 0, "total_commission": 0},
+            previous_reviews=[previous],
+        )
+
+        summaries = request["previous_review_summaries"]
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["action"], "paper_allow")
+        self.assertNotIn("review_request", summaries[0])
+        self.assertNotIn("previous_review_summaries", summaries[0])
+
 
 if __name__ == "__main__":
     unittest.main()
