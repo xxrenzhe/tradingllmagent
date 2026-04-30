@@ -20,6 +20,27 @@ class IbkrCliTests(unittest.TestCase):
         self.assertEqual(args.api_port, 8000)
         self.assertEqual(args.ibkr_port, 7497)
 
+    def test_parser_exposes_ibkr_soak_monitor(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "ibkr",
+                "soak-monitor",
+                "--api-base",
+                "http://127.0.0.1:8011",
+                "--output-dir",
+                "experiments/ibkr_paper/soak_test",
+                "--max-samples",
+                "1",
+            ]
+        )
+
+        self.assertEqual(args.ibkr_command, "soak-monitor")
+        self.assertEqual(args.api_base, "http://127.0.0.1:8011")
+        self.assertEqual(args.output_dir, "experiments/ibkr_paper/soak_test")
+        self.assertEqual(args.max_samples, 1)
+        self.assertEqual(args.max_stale_seconds, 30)
+
     def test_ibkr_loop_sets_runtime_env_and_runs_uvicorn(self) -> None:
         run_calls: list[dict[str, object]] = []
         fake_app = object()

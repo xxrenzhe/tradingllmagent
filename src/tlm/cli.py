@@ -35,6 +35,7 @@ from .firstrate import import_firstrate_bars
 from .ibkr_adapter import build_ibkr_gateway_adapter
 from .ibkr_gateway import IbkrPaperGateway
 from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
+from .ibkr_soak import run_ibkr_soak_monitor
 from .llm import append_audit_log, create_llm_adapter, load_train_validation_feedback
 from .monitor import build_monitor_report, write_monitor_outputs
 from .modules import (
@@ -1174,6 +1175,21 @@ def cmd_ibkr_loop(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ibkr_soak_monitor(args: argparse.Namespace) -> int:
+    summary = run_ibkr_soak_monitor(
+        api_base=args.api_base,
+        output_dir=Path(args.output_dir),
+        symbol=args.symbol,
+        max_stale_seconds=args.max_stale_seconds,
+        interval_seconds=args.interval_seconds,
+        max_samples=args.max_samples,
+        stop_when_ready=args.stop_when_ready,
+        timeout_seconds=args.timeout_seconds,
+    )
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    return 0
+
+
 def _ibkr_cli_report(gateway: IbkrPaperGateway, run_id: str) -> dict:
     return build_ibkr_paper_report(
         run_id=run_id,
@@ -1754,6 +1770,16 @@ def build_parser() -> argparse.ArgumentParser:
     ibkr_loop.add_argument("--auto-submit", action="store_true")
     ibkr_loop.add_argument("--no-connect", action="store_false", dest="connect")
     ibkr_loop.set_defaults(func=cmd_ibkr_loop, connect=True)
+    ibkr_soak_monitor = ibkr_subparsers.add_parser("soak-monitor")
+    ibkr_soak_monitor.add_argument("--api-base", default="http://127.0.0.1:8000")
+    ibkr_soak_monitor.add_argument("--output-dir", default="experiments/ibkr_paper/soak_current")
+    ibkr_soak_monitor.add_argument("--symbol", default="MNQ")
+    ibkr_soak_monitor.add_argument("--max-stale-seconds", type=int, default=30)
+    ibkr_soak_monitor.add_argument("--interval-seconds", type=float, default=60.0)
+    ibkr_soak_monitor.add_argument("--max-samples", type=int)
+    ibkr_soak_monitor.add_argument("--stop-when-ready", action="store_true")
+    ibkr_soak_monitor.add_argument("--timeout-seconds", type=float, default=10.0)
+    ibkr_soak_monitor.set_defaults(func=cmd_ibkr_soak_monitor)
 
     paper = subparsers.add_parser("paper")
     paper_subparsers = paper.add_subparsers(dest="paper_command", required=True)

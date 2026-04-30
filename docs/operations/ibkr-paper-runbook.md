@@ -68,6 +68,38 @@ When the API server is running, the in-process poller performs the same sync loo
 - Use `/api/ibkr-paper/reports/current` for the runtime promotion-blocker and paper PnL report.
 - Create retained run artifacts with `POST /api/ibkr-paper/runs` or `tlm ibkr paper-run --symbol MNQ --quantity 1`.
 
+## Five-Day Soak
+
+Run the loop and a separate monitor so acceptance evidence survives operator review and process restarts:
+
+```bash
+PYTHONPATH=src python3 -m tlm.cli ibkr loop \
+  --symbol MNQ \
+  --api-port 8000 \
+  --poll-interval-seconds 60 \
+  --review-interval-seconds 300 \
+  --max-stale-seconds 30 \
+  --auto-submit
+```
+
+In another terminal:
+
+```bash
+PYTHONPATH=src python3 -m tlm.cli ibkr soak-monitor \
+  --api-base http://127.0.0.1:8000 \
+  --output-dir experiments/ibkr_paper/soak_current \
+  --interval-seconds 300 \
+  --stop-when-ready
+```
+
+The monitor writes:
+
+- `experiments/ibkr_paper/soak_current/samples.jsonl`
+- `experiments/ibkr_paper/soak_current/latest_sample.json`
+- `experiments/ibkr_paper/soak_current/latest_summary.json`
+
+The soak is complete only when `latest_summary.json` shows `acceptance_status = ready`, at least five trading days, at least 100 readiness checks, at least 30 review cycles, zero live order attempts, zero unexplained duplicate orders, and zero bracket-child-missing events.
+
 ## Safe Mode Rules
 
 Enter safe mode immediately when any of these occur:
