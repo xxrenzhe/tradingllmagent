@@ -248,6 +248,33 @@ class OfficialIbkrAdapterTests(unittest.TestCase):
         self.assertIsNone(payload["error_code"])
         self.assertIsNone(payload["error_message"])
 
+    def test_delayed_market_data_notice_does_not_complete_snapshot_before_ticks(self) -> None:
+        adapter = OfficialIbkrAdapter()
+        event = threading.Event()
+        adapter._market_data[1] = {"symbol": "MNQ"}
+        adapter._market_data_events[1] = event
+
+        adapter.client.error(1, 10167, "Requested market data is not subscribed. Displaying delayed market data.")
+
+        self.assertFalse(event.is_set())
+        self.assertNotIn("error_code", adapter._market_data[1])
+
+    def test_market_data_waits_for_bid_ask_and_last_before_completion(self) -> None:
+        adapter = OfficialIbkrAdapter()
+        event = threading.Event()
+        adapter._market_data[1] = {"symbol": "MNQ"}
+        adapter._market_data_events[1] = event
+
+        adapter.client.tickPrice(1, 9, 999.0, None)
+        adapter.client.tickPrice(1, 66, 27592.5, None)
+        adapter.client.tickPrice(1, 67, 27593.0, None)
+
+        self.assertFalse(event.is_set())
+
+        adapter.client.tickPrice(1, 68, 27592.25, None)
+
+        self.assertTrue(event.is_set())
+
     def test_secdef_farm_ok_message_is_not_recorded_as_error(self) -> None:
         adapter = OfficialIbkrAdapter(socket_preflight_enabled=False)
         adapter.connect("127.0.0.1", 7497, 11)

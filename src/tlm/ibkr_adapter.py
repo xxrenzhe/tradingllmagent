@@ -370,9 +370,11 @@ class OfficialIbkrAdapter:
                     payload["ask"] = price
                 elif tickType in {4, 68}:
                     payload["last"] = price
+                else:
+                    return
                 payload["snapshot_time"] = _now()
                 event = adapter._market_data_events.get(reqId)
-                if event is not None:
+                if event is not None and all(payload.get(key) is not None for key in ("bid", "ask", "last")):
                     event.set()
 
             def position(self, account: str, contract: Any, pos: float, avgCost: float) -> None:  # noqa: N802
@@ -465,6 +467,8 @@ class OfficialIbkrAdapter:
                 if reqId in adapter._contract_detail_events:
                     adapter._contract_detail_events[reqId].set()
                 if reqId in adapter._market_data_events:
+                    if _is_delayed_market_data_notice(errorCode, errorString):
+                        return
                     payload = adapter._market_data.setdefault(reqId, {})
                     payload["error_code"] = errorCode
                     payload["error_message"] = errorString
@@ -680,6 +684,10 @@ def _is_connectivity_restored_message(error_code: int, message: str) -> bool:
     if error_code in {2104, 2106, 2158}:
         return True
     return "connection is ok" in message or "connection is restored" in message
+
+
+def _is_delayed_market_data_notice(error_code: int, message: str) -> bool:
+    return error_code == 10167 and "displaying delayed market data" in message.lower()
 
 
 def _is_broken_farm_message(message: str, farm_name: str) -> bool:
