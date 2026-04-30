@@ -28,6 +28,8 @@ class IbkrGatewayAdapter(Protocol):
 
     def submit_bracket_order(self, contract: dict[str, Any], order: dict[str, Any]) -> dict[str, Any]: ...
 
+    def cancel_order(self, order_id: int) -> dict[str, Any]: ...
+
     def drain_runtime_events(self) -> dict[str, Any]: ...
 
 
@@ -293,6 +295,7 @@ class IbkrPaperGateway:
     contract_details: dict[str, IbkrContractDetails] = field(default_factory=dict)
     market_data: dict[str, IbkrMarketDataSnapshot] = field(default_factory=dict)
     bracket_orders: dict[str, IbkrBracketOrderDraft] = field(default_factory=dict)
+    submitted_bracket_order_ids: set[str] = field(default_factory=set)
     order_events: list[dict[str, Any]] = field(default_factory=list)
     next_order_id: int = 1
     paper_position_quantity: int = 0
@@ -555,8 +558,22 @@ class IbkrPaperGateway:
 
     def cancel_open_orders(self, reason: str = "manual") -> dict[str, Any]:
         cancelled = [draft.to_dict() for draft in self.bracket_orders.values()]
+        broker_cancellations = []
+        if self.adapter is not None:
+            for bracket_id, draft in list(self.bracket_orders.items()):
+                if bracket_id not in self.submitted_bracket_order_ids:
+                    continue
+                for order_id in (draft.parent_order_id, draft.stop_order_id, draft.take_profit_order_id):
+                    try:
+                        broker_cancellations.append(self.adapter.cancel_order(order_id))
+                    except Exception as exc:
+                        broker_cancellations.append({"order_id": order_id, "cancelled": False, "error": str(exc)})
+                self.submitted_bracket_order_ids.discard(bracket_id)
         self.bracket_orders.clear()
-        return self._order_event("open_orders_cancelled", {"reason": reason, "orders": cancelled})
+        return self._order_event(
+            "open_orders_cancelled",
+            {"reason": reason, "orders": cancelled, "broker_cancellations": broker_cancellations},
+        )
 
     def flatten_paper_position(self, reason: str = "manual") -> dict[str, Any]:
         previous = self.paper_position_quantity
@@ -734,7 +751,10 @@ class IbkrPaperGateway:
         return {
             "mode": "ibkr_paper",
             "open_bracket_order_count": len(self.bracket_orders),
-            "open_bracket_orders": [draft.to_dict() for draft in self.bracket_orders.values()],
+            "open_bracket_orders": [
+                {**draft.to_dict(), "submitted": draft.bracket_id in self.submitted_bracket_order_ids}
+                for draft in self.bracket_orders.values()
+            ],
             "order_event_count": len(self.order_events),
             "recent_order_events": self.order_events[-20:],
         }
@@ -764,6 +784,7 @@ class IbkrPaperGateway:
         except Exception as exc:
             self.enter_safe_mode("adapter_bracket_submit_failed")
             return self._order_event("bracket_order_submit_failed", {"errors": [str(exc)], "bracket_id": bracket_id})
+        self.submitted_bracket_order_ids.add(bracket_id)
         return self._order_event(
             "bracket_order_submitted",
             {"bracket_id": bracket_id, "bracket_order": draft.to_dict(), "broker_submission": submission},

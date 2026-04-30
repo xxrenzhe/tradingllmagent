@@ -48,6 +48,9 @@ class FakeEClient:
     def cancelMktData(self, req_id: int) -> None:  # noqa: N802
         self.cancelled_requests.append(req_id)
 
+    def cancelOrder(self, order_id: int) -> None:  # noqa: N802
+        return
+
 
 class FakeContract:
     symbol = ""

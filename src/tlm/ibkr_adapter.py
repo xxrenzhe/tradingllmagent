@@ -196,6 +196,10 @@ class OfficialIbkrAdapter:
             "submitted_at": _now(),
         }
 
+    def cancel_order(self, order_id: int) -> dict[str, Any]:
+        self.client.cancelOrder(order_id)
+        return {"order_id": order_id, "cancelled": True, "cancelled_at": _now()}
+
     def drain_runtime_events(self) -> dict[str, Any]:
         with self.lock:
             executions = []

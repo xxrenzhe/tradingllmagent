@@ -15,6 +15,7 @@ class FakeIbkrAdapter:
         self.disconnect_count = 0
         self.submitted_orders: list[dict] = []
         self.market_data_requests: list[dict] = []
+        self.cancelled_orders: list[int] = []
 
     def connect(self, host: str, port: int, client_id: int) -> dict:
         self.connected = True
@@ -82,6 +83,10 @@ class FakeIbkrAdapter:
         }
         self.submitted_orders.append(payload)
         return payload
+
+    def cancel_order(self, order_id: int) -> dict:
+        self.cancelled_orders.append(order_id)
+        return {"order_id": order_id, "cancelled": True}
 
     def drain_runtime_events(self) -> dict:
         return {
@@ -438,6 +443,54 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(submitted["event_type"], "bracket_order_submitted")
         self.assertTrue(submitted["details"]["broker_submission"]["submitted"])
         self.assertEqual(submitted["details"]["broker_submission"]["local_symbol"], "MNQM6")
+
+    def test_cancel_open_orders_calls_broker_for_submitted_brackets(self) -> None:
+        adapter = FakeIbkrAdapter()
+        gateway = IbkrPaperGateway(adapter=adapter)
+        gateway.connect()
+        gateway.record_contract_details(
+            {
+                "symbol": "MNQ",
+                "tick_size": 0.25,
+                "point_value": 2.0,
+                "exchange": "CME",
+                "currency": "USD",
+                "last_trade_date_or_contract_month": "202506",
+                "local_symbol": "MNQM6",
+                "trading_class": "MNQ",
+            }
+        )
+        gateway.record_market_data(
+            {
+                "symbol": "MNQ",
+                "bid": 19000.0,
+                "ask": 19000.25,
+                "last": 19000.25,
+                "market_data_type": "delayed",
+                "snapshot_time": datetime.now(UTC).isoformat(),
+            }
+        )
+        built = gateway.build_bracket_order(
+            {
+                "symbol": "MNQ",
+                "action": "BUY",
+                "quantity": 1,
+                "entry_order_type": "LMT",
+                "entry_price": 18999.0,
+                "stop_price": 18995.0,
+                "take_profit_price": 19010.0,
+                "max_holding_minutes": 20,
+            }
+        )
+        bracket_id = built["details"]["bracket_order"]["bracket_id"]
+        gateway.submit_bracket_order(bracket_id)
+
+        cancelled = gateway.cancel_open_orders("test_cancel")
+
+        self.assertEqual(cancelled["event_type"], "open_orders_cancelled")
+        self.assertEqual(adapter.cancelled_orders, [1, 2, 3])
+        self.assertEqual(cancelled["details"]["broker_cancellations"][0]["order_id"], 1)
+        self.assertEqual(gateway.bracket_order_report()["open_bracket_order_count"], 0)
 
     def test_rejects_risk_increasing_or_invalid_bracket_payloads(self) -> None:
         gateway = self.ready_gateway()
