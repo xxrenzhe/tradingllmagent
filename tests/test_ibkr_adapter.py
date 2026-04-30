@@ -5,7 +5,7 @@ import sys
 import threading
 import unittest
 
-from tlm.ibkr_adapter import OfficialIbkrAdapter
+from tlm.ibkr_adapter import OfficialIbkrAdapter, _optional_broker_float
 
 
 class FakeEWrapper:
@@ -19,6 +19,7 @@ class FakeEClient:
         self.market_data_types: list[int] = []
         self.market_data_requests: list[dict] = []
         self.cancelled_requests: list[int] = []
+        self.placed_orders: list[dict] = []
 
     def isConnected(self) -> bool:  # noqa: N802
         return self.connected
@@ -51,6 +52,15 @@ class FakeEClient:
     def cancelOrder(self, order_id: int) -> None:  # noqa: N802
         return
 
+    def placeOrder(self, order_id: int, contract, order) -> None:  # noqa: N802
+        self.placed_orders.append(
+            {
+                "order_id": order_id,
+                "contract": contract,
+                "order": order,
+            }
+        )
+
 
 class FakeContract:
     symbol = ""
@@ -63,7 +73,9 @@ class FakeContract:
 
 
 class FakeOrder:
-    pass
+    def __init__(self) -> None:
+        self.eTradeOnly = True
+        self.firmQuoteOnly = True
 
 
 class OfficialIbkrAdapterTests(unittest.TestCase):
@@ -109,6 +121,38 @@ class OfficialIbkrAdapterTests(unittest.TestCase):
         self.assertEqual(adapter._market_data[1]["bid"], 27592.5)
         self.assertEqual(adapter._market_data[1]["ask"], 27593.0)
         self.assertEqual(adapter._market_data[1]["last"], 27592.25)
+
+    def test_submit_flatten_order_sets_compatible_flags_and_transmits(self) -> None:
+        adapter = OfficialIbkrAdapter()
+        adapter.next_order_id = 77
+
+        result = adapter.submit_flatten_order(
+            {
+                "symbol": "MNQ",
+                "exchange": "CME",
+                "currency": "USD",
+                "lastTradeDateOrContractMonth": "202506",
+                "localSymbol": "MNQM6",
+                "tradingClass": "MNQ",
+            },
+            action="SELL",
+            quantity=1,
+        )
+
+        self.assertEqual(result["order_id"], 77)
+        self.assertEqual(len(adapter.client.placed_orders), 1)
+        placed = adapter.client.placed_orders[0]["order"]
+        self.assertEqual(placed.action, "SELL")
+        self.assertEqual(placed.orderType, "MKT")
+        self.assertEqual(placed.totalQuantity, 1)
+        self.assertTrue(placed.transmit)
+        self.assertFalse(placed.eTradeOnly)
+        self.assertFalse(placed.firmQuoteOnly)
+
+    def test_optional_broker_float_drops_ibkr_sentinel_value(self) -> None:
+        self.assertIsNone(_optional_broker_float(""))
+        self.assertIsNone(_optional_broker_float(1.7976931348623157e308))
+        self.assertEqual(_optional_broker_float("12.5"), 12.5)
 
 
 if __name__ == "__main__":

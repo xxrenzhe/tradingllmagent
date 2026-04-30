@@ -14,6 +14,7 @@ class FakeIbkrAdapter:
         self.connected = False
         self.disconnect_count = 0
         self.submitted_orders: list[dict] = []
+        self.flatten_orders: list[dict] = []
         self.market_data_requests: list[dict] = []
         self.cancelled_orders: list[int] = []
 
@@ -87,6 +88,17 @@ class FakeIbkrAdapter:
     def cancel_order(self, order_id: int) -> dict:
         self.cancelled_orders.append(order_id)
         return {"order_id": order_id, "cancelled": True}
+
+    def submit_flatten_order(self, contract: dict, action: str, quantity: int) -> dict:
+        payload = {
+            "symbol": contract["symbol"],
+            "action": action,
+            "quantity": quantity,
+            "order_id": 9004,
+            "submitted": True,
+        }
+        self.flatten_orders.append(payload)
+        return payload
 
     def drain_runtime_events(self) -> dict:
         return {
@@ -522,8 +534,32 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertIn("buy_bracket_prices_must_wrap_reference", bad_prices["details"]["errors"])
 
     def test_kill_switch_cancels_bracket_drafts_flattens_and_enters_safe_mode(self) -> None:
-        gateway = self.ready_gateway()
-        gateway.paper_position_quantity = 1
+        adapter = FakeIbkrAdapter()
+        gateway = IbkrPaperGateway(adapter=adapter)
+        gateway.connect()
+        gateway.record_contract_details(
+            {
+                "symbol": "MNQ",
+                "tick_size": 0.25,
+                "point_value": 2.0,
+                "exchange": "CME",
+                "currency": "USD",
+                "last_trade_date_or_contract_month": "202506",
+                "local_symbol": "MNQM6",
+                "trading_class": "MNQ",
+            }
+        )
+        gateway.record_market_data(
+            {
+                "symbol": "MNQ",
+                "bid": 19000.0,
+                "ask": 19000.25,
+                "last": 19000.25,
+                "market_data_type": "delayed",
+                "snapshot_time": datetime.now(UTC).isoformat(),
+            }
+        )
+        gateway.record_position_snapshot({"symbol": "MNQ", "quantity": 1})
         gateway.build_bracket_order(
             {
                 "symbol": "MNQ",
@@ -539,8 +575,34 @@ class IbkrPaperGatewayTests(unittest.TestCase):
 
         self.assertEqual(event["event_type"], "kill_switch_triggered")
         self.assertEqual(gateway.bracket_orders, {})
-        self.assertEqual(gateway.paper_position_quantity, 0)
+        self.assertEqual(event["flatten_event"]["event_type"], "paper_position_flatten_submitted")
+        self.assertEqual(adapter.flatten_orders[0]["action"], "SELL")
+        self.assertEqual(gateway.paper_position_quantity, 1)
         self.assertTrue(gateway.safe_mode)
+
+    def test_flatten_paper_position_submits_broker_close_order(self) -> None:
+        adapter = FakeIbkrAdapter()
+        gateway = IbkrPaperGateway(adapter=adapter)
+        gateway.connect()
+        gateway.record_contract_details(
+            {
+                "symbol": "MNQ",
+                "tick_size": 0.25,
+                "point_value": 2.0,
+                "exchange": "CME",
+                "currency": "USD",
+                "last_trade_date_or_contract_month": "202506",
+                "local_symbol": "MNQM6",
+                "trading_class": "MNQ",
+            }
+        )
+        gateway.record_position_snapshot({"symbol": "MNQ", "quantity": 1})
+
+        event = gateway.flatten_paper_position("test_flatten")
+
+        self.assertEqual(event["event_type"], "paper_position_flatten_submitted")
+        self.assertEqual(adapter.flatten_orders[0]["action"], "SELL")
+        self.assertEqual(adapter.flatten_orders[0]["quantity"], 1)
 
     def test_records_order_status_fills_positions_and_account_pnl(self) -> None:
         gateway = self.ready_gateway()
@@ -596,6 +658,39 @@ class IbkrPaperGatewayTests(unittest.TestCase):
         self.assertEqual(ledger["total_commission"], 0.47)
         self.assertEqual(ledger["positions"][0]["quantity"], 1)
         self.assertEqual(ledger["latest_account_snapshot"]["daily_pnl"], 20.0)
+
+    def test_record_execution_fill_normalizes_ibkr_bot_and_sld_sides(self) -> None:
+        gateway = self.ready_gateway()
+
+        buy_event = gateway.record_execution_fill(
+            {
+                "execution_id": "exec-bot",
+                "order_id": 1,
+                "symbol": "MNQ",
+                "side": "BOT",
+                "quantity": 1,
+                "fill_price": 19000.25,
+                "commission": 0.47,
+                "filled_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        sell_event = gateway.record_execution_fill(
+            {
+                "execution_id": "exec-sld",
+                "order_id": 2,
+                "symbol": "MNQ",
+                "side": "SLD",
+                "quantity": 1,
+                "fill_price": 19010.25,
+                "commission": 0.47,
+                "filled_at": datetime.now(UTC).isoformat(),
+            }
+        )
+
+        self.assertEqual(buy_event["event_type"], "execution_fill_recorded")
+        self.assertEqual(sell_event["event_type"], "execution_fill_recorded")
+        self.assertEqual(gateway.executions[0].side, "BUY")
+        self.assertEqual(gateway.executions[1].side, "SELL")
 
     def test_position_reconciliation_enters_safe_mode_on_drift(self) -> None:
         gateway = self.ready_gateway()

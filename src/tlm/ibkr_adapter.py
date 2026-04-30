@@ -200,6 +200,27 @@ class OfficialIbkrAdapter:
         self.client.cancelOrder(order_id)
         return {"order_id": order_id, "cancelled": True, "cancelled_at": _now()}
 
+    def submit_flatten_order(self, contract: dict[str, Any], action: str, quantity: int) -> dict[str, Any]:
+        order_id = self._reserve_order_id()
+        ib_contract = self._build_contract(contract)
+        order = self._build_parent_order(
+            order_id,
+            {
+                "action": action,
+                "entry_order_type": "MKT",
+                "quantity": quantity,
+            },
+        )
+        order.transmit = True
+        self.client.placeOrder(order_id, ib_contract, order)
+        return {
+            "submitted": True,
+            "order_id": order_id,
+            "action": action,
+            "quantity": quantity,
+            "submitted_at": _now(),
+        }
+
     def drain_runtime_events(self) -> dict[str, Any]:
         with self.lock:
             executions = []
@@ -351,7 +372,7 @@ class OfficialIbkrAdapter:
                 with adapter.lock:
                     adapter._commission_reports[str(commissionReport.execId)] = {
                         "commission": float(commissionReport.commission),
-                        "realized_pnl": _optional_float(commissionReport.realizedPNL),
+                        "realized_pnl": _optional_broker_float(commissionReport.realizedPNL),
                     }
 
             def error(self, reqId: int, errorCode: int, errorString: str, advancedOrderRejectJson: str = "") -> None:  # noqa: N802
@@ -434,7 +455,7 @@ class OfficialIbkrAdapter:
         if order.orderType == "LMT":
             order.lmtPrice = float(payload["entry_price"])
         order.transmit = False
-        return order
+        return self._apply_compatible_order_flags(order)
 
     def _build_child_order(
         self,
@@ -464,6 +485,13 @@ class OfficialIbkrAdapter:
         if limit_price is not None:
             order.lmtPrice = limit_price
         order.transmit = transmit
+        return self._apply_compatible_order_flags(order)
+
+    def _apply_compatible_order_flags(self, order: Any) -> Any:
+        if hasattr(order, "eTradeOnly"):
+            order.eTradeOnly = False
+        if hasattr(order, "firmQuoteOnly"):
+            order.firmQuoteOnly = False
         return order
 
 
@@ -485,6 +513,15 @@ def _optional_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
     return float(value)
+
+
+def _optional_broker_float(value: Any) -> float | None:
+    parsed = _optional_float(value)
+    if parsed is None:
+        return None
+    if abs(parsed) >= 1e307:
+        return None
+    return parsed
 
 
 def _now() -> str:

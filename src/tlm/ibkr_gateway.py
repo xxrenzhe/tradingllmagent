@@ -30,6 +30,8 @@ class IbkrGatewayAdapter(Protocol):
 
     def cancel_order(self, order_id: int) -> dict[str, Any]: ...
 
+    def submit_flatten_order(self, contract: dict[str, Any], action: str, quantity: int) -> dict[str, Any]: ...
+
     def drain_runtime_events(self) -> dict[str, Any]: ...
 
 
@@ -576,9 +578,40 @@ class IbkrPaperGateway:
         )
 
     def flatten_paper_position(self, reason: str = "manual") -> dict[str, Any]:
-        previous = self.paper_position_quantity
-        self.paper_position_quantity = 0
-        return self._order_event("paper_position_flattened", {"reason": reason, "previous_quantity": previous})
+        current_quantity = self.positions.get("MNQ").quantity if "MNQ" in self.positions else self.paper_position_quantity
+        if current_quantity == 0:
+            return self._order_event("paper_position_flattened", {"reason": reason, "previous_quantity": 0})
+        if self.adapter is None:
+            self.paper_position_quantity = 0
+            return self._order_event("paper_position_flattened", {"reason": reason, "previous_quantity": current_quantity})
+        resolved_contract = self.resolved_contract("MNQ", require_concrete=True)
+        if resolved_contract is None:
+            return self._order_event(
+                "paper_position_flatten_rejected",
+                {"reason": reason, "errors": ["contract_month_or_local_symbol_required_for_flatten"]},
+            )
+        action = "SELL" if current_quantity > 0 else "BUY"
+        try:
+            submission = self.adapter.submit_flatten_order(
+                resolved_contract,
+                action=action,
+                quantity=abs(current_quantity),
+            )
+        except Exception as exc:
+            self.enter_safe_mode("adapter_flatten_submit_failed")
+            return self._order_event(
+                "paper_position_flatten_failed",
+                {"reason": reason, "errors": [str(exc)], "current_quantity": current_quantity},
+            )
+        return self._order_event(
+            "paper_position_flatten_submitted",
+            {
+                "reason": reason,
+                "current_quantity": current_quantity,
+                "flatten_action": action,
+                "broker_submission": submission,
+            },
+        )
 
     def kill_switch(self, reason: str = "manual") -> dict[str, Any]:
         cancel_event = self.cancel_open_orders(reason)
@@ -610,11 +643,12 @@ class IbkrPaperGateway:
         return event
 
     def record_execution_fill(self, payload: dict[str, Any]) -> dict[str, Any]:
+        side = _normalize_execution_side(payload.get("side"))
         fill = IbkrExecutionFill(
             execution_id=str(payload.get("execution_id") or f"exec_{uuid4().hex}"),
             order_id=int(payload["order_id"]),
             symbol=str(payload.get("symbol", "MNQ")),
-            side=str(payload["side"]).upper(),
+            side=side,
             quantity=_positive_int(payload["quantity"]),
             fill_price=float(payload["fill_price"]),
             commission=float(payload.get("commission", 0.0)),
@@ -977,6 +1011,15 @@ def _none_if_blank(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _normalize_execution_side(value: Any) -> str:
+    side = str(value or "").upper()
+    if side == "BOT":
+        return "BUY"
+    if side == "SLD":
+        return "SELL"
+    return side
 
 
 def _positive_int(value: Any) -> int:
