@@ -55,11 +55,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--min-edge-count", type=int, default=1)
     parser.add_argument("--selection-profile", choices=("net", "stable", "defensive", "stress", "floor"), default="net")
     parser.add_argument("--exclude-scan-type", action="append", default=[])
+    parser.add_argument(
+        "--max-scan-type-count",
+        action="append",
+        default=[],
+        metavar="SCAN_TYPE=N",
+        help="Limit selected combo edges from a scan family, e.g. prior_day_breakout=2.",
+    )
+    parser.add_argument(
+        "--min-scan-type-count",
+        action="append",
+        default=[],
+        metavar="SCAN_TYPE=N",
+        help="Require selected combo edges from a scan family, e.g. prior_day_breakout=1.",
+    )
     parser.add_argument("--slippage-ticks-per-side", type=float, default=1.0)
+    parser.add_argument(
+        "--take-profit-r-grid",
+        default="0.5,0.75,1.0,1.25,1.5",
+        help="Comma-separated take-profit R values tested for each single edge.",
+    )
     parser.add_argument("--full-grid", action="store_true")
     parser.add_argument("--min-full-year-trades", type=int, default=1000)
     parser.add_argument("--output", type=Path, default=Path("reports/nq_expanded_high_edge_walk_forward_2026-05-01.json"))
     args = parser.parse_args(argv)
+    max_scan_type_counts = parse_scan_type_counts(args.max_scan_type_count, option_name="--max-scan-type-count")
+    min_scan_type_counts = parse_scan_type_counts(args.min_scan_type_count, option_name="--min-scan-type-count")
+    take_profit_r_grid = parse_float_grid(args.take_profit_r_grid, option_name="--take-profit-r-grid")
 
     config = LowRRegimeBasketConfig(
         data_root=args.data_root,
@@ -106,6 +128,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 min_edge_count=args.min_edge_count,
                 selection_profile=args.selection_profile,
                 excluded_scan_types=tuple(args.exclude_scan_type),
+                max_scan_type_counts=max_scan_type_counts,
+                min_scan_type_counts=min_scan_type_counts,
+                take_profit_r_grid=take_profit_r_grid,
                 parameter_grid=parameter_grid,
                 max_positions_grid=max_positions_grid,
                 min_full_year_trades=args.min_full_year_trades,
@@ -139,7 +164,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "min_edge_count": args.min_edge_count,
             "selection_profile": args.selection_profile,
             "excluded_scan_types": list(args.exclude_scan_type),
+            "max_scan_type_counts": max_scan_type_counts,
+            "min_scan_type_counts": min_scan_type_counts,
             "slippage_ticks_per_side": args.slippage_ticks_per_side,
+            "take_profit_r_grid": list(take_profit_r_grid),
             "full_grid": args.full_grid,
             "min_full_year_trades": args.min_full_year_trades,
         },
@@ -165,6 +193,9 @@ def run_fold(
     min_edge_count: int,
     selection_profile: str,
     excluded_scan_types: Sequence[str],
+    max_scan_type_counts: dict[str, int],
+    min_scan_type_counts: dict[str, int],
+    take_profit_r_grid: Sequence[float],
     parameter_grid: Sequence[dict[str, Any]],
     max_positions_grid: Sequence[int],
     min_full_year_trades: int,
@@ -201,7 +232,7 @@ def run_fold(
             if len(train_signals) < 20:
                 continue
             best_single = None
-            for take_profit_r in (0.5, 0.75, 1.0, 1.25, 1.5):
+            for take_profit_r in take_profit_r_grid:
                 edge = edge_from_stats(stats, take_profit_r)
                 result = replay_summary_result(
                     label=stats.candidate_id,
@@ -223,7 +254,14 @@ def run_fold(
                 singles.append(best_single)
         best_singles_by_param[param_key] = singles
         single_by_id = {row["source_candidate_id"]: row for row in singles}
-        specs = build_walk_forward_specs(singles, train_years, selection_profile, min_edge_count)[:max_specs]
+        specs = build_walk_forward_specs(
+            singles,
+            train_years,
+            selection_profile,
+            min_edge_count,
+            max_scan_type_counts=max_scan_type_counts,
+            min_scan_type_counts=min_scan_type_counts,
+        )[:max_specs]
         for max_positions in max_positions_grid:
             combo_config = config_from_params(base_config, {**params, "max_concurrent_positions": max_positions})
             for spec in specs:
@@ -404,6 +442,43 @@ def load_candidate_stats_for_years(
             )
         )
     return stats
+
+
+def parse_scan_type_counts(values: Sequence[str], *, option_name: str) -> dict[str, int]:
+    parsed: dict[str, int] = {}
+    for raw in values:
+        if "=" not in raw:
+            raise SystemExit(f"{option_name} expects SCAN_TYPE=N, got {raw!r}")
+        scan_type, count_text = raw.split("=", 1)
+        scan_type = scan_type.strip()
+        if not scan_type:
+            raise SystemExit(f"{option_name} scan type cannot be empty")
+        try:
+            count = int(count_text)
+        except ValueError as exc:
+            raise SystemExit(f"{option_name} count must be an integer, got {raw!r}") from exc
+        if count < 0:
+            raise SystemExit(f"{option_name} count must be non-negative, got {raw!r}")
+        parsed[scan_type] = count
+    return parsed
+
+
+def parse_float_grid(raw: str, *, option_name: str) -> tuple[float, ...]:
+    values: list[float] = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            value = float(item)
+        except ValueError as exc:
+            raise SystemExit(f"{option_name} expects comma-separated floats, got {raw!r}") from exc
+        if value <= 0:
+            raise SystemExit(f"{option_name} values must be positive, got {raw!r}")
+        values.append(value)
+    if not values:
+        raise SystemExit(f"{option_name} cannot be empty")
+    return tuple(values)
 
 
 def select_candidate_stats_for_profile(
@@ -610,7 +685,12 @@ def build_walk_forward_specs(
     train_years: Sequence[int],
     selection_profile: str,
     min_edge_count: int,
+    *,
+    max_scan_type_counts: dict[str, int] | None = None,
+    min_scan_type_counts: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
+    max_scan_type_counts = max_scan_type_counts or {}
+    min_scan_type_counts = min_scan_type_counts or {}
     ranked = sorted(
         single_edges,
         key=lambda row: single_train_sort_key(row, train_years, selection_profile),
@@ -620,11 +700,43 @@ def build_walk_forward_specs(
     for size in (4, 6, 8, 10, 12, 13, 14, 16, 20, 24, 32):
         if size < min_edge_count:
             continue
-        prefix = ranked[:size]
-        if prefix:
-            ids = tuple(row["source_candidate_id"] for row in prefix)
-            specs.append({"name": f"walk_forward_{selection_profile}_top_{len(ids)}", "candidate_ids": ids})
+        prefix = select_ranked_with_scan_type_limits(
+            ranked,
+            target_size=size,
+            max_scan_type_counts=max_scan_type_counts,
+        )
+        if len(prefix) < size or not scan_type_minimums_pass(prefix, min_scan_type_counts):
+            continue
+        ids = tuple(row["source_candidate_id"] for row in prefix)
+        specs.append({"name": f"walk_forward_{selection_profile}_top_{len(ids)}", "candidate_ids": ids})
     return specs
+
+
+def select_ranked_with_scan_type_limits(
+    ranked: Sequence[dict[str, Any]],
+    *,
+    target_size: int,
+    max_scan_type_counts: dict[str, int],
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    counts: Counter[str] = Counter()
+    for row in ranked:
+        scan_type = str(row["edges"][0]["scan_type"])
+        max_count = max_scan_type_counts.get(scan_type)
+        if max_count is not None and counts[scan_type] >= max_count:
+            continue
+        selected.append(row)
+        counts[scan_type] += 1
+        if len(selected) >= target_size:
+            break
+    return selected
+
+
+def scan_type_minimums_pass(rows: Sequence[dict[str, Any]], minimums: dict[str, int]) -> bool:
+    if not minimums:
+        return True
+    counts = Counter(str(row["edges"][0]["scan_type"]) for row in rows)
+    return all(counts[scan_type] >= minimum for scan_type, minimum in minimums.items())
 
 
 def single_train_sort_key(
