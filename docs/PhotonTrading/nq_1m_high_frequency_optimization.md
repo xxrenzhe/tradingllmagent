@@ -178,3 +178,7 @@ Versioned implementation details:
 - `check_expanded_high_edge_replay()` compares a replay result against the versioned yearly baseline and flags drift.
 - IBKR strategy construction now reads preset-specific parameters, so selecting `TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET=positive_expanded_edge_top_32` uses the 99-concurrency and 120-minute netmax research settings.
 - Unit coverage in `tests/test_expanded_high_edge.py` verifies preset registration, edge-family mix, annual hard gates, and preset-specific IBKR strategy parameters.
+- `scripts/validate_expanded_high_edge_netmax.py --fail-on-drift` replays the frozen preset from local 1-minute bars and writes `reports/nq_expanded_high_edge_netmax_replay_2026-05-01.json`.
+- The frozen replay currently passes drift validation exactly: `46,851` signals/trades, `$5,804,050.00` net PnL, `5,498` minimum full-year trades, `8/8` positive checked years, and zero yearly baseline mismatches.
+
+This replay validation proves the versioned implementation reproduces the source research artifact. It does not replace rolling walk-forward selection; `tradingllmagent-2jxx` remains open for train/test selection stability, selected-edge turnover, and multiple-testing penalty reporting.
