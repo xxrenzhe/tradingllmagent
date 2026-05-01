@@ -154,6 +154,7 @@ Use these beads as implementation control points:
 - `tradingllmagent-0d0e`: add persistent SMC/high-frequency funnel diagnostics and ablation report.
 - `tradingllmagent-yad9`: promote `positive_expanded_edge_top_32` into a versioned executable strategy module.
 - `tradingllmagent-2jxx`: run walk-forward and 2026 holdout validation for the expanded high-edge basket.
+- `tradingllmagent-02v8`: optimize or replace the expanded basket after walk-forward failure.
 - `tradingllmagent-3bxz`: run tick/quote replay and cost-stress validation for the selected basket.
 - `tradingllmagent-fgou`: build risk-scaled MNQ paper plan after validation gates pass.
 
@@ -163,7 +164,7 @@ The IBKR paper wiring bead must remain blocked until the validation tasks pass.
 
 If the mandate is strictly “maximize historical net PnL while requiring every full year to have more than 1,000 trades and positive net PnL,” choose `positive_expanded_edge_top_32`.
 
-If the mandate is “prepare something realistic for paper trading,” do not choose the 99-concurrency version yet. First validate the 24-concurrency robust variant, then downscale to MNQ with strict daily loss limits.
+If the mandate is “prepare something realistic for paper trading,” do not choose the 99-concurrency version yet. The first rolling walk-forward validation failed its positive-OOS-year gate, so the basket needs another optimization pass before tick/quote replay or paper trading.
 
 ## 8. Implementation Status
 
@@ -181,4 +182,46 @@ Versioned implementation details:
 - `scripts/validate_expanded_high_edge_netmax.py --fail-on-drift` replays the frozen preset from local 1-minute bars and writes `reports/nq_expanded_high_edge_netmax_replay_2026-05-01.json`.
 - The frozen replay currently passes drift validation exactly: `46,851` signals/trades, `$5,804,050.00` net PnL, `5,498` minimum full-year trades, `8/8` positive checked years, and zero yearly baseline mismatches.
 
-This replay validation proves the versioned implementation reproduces the source research artifact. It does not replace rolling walk-forward selection; `tradingllmagent-2jxx` remains open for train/test selection stability, selected-edge turnover, and multiple-testing penalty reporting.
+This replay validation proves the versioned implementation reproduces the source research artifact. It does not prove robustness because the first rolling walk-forward validation failed.
+
+## 9. Walk-Forward Validation Result
+
+Script: `scripts/walk_forward_expanded_high_edge.py`
+
+Report: `reports/nq_expanded_high_edge_walk_forward_fast_2026-05-01.json`
+
+Method:
+
+- Expanding train windows select candidate groups and combo size only from train years.
+- The selected basket is replayed on the next unseen test year.
+- Default fast validation uses `max_preselect=40`, `max_specs=6`, `max_hold_minutes=120`, `stop_range_multiple=6.0`, and `max_concurrent_positions` selected from `6`, `12`, `24`, and `99`.
+- The report includes selected-edge turnover and a multiple-testing penalty decision.
+
+Summary:
+
+- Decision: `fail`
+- Positive OOS years: `4/6`
+- Trade-floor years: `6/6`
+- OOS total trades: `18,688`
+- OOS total net PnL: `$275,842.50`
+- Worst OOS year PnL: `-$1,067,145.00`
+- Failed positive years: `2022`, `2026`
+- Average selected-edge Jaccard similarity: `0.3163`
+- Minimum selected-edge Jaccard similarity: `0.0769`
+- Multiple-testing penalty decision: `fail`
+
+| Test Year | Trades | Net PnL | Profit Factor | Max Drawdown | Turnover Jaccard |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 2021 | 3,327 | `$354,067.50` | `1.3034` | `$168,736.25` | n/a |
+| 2022 | 4,206 | `-$1,067,145.00` | `0.6458` | `$1,204,435.00` | `0.1429` |
+| 2023 | 4,402 | `$694,790.00` | `1.4722` | `$278,498.75` | `0.0769` |
+| 2024 | 2,867 | `$250,811.25` | `1.1602` | `$336,558.75` | `0.4286` |
+| 2025 | 2,729 | `$105,091.25` | `1.0499` | `$345,697.50` | `0.6000` |
+| 2026 YTD | 1,157 | `-$61,772.50` | `0.9301` | `$362,885.00` | `0.3333` |
+
+Conclusion:
+
+- The historical in-sample net maximizer satisfies the user's hard historical annual trade/PnL target, but it does not yet satisfy rolling OOS robustness.
+- The low selected-edge stability suggests optimizer selection bias and regime dependence.
+- Do not promote `positive_expanded_edge_top_32` to paper trading as-is.
+- Next optimization bead: `tradingllmagent-02v8`, which blocks tick/quote replay and the MNQ paper plan until an OOS-positive candidate is found.

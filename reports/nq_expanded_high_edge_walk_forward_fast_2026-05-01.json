@@ -1,0 +1,607 @@
+{
+  "artifact": "expanded_high_edge_walk_forward_validation",
+  "date_from": "2019-01-01",
+  "date_to": "2026-04-27",
+  "symbol": "NQ_CME",
+  "method": {
+    "folds": [
+      {
+        "train_years": [
+          2019,
+          2020
+        ],
+        "test_year": 2021
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021
+        ],
+        "test_year": 2022
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "test_year": 2023
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "test_year": 2024
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "test_year": 2025
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "test_year": 2026
+      }
+    ],
+    "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+    "max_preselect": 40,
+    "max_specs": 6,
+    "full_grid": false,
+    "min_full_year_trades": 1000
+  },
+  "summary": {
+    "decision": {
+      "passed": false,
+      "positive_test_years": 4,
+      "test_year_count": 6,
+      "trade_floor_years": 6,
+      "failed_positive_years": [
+        2022,
+        2026
+      ],
+      "failed_trade_floor_years": []
+    },
+    "oos_total_net_pnl": 275842.5,
+    "oos_min_year_pnl": -1067145.0,
+    "oos_min_year_trades": 1157,
+    "oos_total_trades": 18688,
+    "average_turnover_jaccard": 0.3163369963369963,
+    "min_turnover_jaccard": 0.07692307692307693,
+    "multiple_testing": {
+      "candidate_group_count": 16538,
+      "evaluated_train_combo_count": 144,
+      "effective_trial_count_floor": 16682,
+      "penalty_decision": "fail",
+      "selection_bias_note": "Treat in-sample net PnL as rejected unless rolling OOS gates pass; statistical deflated Sharpe is not estimated because per-trial return paths are not persisted."
+    }
+  },
+  "folds": [
+    {
+      "train_years": [
+        2019,
+        2020
+      ],
+      "test_year": 2021,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_top_8",
+        "edge_count": 8,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 99
+        },
+        "edge_summary": {
+          "scan_types": {
+            "donchian20_breakout": 1,
+            "opening_range_breakout": 3,
+            "prior_day_breakout": 3,
+            "vwap_pullback_bounce": 1
+          },
+          "take_profit_r": {
+            "1.25": 2,
+            "1.5": 6
+          },
+          "sessions": {
+            "ny_0600_0929": 1,
+            "ny_0930_1159": 7
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "vwap_pullback_bounce|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=1",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1",
+        "donchian20_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1",
+        "prior_day_breakout|dir=long|sess=ny_0600_0929|dow=1|trend=1|vol=3"
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": null,
+        "added_count": null,
+        "removed_count": null
+      },
+      "train_metrics": {
+        "trade_count": 7088,
+        "net_pnl": 965632.5,
+        "profit_factor": 1.521412507323342,
+        "avg_trade_net_pnl": 136.2348335214447,
+        "max_drawdown": 308942.5,
+        "net_pnl_to_max_drawdown": 3.1256058975375676,
+        "win_rate": 0.5702595936794582
+      },
+      "test_metrics": {
+        "trade_count": 3327,
+        "net_pnl": 354067.5,
+        "profit_factor": 1.3034088425959647,
+        "avg_trade_net_pnl": 106.4224526600541,
+        "max_drawdown": 168736.25,
+        "net_pnl_to_max_drawdown": 2.0983487543429464,
+        "win_rate": 0.5338142470694319
+      },
+      "test_yearly_result": {
+        "year": 2021,
+        "trade_count": 3327,
+        "net_pnl": 354067.5,
+        "profit_factor": 1.3034088425959647,
+        "avg_trade_net_pnl": 106.4224526600541,
+        "max_drawdown": 168736.25
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021
+      ],
+      "test_year": 2022,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_top_16",
+        "edge_count": 16,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 99
+        },
+        "edge_summary": {
+          "scan_types": {
+            "opening_range_breakout": 2,
+            "prior_day_breakout": 14
+          },
+          "take_profit_r": {
+            "0.75": 1,
+            "1.0": 3,
+            "1.25": 4,
+            "1.5": 8
+          },
+          "sessions": {
+            "ny_0000_0559": 1,
+            "ny_0930_1159": 15
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=2",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=1|range=0",
+        "prior_day_breakout|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=0",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=1",
+        "prior_day_breakout|dir=short|sess=ny_0930_1159|dow=2|trend=-1",
+        "prior_day_breakout|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=0|range=0",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0|range=0",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=0",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|trend=1|vol=2|range=0",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1",
+        "prior_day_breakout|dir=short|sess=ny_0000_0559|dow=2|trend=-1",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|trend=1|vol=1|range=0"
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.14285714285714285,
+        "added_count": 13,
+        "removed_count": 5
+      },
+      "train_metrics": {
+        "trade_count": 12649,
+        "net_pnl": 2317285.0,
+        "profit_factor": 1.7062503238233402,
+        "avg_trade_net_pnl": 183.19906711993042,
+        "max_drawdown": 387365.0,
+        "net_pnl_to_max_drawdown": 5.982174434964439,
+        "win_rate": 0.5813898331883943
+      },
+      "test_metrics": {
+        "trade_count": 4206,
+        "net_pnl": -1067145.0,
+        "profit_factor": 0.6458009718405225,
+        "avg_trade_net_pnl": -253.7196861626248,
+        "max_drawdown": 1204435.0,
+        "net_pnl_to_max_drawdown": -0.8860129438284341,
+        "win_rate": 0.42344270090347125
+      },
+      "test_yearly_result": {
+        "year": 2022,
+        "trade_count": 4206,
+        "net_pnl": -1067145.0,
+        "profit_factor": 0.6458009718405225,
+        "avg_trade_net_pnl": -253.7196861626248,
+        "max_drawdown": 1204435.0
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022
+      ],
+      "test_year": 2023,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_top_12",
+        "edge_count": 12,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 99
+        },
+        "edge_summary": {
+          "scan_types": {
+            "high_volume_impulse_continuation": 1,
+            "opening_range_breakout": 3,
+            "prior_day_breakout": 6,
+            "range_expansion_continuation": 2
+          },
+          "take_profit_r": {
+            "0.5": 1,
+            "1.0": 1,
+            "1.25": 6,
+            "1.5": 4
+          },
+          "sessions": {
+            "ny_0930_1159": 7,
+            "ny_1200_1559": 5
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=1",
+        "high_volume_impulse_continuation|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3|range=3",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=0",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|trend=1|vol=2|range=0",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=2|trend=-1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=3|trend=-1|vol=1|range=0",
+        "prior_day_breakout|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1",
+        "prior_day_breakout|dir=long|sess=ny_1200_1559|dow=5|trend=1",
+        "prior_day_breakout|dir=long|sess=ny_1200_1559|dow=5|trend=1|vol=1"
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.07692307692307693,
+        "added_count": 10,
+        "removed_count": 14
+      },
+      "train_metrics": {
+        "trade_count": 13663,
+        "net_pnl": 2253710.0,
+        "profit_factor": 1.5772371779356378,
+        "avg_trade_net_pnl": 164.94986459781893,
+        "max_drawdown": 185690.0,
+        "net_pnl_to_max_drawdown": 12.136948677904034,
+        "win_rate": 0.5536851350362292
+      },
+      "test_metrics": {
+        "trade_count": 4402,
+        "net_pnl": 694790.0,
+        "profit_factor": 1.4721596449917262,
+        "avg_trade_net_pnl": 157.83507496592458,
+        "max_drawdown": 278498.75,
+        "net_pnl_to_max_drawdown": 2.4947688275082025,
+        "win_rate": 0.5624716038164471
+      },
+      "test_yearly_result": {
+        "year": 2023,
+        "trade_count": 4402,
+        "net_pnl": 694790.0,
+        "profit_factor": 1.4721596449917262,
+        "avg_trade_net_pnl": 157.83507496592458,
+        "max_drawdown": 278498.75
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023
+      ],
+      "test_year": 2024,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_top_8",
+        "edge_count": 8,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 99
+        },
+        "edge_summary": {
+          "scan_types": {
+            "opening_range_breakout": 4,
+            "prior_day_breakout": 3,
+            "range_expansion_continuation": 1
+          },
+          "take_profit_r": {
+            "1.0": 1,
+            "1.25": 4,
+            "1.5": 3
+          },
+          "sessions": {
+            "ny_0930_1159": 5,
+            "ny_1200_1559": 3
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=0",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=1",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|trend=1|vol=2|range=0",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3"
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.42857142857142855,
+        "added_count": 2,
+        "removed_count": 6
+      },
+      "train_metrics": {
+        "trade_count": 13937,
+        "net_pnl": 2715260.0,
+        "profit_factor": 1.507528079596708,
+        "avg_trade_net_pnl": 194.8238501829662,
+        "max_drawdown": 282263.75,
+        "net_pnl_to_max_drawdown": 9.61958451979753,
+        "win_rate": 0.5445217765659754
+      },
+      "test_metrics": {
+        "trade_count": 2867,
+        "net_pnl": 250811.25,
+        "profit_factor": 1.1602202930213394,
+        "avg_trade_net_pnl": 87.48212417160795,
+        "max_drawdown": 336558.75,
+        "net_pnl_to_max_drawdown": 0.7452227879976379,
+        "win_rate": 0.5374956400418556
+      },
+      "test_yearly_result": {
+        "year": 2024,
+        "trade_count": 2867,
+        "net_pnl": 250811.25,
+        "profit_factor": 1.1602202930213394,
+        "avg_trade_net_pnl": 87.48212417160795,
+        "max_drawdown": 336558.75
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "test_year": 2025,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_top_8",
+        "edge_count": 8,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 99
+        },
+        "edge_summary": {
+          "scan_types": {
+            "opening_range_breakout": 4,
+            "prior_day_breakout": 4
+          },
+          "take_profit_r": {
+            "1.25": 2,
+            "1.5": 6
+          },
+          "sessions": {
+            "ny_0930_1159": 5,
+            "ny_1200_1559": 3
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=3",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=0",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=1",
+        "prior_day_breakout|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0"
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.6,
+        "added_count": 2,
+        "removed_count": 2
+      },
+      "train_metrics": {
+        "trade_count": 15914,
+        "net_pnl": 3014405.0,
+        "profit_factor": 1.4586854356507732,
+        "avg_trade_net_pnl": 189.4184365967073,
+        "max_drawdown": 298052.5,
+        "net_pnl_to_max_drawdown": 10.113671249192675,
+        "win_rate": 0.5429181852456956
+      },
+      "test_metrics": {
+        "trade_count": 2729,
+        "net_pnl": 105091.25,
+        "profit_factor": 1.0499442773159964,
+        "avg_trade_net_pnl": 38.50906925613778,
+        "max_drawdown": 345697.5,
+        "net_pnl_to_max_drawdown": 0.3039977147650764,
+        "win_rate": 0.4844265298644192
+      },
+      "test_yearly_result": {
+        "year": 2025,
+        "trade_count": 2729,
+        "net_pnl": 105091.25,
+        "profit_factor": 1.0499442773159964,
+        "avg_trade_net_pnl": 38.50906925613778,
+        "max_drawdown": 345697.5
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "test_year": 2026,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_top_8",
+        "edge_count": 8,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 99
+        },
+        "edge_summary": {
+          "scan_types": {
+            "opening_range_breakout": 4,
+            "prior_day_breakout": 3,
+            "vwap_pullback_bounce": 1
+          },
+          "take_profit_r": {
+            "1.0": 1,
+            "1.25": 1,
+            "1.5": 6
+          },
+          "sessions": {
+            "ny_0930_1159": 6,
+            "ny_1200_1559": 2
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=0",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=3",
+        "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=2|trend=1",
+        "prior_day_breakout|dir=short|sess=ny_0930_1159|dow=2|trend=-1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=1",
+        "vwap_pullback_bounce|dir=short|sess=ny_1200_1559|dow=4|trend=-1"
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.3333333333333333,
+        "added_count": 4,
+        "removed_count": 4
+      },
+      "train_metrics": {
+        "trade_count": 24576,
+        "net_pnl": 3169975.0,
+        "profit_factor": 1.2784360553819831,
+        "avg_trade_net_pnl": 128.98661295572916,
+        "max_drawdown": 272626.25,
+        "net_pnl_to_max_drawdown": 11.627548704499292,
+        "win_rate": 0.5336100260416666
+      },
+      "test_metrics": {
+        "trade_count": 1157,
+        "net_pnl": -61772.5,
+        "profit_factor": 0.930063061839096,
+        "avg_trade_net_pnl": -53.390233362143476,
+        "max_drawdown": 362885.0,
+        "net_pnl_to_max_drawdown": -0.17022610468881327,
+        "win_rate": 0.4874675885911841
+      },
+      "test_yearly_result": {
+        "year": 2026,
+        "trade_count": 1157,
+        "net_pnl": -61772.5,
+        "profit_factor": 0.930063061839096,
+        "avg_trade_net_pnl": -53.390233362143476,
+        "max_drawdown": 362885.0
+      }
+    }
+  ]
+}
