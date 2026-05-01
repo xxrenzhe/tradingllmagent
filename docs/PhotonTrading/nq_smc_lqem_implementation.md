@@ -12,6 +12,7 @@ The implementation target is:
 - Paper/runtime symbol: `MNQ_IBKR`
 - Base timeframe: completed 1-minute bars
 - Higher timeframe: completed 15-minute bars built from 1-minute bars
+- Visual review artifact: TradingView Pine Script strategy/overlay for NQ or MNQ charts
 - Execution order: parent limit order with stop and take-profit bracket
 - Default deployment path: backtest, quote/tick replay, MNQ paper soak, then live review
 
@@ -519,7 +520,343 @@ take_profit_price = signal.take_profit_price
 quantity = signal.quantity_hint or risk-sized quantity
 ```
 
-## 12. File-Level Implementation Map
+## 12. TradingView Pine Script Visualization
+
+TradingView support is a required implementation artifact. Its purpose is visual validation, manual review, and fast inspection of setup quality on NQ/MNQ charts. It is not the execution source of truth.
+
+Pine Script rules:
+
+- Use Pine Script v5.
+- Run on a 1-minute NQ or MNQ chart.
+- Use 15-minute higher timeframe structure through `request.security(..., lookahead = barmerge.lookahead_off)`.
+- Plot HTF order blocks, PBL levels, sweep markers, LTF ChoCh markers, entry, stop, and take-profit.
+- Use `strategy()` rather than `indicator()` so TradingView can run a rough visual backtest.
+- Treat TradingView results as approximate because broker fill simulation, futures costs, roll handling, and quote-level fill ambiguity differ from the Python backtester.
+- The Python implementation remains authoritative for promotion gates.
+
+The first Pine deliverable should be saved as:
+
+```text
+docs/PhotonTrading/nq_smc_lqem_visual_strategy.pine
+```
+
+The Pine source must also be kept in parity with the Python parameter names in Section 17.
+
+Initial Pine Script prototype:
+
+```pine
+//@version=5
+strategy("NQ SMC LQ-EM CE v1 Visual Strategy", overlay=true, pyramiding=0, calc_on_every_tick=false, process_orders_on_close=false, max_boxes_count=100, max_labels_count=200, max_lines_count=200)
+
+htfTf = input.timeframe("15", "HTF timeframe")
+tradeSession = input.session("0935-1130,1330-1530", "NY signal session")
+tickSize = input.float(0.25, "Tick size", minval=0.01)
+pointValue = input.float(20.0, "Point value")
+htfLeft = input.int(3, "HTF swing left", minval=1)
+htfRight = input.int(3, "HTF swing right", minval=1)
+ltfLeft = input.int(2, "LTF swing left", minval=1)
+ltfRight = input.int(2, "LTF swing right", minval=1)
+breakBufferTicks = input.int(1, "Break buffer ticks", minval=0)
+minHtfRangeTicks = input.int(80, "Min HTF range ticks", minval=1)
+pblClearanceTicks = input.int(4, "PBL clearance ticks", minval=0)
+sweepBufferTicks = input.int(1, "Sweep buffer ticks", minval=0)
+stopBufferTicks = input.int(4, "Stop buffer ticks", minval=0)
+minStopTicks = input.int(8, "Min stop ticks", minval=1)
+maxStopTicks = input.int(80, "Max stop ticks", minval=1)
+minRewardR = input.float(2.0, "Min reward R", minval=0.25)
+defaultTakeProfitR = input.float(3.0, "Default take profit R", minval=0.25)
+pendingTtlBars = input.int(10, "Pending TTL bars", minval=1)
+
+int IDLE = 0
+int WAITING_FOR_PBL = 1
+int WAITING_FOR_SWEEP = 2
+int MONITORING_LTF_CHOCH = 3
+int ORDER_PENDING = 4
+int IN_POSITION = 5
+int COOLDOWN = 6
+
+roundToTick(price) =>
+    math.round(price / tickSize) * tickSize
+
+ticksBetween(a, b) =>
+    math.round(math.abs(a - b) / tickSize)
+
+inSession = not na(time(timeframe.period, tradeSession, "America/New_York"))
+
+[htfOpen, htfHigh, htfLow, htfClose, htfTime, htfAtr, htfPivotHigh, htfPivotLow] = request.security(
+     syminfo.tickerid,
+     htfTf,
+     [open, high, low, close, time, ta.atr(14), ta.pivothigh(high, htfLeft, htfRight), ta.pivotlow(low, htfLeft, htfRight)],
+     lookahead=barmerge.lookahead_off)
+
+newHtfBar = ta.change(htfTime) != 0
+
+ltfPivotHigh = ta.pivothigh(high, ltfLeft, ltfRight)
+ltfPivotLow = ta.pivotlow(low, ltfLeft, ltfRight)
+
+var float lastHtfSwingHigh = na
+var float lastHtfSwingLow = na
+var float lastLtfSwingHigh = na
+var float lastLtfSwingLow = na
+var float lastHtfBearLow = na
+var float lastHtfBearHigh = na
+var float lastHtfBullLow = na
+var float lastHtfBullHigh = na
+var float lastLtfBearLow = na
+var float lastLtfBearHigh = na
+var float lastLtfBullLow = na
+var float lastLtfBullHigh = na
+var int trend = 0
+var int state = IDLE
+var int activeDir = 0
+var float htfObLow = na
+var float htfObHigh = na
+var float pblPrice = na
+var float sweepExtreme = na
+var float entryPrice = na
+var float stopPrice = na
+var float takeProfitPrice = na
+var int pendingBar = na
+var box htfObBox = na
+var line pblLine = na
+var line entryLine = na
+var line stopLine = na
+var line tpLine = na
+
+if not na(ltfPivotHigh)
+    lastLtfSwingHigh := ltfPivotHigh
+if not na(ltfPivotLow)
+    lastLtfSwingLow := ltfPivotLow
+
+if close < open
+    lastLtfBearLow := low
+    lastLtfBearHigh := math.max(open, close)
+if close > open
+    lastLtfBullLow := math.min(open, close)
+    lastLtfBullHigh := high
+
+if newHtfBar
+    if not na(htfPivotHigh)
+        lastHtfSwingHigh := htfPivotHigh
+    if not na(htfPivotLow)
+        lastHtfSwingLow := htfPivotLow
+    if htfClose < htfOpen
+        lastHtfBearLow := htfLow
+        lastHtfBearHigh := math.max(htfOpen, htfClose)
+    if htfClose > htfOpen
+        lastHtfBullLow := math.min(htfOpen, htfClose)
+        lastHtfBullHigh := htfHigh
+
+rangeReady = not na(lastHtfSwingHigh) and not na(lastHtfSwingLow) and lastHtfSwingHigh > lastHtfSwingLow
+rangeTicks = rangeReady ? ticksBetween(lastHtfSwingHigh, lastHtfSwingLow) : 0
+equilibrium = rangeReady ? (lastHtfSwingHigh + lastHtfSwingLow) / 2.0 : na
+
+bullBreak = newHtfBar and rangeReady and htfClose > lastHtfSwingHigh + breakBufferTicks * tickSize
+bearBreak = newHtfBar and rangeReady and htfClose < lastHtfSwingLow - breakBufferTicks * tickSize
+
+validRange = rangeTicks >= minHtfRangeTicks
+
+if bullBreak and validRange and not na(lastHtfBearLow) and not na(lastHtfBearHigh)
+    candidateMid = (lastHtfBearLow + lastHtfBearHigh) / 2.0
+    if candidateMid <= equilibrium
+        trend := 1
+        activeDir := 1
+        htfObLow := lastHtfBearLow
+        htfObHigh := lastHtfBearHigh
+        pblPrice := na
+        sweepExtreme := na
+        state := WAITING_FOR_PBL
+        box.delete(htfObBox)
+        htfObBox := box.new(bar_index, htfObHigh, bar_index + 1, htfObLow, bgcolor=color.new(color.green, 82), border_color=color.new(color.green, 20), extend=extend.right)
+        label.new(bar_index, htfObHigh, "HTF bullish OB", style=label.style_label_down, color=color.new(color.green, 0), textcolor=color.white)
+
+if bearBreak and validRange and not na(lastHtfBullLow) and not na(lastHtfBullHigh)
+    candidateMid = (lastHtfBullLow + lastHtfBullHigh) / 2.0
+    if candidateMid >= equilibrium
+        trend := -1
+        activeDir := -1
+        htfObLow := lastHtfBullLow
+        htfObHigh := lastHtfBullHigh
+        pblPrice := na
+        sweepExtreme := na
+        state := WAITING_FOR_PBL
+        box.delete(htfObBox)
+        htfObBox := box.new(bar_index, htfObHigh, bar_index + 1, htfObLow, bgcolor=color.new(color.red, 82), border_color=color.new(color.red, 20), extend=extend.right)
+        label.new(bar_index, htfObLow, "HTF bearish OB", style=label.style_label_up, color=color.new(color.red, 0), textcolor=color.white)
+
+if state == WAITING_FOR_PBL and activeDir == 1 and not na(ltfPivotLow) and ltfPivotLow > htfObHigh + pblClearanceTicks * tickSize
+    pblPrice := ltfPivotLow
+    state := WAITING_FOR_SWEEP
+    line.delete(pblLine)
+    pblLine := line.new(bar_index - ltfRight, pblPrice, bar_index, pblPrice, extend=extend.right, color=color.new(color.yellow, 0), style=line.style_dashed)
+
+if state == WAITING_FOR_PBL and activeDir == -1 and not na(ltfPivotHigh) and ltfPivotHigh < htfObLow - pblClearanceTicks * tickSize
+    pblPrice := ltfPivotHigh
+    state := WAITING_FOR_SWEEP
+    line.delete(pblLine)
+    pblLine := line.new(bar_index - ltfRight, pblPrice, bar_index, pblPrice, extend=extend.right, color=color.new(color.yellow, 0), style=line.style_dashed)
+
+touchesHtfOb = not na(htfObLow) and not na(htfObHigh) and low <= htfObHigh and high >= htfObLow
+longSweep = state == WAITING_FOR_SWEEP and activeDir == 1 and not na(pblPrice) and low < pblPrice - sweepBufferTicks * tickSize and close > pblPrice and touchesHtfOb
+shortSweep = state == WAITING_FOR_SWEEP and activeDir == -1 and not na(pblPrice) and high > pblPrice + sweepBufferTicks * tickSize and close < pblPrice and touchesHtfOb
+
+if longSweep
+    sweepExtreme := low
+    state := MONITORING_LTF_CHOCH
+    label.new(bar_index, low, "Sweep", style=label.style_label_up, color=color.new(color.green, 0), textcolor=color.white)
+
+if shortSweep
+    sweepExtreme := high
+    state := MONITORING_LTF_CHOCH
+    label.new(bar_index, high, "Sweep", style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white)
+
+longChoch = state == MONITORING_LTF_CHOCH and activeDir == 1 and not na(lastLtfSwingHigh) and close > lastLtfSwingHigh + breakBufferTicks * tickSize
+shortChoch = state == MONITORING_LTF_CHOCH and activeDir == -1 and not na(lastLtfSwingLow) and close < lastLtfSwingLow - breakBufferTicks * tickSize
+
+if longChoch and not na(lastLtfBearLow) and not na(lastLtfBearHigh) and inSession
+    entryPrice := roundToTick(lastLtfBearHigh)
+    stopPrice := roundToTick(math.min(lastLtfBearLow, sweepExtreme) - stopBufferTicks * tickSize)
+    stopTicks = ticksBetween(entryPrice, stopPrice)
+    takeProfitPrice := roundToTick(entryPrice + math.max(minRewardR, defaultTakeProfitR) * (entryPrice - stopPrice))
+    if stopTicks >= minStopTicks and stopTicks <= maxStopTicks
+        strategy.entry("SMC-L", strategy.long, limit=entryPrice)
+        strategy.exit("SMC-LX", "SMC-L", stop=stopPrice, limit=takeProfitPrice)
+        pendingBar := bar_index
+        state := ORDER_PENDING
+        label.new(bar_index, high, "LTF ChoCh long", style=label.style_label_down, color=color.new(color.green, 0), textcolor=color.white)
+
+if shortChoch and not na(lastLtfBullLow) and not na(lastLtfBullHigh) and inSession
+    entryPrice := roundToTick(lastLtfBullLow)
+    stopPrice := roundToTick(math.max(lastLtfBullHigh, sweepExtreme) + stopBufferTicks * tickSize)
+    stopTicks = ticksBetween(entryPrice, stopPrice)
+    takeProfitPrice := roundToTick(entryPrice - math.max(minRewardR, defaultTakeProfitR) * (stopPrice - entryPrice))
+    if stopTicks >= minStopTicks and stopTicks <= maxStopTicks
+        strategy.entry("SMC-S", strategy.short, limit=entryPrice)
+        strategy.exit("SMC-SX", "SMC-S", stop=stopPrice, limit=takeProfitPrice)
+        pendingBar := bar_index
+        state := ORDER_PENDING
+        label.new(bar_index, low, "LTF ChoCh short", style=label.style_label_up, color=color.new(color.red, 0), textcolor=color.white)
+
+if state == ORDER_PENDING
+    line.delete(entryLine)
+    line.delete(stopLine)
+    line.delete(tpLine)
+    entryLine := line.new(bar_index, entryPrice, bar_index + 1, entryPrice, extend=extend.right, color=color.white)
+    stopLine := line.new(bar_index, stopPrice, bar_index + 1, stopPrice, extend=extend.right, color=color.red)
+    tpLine := line.new(bar_index, takeProfitPrice, bar_index + 1, takeProfitPrice, extend=extend.right, color=color.green)
+    targetTouchedBeforeFill = activeDir == 1 ? high >= takeProfitPrice : low <= takeProfitPrice
+    ttlExpired = not na(pendingBar) and bar_index - pendingBar > pendingTtlBars
+    if strategy.position_size == 0 and (targetTouchedBeforeFill or ttlExpired or not inSession)
+        strategy.cancel("SMC-L")
+        strategy.cancel("SMC-S")
+        state := COOLDOWN
+    if strategy.position_size != 0
+        state := IN_POSITION
+
+if state == IN_POSITION and strategy.position_size == 0
+    state := COOLDOWN
+
+if state == COOLDOWN and strategy.position_size == 0 and bar_index - nz(pendingBar, bar_index) > pendingTtlBars
+    state := IDLE
+    activeDir := 0
+    pendingBar := na
+
+plot(equilibrium, "HTF equilibrium", color=color.new(color.gray, 50))
+plot(lastHtfSwingHigh, "HTF swing high", color=color.new(color.red, 65), style=plot.style_linebr)
+plot(lastHtfSwingLow, "HTF swing low", color=color.new(color.green, 65), style=plot.style_linebr)
+bgcolor(state == MONITORING_LTF_CHOCH ? color.new(color.blue, 90) : na)
+```
+
+Pine acceptance criteria:
+
+- Compiles in TradingView Pine v5.
+- Displays HTF OB zones, PBL, sweeps, ChoCh, entry, stop, and target.
+- Uses `lookahead_off` for higher timeframe data.
+- Documents any intentional approximation versus the Python engine.
+- Includes at least five chart screenshots or saved chart links covering long setup, short setup, cancellation, stop, and target.
+
+## 13. Historical Backtest and Optimization Loop
+
+Historical testing and optimization are mandatory. If the first parameter set performs poorly, the implementation must continue through a bounded optimization loop instead of stopping at the first weak result.
+
+Backtest stages:
+
+1. Synthetic correctness backtest: deterministic fixtures prove entries, cancellations, stops, targets, and no-lookahead behavior.
+2. Historical OHLCV backtest: run full available `NQ_CME` 1-minute history using conservative limit-fill assumptions.
+3. Quote or tick replay validation: rerun candidate trades where quote/tick data is available to validate fills, stop-target ordering, spread, and slippage.
+4. Walk-forward validation: train, validation, test, embargo, and final holdout windows from Section 10.
+5. MNQ paper trading: only after historical and quote/tick gates pass.
+
+Required outputs:
+
+- Full-history trade list and equity curve.
+- Yearly and monthly PnL.
+- Profit factor, expectancy, max drawdown, Sharpe, average R, median R, win rate, average hold time.
+- Setup attribution by direction, session window, HTF trend type, OB size bucket, sweep type, stop size bucket, and target type.
+- Cost stress at 1x, 2x, and 3x configured slippage.
+- Top 20 winning trades and top 20 losing trades with SMC audit payloads.
+- Rejected setup report explaining why candidate setups did not become trades.
+
+Minimum pass gates:
+
+- Final holdout profit factor greater than `1.05`.
+- Positive expectancy after 2x cost stress.
+- At least 200 completed trades across full in-sample and validation, unless deliberately classified as a low-frequency discretionary aid.
+- No single calendar year contributes more than 40% of total net profit.
+- Max drawdown below 2.5x annualized expected profit.
+- Median hold time below 45 minutes unless explicitly approved.
+- Quote/tick replay confirms fills are not dependent on ambiguous OHLC sequencing.
+
+Optimization policy:
+
+- Optimize only after the baseline parameter set is fully reported.
+- Use bounded parameter ranges from this section and the defaults in Section 17; do not introduce new discretionary concepts during optimization.
+- Optimize on training windows only.
+- Select parameters by validation objective, not by training net profit.
+- Keep a final holdout untouched until the selected candidate is frozen.
+- Penalize complexity, low trade count, excessive holding time, and sensitivity to slippage.
+- Stop optimization if three consecutive bounded search rounds fail final holdout gates; create a bd decision issue before changing the core strategy thesis.
+
+Optimization parameter ranges:
+
+```text
+htf_swing_left/right: 2-5
+ltf_swing_left/right: 1-4
+break_buffer_ticks: 0-4
+min_htf_range_ticks: 40-160
+min_ob_ticks: 4-24
+max_ob_ticks: 40-180
+min_micro_ob_ticks: 2-12
+max_micro_ob_ticks: 20-80
+pbl_clearance_ticks: 0-12
+sweep_buffer_ticks: 0-4
+stop_buffer_ticks: 2-12
+min_stop_ticks: 6-24
+max_stop_ticks: 40-120
+min_reward_r: 1.5-3.0
+default_take_profit_r: 2.0-5.0
+pending_ttl_bars: 3-20
+displacement_atr_multiple: 0.25-1.25
+relative_tick_count_min: 0.8-1.5
+session windows: RTH-only subsets; overnight disabled unless a separate bd issue approves it
+```
+
+Optimization deliverables:
+
+- `reports/nq_smc_lqem_baseline_<date>.md`
+- `reports/nq_smc_lqem_optimization_<date>.md`
+- machine-readable parameter search artifact under `experiments/`
+- final selected strategy spec or explicit rejection report
+
+If performance remains weak:
+
+- Do not proceed to paper auto-submit.
+- Preserve the failed baseline and optimization reports.
+- Create a bd issue for thesis review with evidence.
+- Candidate improvements must be one change family at a time: session filter, pivot sensitivity, OB definition, sweep definition, target model, or cost/fill model.
+- Any major new concept, such as advanced order flow or supply/demand flips, requires a separate design issue before coding.
+
+## 14. File-Level Implementation Map
 
 Expected code changes:
 
@@ -527,15 +864,18 @@ Expected code changes:
 - `src/tlm/smc_state.py`: event-driven state machine and audit objects.
 - `src/tlm/backtest.py`: register `smc_lqem_ce` and call the SMC backtest runner.
 - `src/tlm/strategy.py`: allow `smc_lqem_ce` family and validate SMC parameter schema.
+- `src/tlm/smc_optimization.py` or an equivalent experiment script: bounded historical parameter search and final holdout selection.
 - `src/tlm/ibkr_paper.py` or a sibling runtime module: wire SMC signal generation into paper decision cycles.
 - `strategies/nq_smc_lqem_ce_v1.yaml`: first executable strategy spec.
+- `docs/PhotonTrading/nq_smc_lqem_visual_strategy.pine`: TradingView visual strategy prototype.
 - `tests/test_smc.py`: deterministic algorithm tests.
 - `tests/test_smc_backtest.py`: backtest and no-lookahead tests.
+- `tests/test_smc_optimization.py`: bounded optimization and holdout integrity tests.
 - `tests/test_ibkr_smc_runtime.py`: bracket payload, cancellation, and readiness tests.
 
-No separate Backtrader dependency is required. The existing project backtester and gateway should be extended instead.
+No separate Backtrader dependency is required. The existing project backtester and gateway should be extended instead. TradingView is used only for visual inspection and approximate chart-level strategy replay.
 
-## 13. Test Matrix
+## 15. Test Matrix
 
 Unit tests:
 
@@ -565,11 +905,26 @@ Runtime tests:
 - kill switch cancels brackets and flattens position
 - paper loop does not submit if readiness is incomplete
 
-## 14. Acceptance Gates
+Pine tests:
+
+- Pine file compiles in TradingView.
+- HTF data uses `lookahead_off`.
+- Visual markers align with Python audit samples on at least five known setups.
+- Pine deviations are documented and do not override Python backtest results.
+
+Optimization tests:
+
+- parameter search uses only training data for fitting
+- validation objective selects the candidate
+- final holdout is evaluated once after candidate freeze
+- failed optimization rounds emit rejection reports rather than silently changing the thesis
+
+## 16. Acceptance Gates
 
 Implementation gate:
 
 - all SMC unit tests pass
+- Pine visual strategy compiles and displays required overlays
 - strategy spec validator accepts `nq_smc_lqem_ce_v1.yaml`
 - backtest runner produces deterministic trades on synthetic data
 - no-lookahead test fails if right-side pivot confirmation is removed
@@ -579,7 +934,9 @@ Research gate:
 - run on full available `NQ_CME` 1-minute history
 - run walk-forward and final holdout
 - run 1x, 2x, 3x cost stress
+- run bounded optimization if baseline gates fail
 - produce strategy report with trade distribution, yearly performance, drawdown, R distribution, and setup audit samples
+- produce explicit rejection report if optimized variants still fail gates
 
 Execution validation gate:
 
@@ -597,7 +954,7 @@ Promotion gate:
 - first live phase uses MNQ only
 - NQ full-size trading requires a separate bd issue and explicit approval
 
-## 15. Default Parameter Block
+## 17. Default Parameter Block
 
 ```json
 {
@@ -650,7 +1007,7 @@ Promotion gate:
 }
 ```
 
-## 16. Known Limits
+## 18. Known Limits
 
 This plan does not claim that SMC has edge on NQ before testing. It only makes the strategy mechanically implementable and testable.
 
@@ -665,7 +1022,7 @@ The first version deliberately avoids:
 
 These can be added after v1 generates audited evidence.
 
-## 17. bd Work Breakdown Reference
+## 19. bd Work Breakdown Reference
 
 Implementation work is tracked in bd, not in markdown task lists. The related bd epic and child issues created for this plan are the source of truth for sequencing, ownership, and completion state.
 
@@ -680,3 +1037,10 @@ Issue map:
 | `tradingllmagent-8nr8` | Validation reports and cost stress | `tradingllmagent-ukc7` |
 | `tradingllmagent-pwo4` | IBKR paper runtime wiring | `tradingllmagent-ukc7` |
 | `tradingllmagent-hokm` | MNQ paper soak and promotion review | `tradingllmagent-8nr8`, `tradingllmagent-pwo4` |
+
+Additional required issues:
+
+| bd issue | Scope | Depends on |
+| --- | --- | --- |
+| `tradingllmagent-u4gk` | TradingView Pine visual strategy validation | `tradingllmagent-ysm0` |
+| `tradingllmagent-m0un` | Historical backtest and bounded optimization loop | `tradingllmagent-8nr8` |

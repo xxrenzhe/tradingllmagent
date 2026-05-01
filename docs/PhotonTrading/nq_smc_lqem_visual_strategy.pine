@@ -1,0 +1,219 @@
+//@version=5
+strategy("NQ SMC LQ-EM CE v1 Visual Strategy", overlay=true, pyramiding=0, calc_on_every_tick=false, process_orders_on_close=false, max_boxes_count=100, max_labels_count=200, max_lines_count=200)
+
+htfTf = input.timeframe("15", "HTF timeframe")
+tradeSession = input.session("0935-1130,1330-1530", "NY signal session")
+tickSize = input.float(0.25, "Tick size", minval=0.01)
+pointValue = input.float(20.0, "Point value")
+htfLeft = input.int(3, "HTF swing left", minval=1)
+htfRight = input.int(3, "HTF swing right", minval=1)
+ltfLeft = input.int(2, "LTF swing left", minval=1)
+ltfRight = input.int(2, "LTF swing right", minval=1)
+breakBufferTicks = input.int(1, "Break buffer ticks", minval=0)
+minHtfRangeTicks = input.int(80, "Min HTF range ticks", minval=1)
+pblClearanceTicks = input.int(4, "PBL clearance ticks", minval=0)
+sweepBufferTicks = input.int(1, "Sweep buffer ticks", minval=0)
+stopBufferTicks = input.int(4, "Stop buffer ticks", minval=0)
+minStopTicks = input.int(8, "Min stop ticks", minval=1)
+maxStopTicks = input.int(80, "Max stop ticks", minval=1)
+minRewardR = input.float(2.0, "Min reward R", minval=0.25)
+defaultTakeProfitR = input.float(3.0, "Default take profit R", minval=0.25)
+pendingTtlBars = input.int(10, "Pending TTL bars", minval=1)
+
+int IDLE = 0
+int WAITING_FOR_PBL = 1
+int WAITING_FOR_SWEEP = 2
+int MONITORING_LTF_CHOCH = 3
+int ORDER_PENDING = 4
+int IN_POSITION = 5
+int COOLDOWN = 6
+
+roundToTick(price) =>
+    math.round(price / tickSize) * tickSize
+
+ticksBetween(a, b) =>
+    math.round(math.abs(a - b) / tickSize)
+
+inSession = not na(time(timeframe.period, tradeSession, "America/New_York"))
+
+[htfOpen, htfHigh, htfLow, htfClose, htfTime, htfAtr, htfPivotHigh, htfPivotLow] = request.security(
+     syminfo.tickerid,
+     htfTf,
+     [open, high, low, close, time, ta.atr(14), ta.pivothigh(high, htfLeft, htfRight), ta.pivotlow(low, htfLeft, htfRight)],
+     lookahead=barmerge.lookahead_off)
+
+newHtfBar = ta.change(htfTime) != 0
+
+ltfPivotHigh = ta.pivothigh(high, ltfLeft, ltfRight)
+ltfPivotLow = ta.pivotlow(low, ltfLeft, ltfRight)
+
+var float lastHtfSwingHigh = na
+var float lastHtfSwingLow = na
+var float lastLtfSwingHigh = na
+var float lastLtfSwingLow = na
+var float lastHtfBearLow = na
+var float lastHtfBearHigh = na
+var float lastHtfBullLow = na
+var float lastHtfBullHigh = na
+var float lastLtfBearLow = na
+var float lastLtfBearHigh = na
+var float lastLtfBullLow = na
+var float lastLtfBullHigh = na
+var int trend = 0
+var int state = IDLE
+var int activeDir = 0
+var float htfObLow = na
+var float htfObHigh = na
+var float pblPrice = na
+var float sweepExtreme = na
+var float entryPrice = na
+var float stopPrice = na
+var float takeProfitPrice = na
+var int pendingBar = na
+var box htfObBox = na
+var line pblLine = na
+var line entryLine = na
+var line stopLine = na
+var line tpLine = na
+
+if not na(ltfPivotHigh)
+    lastLtfSwingHigh := ltfPivotHigh
+if not na(ltfPivotLow)
+    lastLtfSwingLow := ltfPivotLow
+
+if close < open
+    lastLtfBearLow := low
+    lastLtfBearHigh := math.max(open, close)
+if close > open
+    lastLtfBullLow := math.min(open, close)
+    lastLtfBullHigh := high
+
+if newHtfBar
+    if not na(htfPivotHigh)
+        lastHtfSwingHigh := htfPivotHigh
+    if not na(htfPivotLow)
+        lastHtfSwingLow := htfPivotLow
+    if htfClose < htfOpen
+        lastHtfBearLow := htfLow
+        lastHtfBearHigh := math.max(htfOpen, htfClose)
+    if htfClose > htfOpen
+        lastHtfBullLow := math.min(htfOpen, htfClose)
+        lastHtfBullHigh := htfHigh
+
+rangeReady = not na(lastHtfSwingHigh) and not na(lastHtfSwingLow) and lastHtfSwingHigh > lastHtfSwingLow
+rangeTicks = rangeReady ? ticksBetween(lastHtfSwingHigh, lastHtfSwingLow) : 0
+equilibrium = rangeReady ? (lastHtfSwingHigh + lastHtfSwingLow) / 2.0 : na
+
+bullBreak = newHtfBar and rangeReady and htfClose > lastHtfSwingHigh + breakBufferTicks * tickSize
+bearBreak = newHtfBar and rangeReady and htfClose < lastHtfSwingLow - breakBufferTicks * tickSize
+validRange = rangeTicks >= minHtfRangeTicks
+
+if bullBreak and validRange and not na(lastHtfBearLow) and not na(lastHtfBearHigh)
+    candidateMid = (lastHtfBearLow + lastHtfBearHigh) / 2.0
+    if candidateMid <= equilibrium
+        trend := 1
+        activeDir := 1
+        htfObLow := lastHtfBearLow
+        htfObHigh := lastHtfBearHigh
+        pblPrice := na
+        sweepExtreme := na
+        state := WAITING_FOR_PBL
+        box.delete(htfObBox)
+        htfObBox := box.new(bar_index, htfObHigh, bar_index + 1, htfObLow, bgcolor=color.new(color.green, 82), border_color=color.new(color.green, 20), extend=extend.right)
+        label.new(bar_index, htfObHigh, "HTF bullish OB", style=label.style_label_down, color=color.new(color.green, 0), textcolor=color.white)
+
+if bearBreak and validRange and not na(lastHtfBullLow) and not na(lastHtfBullHigh)
+    candidateMid = (lastHtfBullLow + lastHtfBullHigh) / 2.0
+    if candidateMid >= equilibrium
+        trend := -1
+        activeDir := -1
+        htfObLow := lastHtfBullLow
+        htfObHigh := lastHtfBullHigh
+        pblPrice := na
+        sweepExtreme := na
+        state := WAITING_FOR_PBL
+        box.delete(htfObBox)
+        htfObBox := box.new(bar_index, htfObHigh, bar_index + 1, htfObLow, bgcolor=color.new(color.red, 82), border_color=color.new(color.red, 20), extend=extend.right)
+        label.new(bar_index, htfObLow, "HTF bearish OB", style=label.style_label_up, color=color.new(color.red, 0), textcolor=color.white)
+
+if state == WAITING_FOR_PBL and activeDir == 1 and not na(ltfPivotLow) and ltfPivotLow > htfObHigh + pblClearanceTicks * tickSize
+    pblPrice := ltfPivotLow
+    state := WAITING_FOR_SWEEP
+    line.delete(pblLine)
+    pblLine := line.new(bar_index - ltfRight, pblPrice, bar_index, pblPrice, extend=extend.right, color=color.new(color.yellow, 0), style=line.style_dashed)
+
+if state == WAITING_FOR_PBL and activeDir == -1 and not na(ltfPivotHigh) and ltfPivotHigh < htfObLow - pblClearanceTicks * tickSize
+    pblPrice := ltfPivotHigh
+    state := WAITING_FOR_SWEEP
+    line.delete(pblLine)
+    pblLine := line.new(bar_index - ltfRight, pblPrice, bar_index, pblPrice, extend=extend.right, color=color.new(color.yellow, 0), style=line.style_dashed)
+
+touchesHtfOb = not na(htfObLow) and not na(htfObHigh) and low <= htfObHigh and high >= htfObLow
+longSweep = state == WAITING_FOR_SWEEP and activeDir == 1 and not na(pblPrice) and low < pblPrice - sweepBufferTicks * tickSize and close > pblPrice and touchesHtfOb
+shortSweep = state == WAITING_FOR_SWEEP and activeDir == -1 and not na(pblPrice) and high > pblPrice + sweepBufferTicks * tickSize and close < pblPrice and touchesHtfOb
+
+if longSweep
+    sweepExtreme := low
+    state := MONITORING_LTF_CHOCH
+    label.new(bar_index, low, "Sweep", style=label.style_label_up, color=color.new(color.green, 0), textcolor=color.white)
+
+if shortSweep
+    sweepExtreme := high
+    state := MONITORING_LTF_CHOCH
+    label.new(bar_index, high, "Sweep", style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white)
+
+longChoch = state == MONITORING_LTF_CHOCH and activeDir == 1 and not na(lastLtfSwingHigh) and close > lastLtfSwingHigh + breakBufferTicks * tickSize
+shortChoch = state == MONITORING_LTF_CHOCH and activeDir == -1 and not na(lastLtfSwingLow) and close < lastLtfSwingLow - breakBufferTicks * tickSize
+
+if longChoch and not na(lastLtfBearLow) and not na(lastLtfBearHigh) and inSession
+    entryPrice := roundToTick(lastLtfBearHigh)
+    stopPrice := roundToTick(math.min(lastLtfBearLow, sweepExtreme) - stopBufferTicks * tickSize)
+    stopTicks = ticksBetween(entryPrice, stopPrice)
+    takeProfitPrice := roundToTick(entryPrice + math.max(minRewardR, defaultTakeProfitR) * (entryPrice - stopPrice))
+    if stopTicks >= minStopTicks and stopTicks <= maxStopTicks
+        strategy.entry("SMC-L", strategy.long, limit=entryPrice)
+        strategy.exit("SMC-LX", "SMC-L", stop=stopPrice, limit=takeProfitPrice)
+        pendingBar := bar_index
+        state := ORDER_PENDING
+        label.new(bar_index, high, "LTF ChoCh long", style=label.style_label_down, color=color.new(color.green, 0), textcolor=color.white)
+
+if shortChoch and not na(lastLtfBullLow) and not na(lastLtfBullHigh) and inSession
+    entryPrice := roundToTick(lastLtfBullLow)
+    stopPrice := roundToTick(math.max(lastLtfBullHigh, sweepExtreme) + stopBufferTicks * tickSize)
+    stopTicks = ticksBetween(entryPrice, stopPrice)
+    takeProfitPrice := roundToTick(entryPrice - math.max(minRewardR, defaultTakeProfitR) * (stopPrice - entryPrice))
+    if stopTicks >= minStopTicks and stopTicks <= maxStopTicks
+        strategy.entry("SMC-S", strategy.short, limit=entryPrice)
+        strategy.exit("SMC-SX", "SMC-S", stop=stopPrice, limit=takeProfitPrice)
+        pendingBar := bar_index
+        state := ORDER_PENDING
+        label.new(bar_index, low, "LTF ChoCh short", style=label.style_label_up, color=color.new(color.red, 0), textcolor=color.white)
+
+if state == ORDER_PENDING
+    line.delete(entryLine)
+    line.delete(stopLine)
+    line.delete(tpLine)
+    entryLine := line.new(bar_index, entryPrice, bar_index + 1, entryPrice, extend=extend.right, color=color.white)
+    stopLine := line.new(bar_index, stopPrice, bar_index + 1, stopPrice, extend=extend.right, color=color.red)
+    tpLine := line.new(bar_index, takeProfitPrice, bar_index + 1, takeProfitPrice, extend=extend.right, color=color.green)
+    targetTouchedBeforeFill = activeDir == 1 ? high >= takeProfitPrice : low <= takeProfitPrice
+    ttlExpired = not na(pendingBar) and bar_index - pendingBar > pendingTtlBars
+    if strategy.position_size == 0 and (targetTouchedBeforeFill or ttlExpired or not inSession)
+        strategy.cancel("SMC-L")
+        strategy.cancel("SMC-S")
+        state := COOLDOWN
+    if strategy.position_size != 0
+        state := IN_POSITION
+
+if state == IN_POSITION and strategy.position_size == 0
+    state := COOLDOWN
+
+if state == COOLDOWN and strategy.position_size == 0 and bar_index - nz(pendingBar, bar_index) > pendingTtlBars
+    state := IDLE
+    activeDir := 0
+    pendingBar := na
+
+plot(equilibrium, "HTF equilibrium", color=color.new(color.gray, 50))
+plot(lastHtfSwingHigh, "HTF swing high", color=color.new(color.red, 65), style=plot.style_linebr)
+plot(lastHtfSwingLow, "HTF swing low", color=color.new(color.green, 65), style=plot.style_linebr)
+bgcolor(state == MONITORING_LTF_CHOCH ? color.new(color.blue, 90) : na)
