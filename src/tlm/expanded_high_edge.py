@@ -55,7 +55,14 @@ EXPANDED_HIGH_EDGE_NETMAX_MAX_HOLD_MINUTES = 120
 EXPANDED_HIGH_EDGE_NETMAX_STOP_RANGE_MULTIPLE = 6.0
 EXPANDED_HIGH_EDGE_NETMAX_MIN_STOP_POINTS = 8.0
 EXPANDED_HIGH_EDGE_NETMAX_MAX_STOP_POINTS = 90.0
+EXPANDED_HIGH_EDGE_WF_ORB_2026_PRESET = "walk_forward_orb_2026_min13"
+EXPANDED_HIGH_EDGE_WF_ORB_2026_MAX_CONCURRENT_POSITIONS = 6
+EXPANDED_HIGH_EDGE_WF_ORB_2026_MAX_HOLD_MINUTES = 120
+EXPANDED_HIGH_EDGE_WF_ORB_2026_STOP_RANGE_MULTIPLE = 6.0
+EXPANDED_HIGH_EDGE_WF_ORB_2026_MIN_STOP_POINTS = 8.0
+EXPANDED_HIGH_EDGE_WF_ORB_2026_MAX_STOP_POINTS = 90.0
 EXPANDED_HIGH_EDGE_SOURCE_REPORT = "experiments/profit_mining/expanded_high_edge_strategy_search_2019_2026.json"
+EXPANDED_HIGH_EDGE_WF_ORB_2026_SOURCE_REPORT = "reports/nq_expanded_high_edge_walk_forward_no_prior_highvol_donchian_min13_2026-05-01.json"
 
 
 EXPANDED_HIGH_EDGE_CAP24_EDGES: tuple[ExpandedHighEdge, ...] = (
@@ -142,6 +149,23 @@ EXPANDED_HIGH_EDGE_NETMAX_YEARLY_RESULTS: tuple[ExpandedHighEdgeYearResult, ...]
 )
 
 
+EXPANDED_HIGH_EDGE_WF_ORB_2026_EDGES: tuple[ExpandedHighEdge, ...] = (
+    ExpandedHighEdge("opening_range_breakout", "short", "ny_0930_1159", 1.5, dow=5, trend_bin=-1, volume_bin=0, range_bin=-1),
+    ExpandedHighEdge("opening_range_breakout", "short", "ny_0930_1159", 1.5, dow=5, trend_bin=-1, volume_bin=0, range_bin=0),
+    ExpandedHighEdge("opening_range_breakout", "short", "ny_0930_1159", 1.5, dow=5, trend_bin=-1, volume_bin=0, range_bin=0),
+    ExpandedHighEdge("opening_range_breakout", "short", "ny_0930_1159", 1.5, dow=5, trend_bin=-1, volume_bin=1, range_bin=0),
+    ExpandedHighEdge("opening_range_breakout", "short", "ny_1200_1559", 1.5, dow=4, trend_bin=-1, volume_bin=1, range_bin=0),
+    ExpandedHighEdge("opening_range_breakout", "short", "ny_1200_1559", 1.5, dow=4, trend_bin=-1, volume_bin=2, range_bin=0),
+    ExpandedHighEdge("opening_range_breakout", "long", "ny_0930_1159", 1.5, dow=2, trend_bin=1, volume_bin=0, range_bin=0),
+    ExpandedHighEdge("opening_range_retest_reclaim", "short", "ny_0930_1159", 1.0, dow=5, trend_bin=-1, volume_bin=0, range_bin=0),
+    ExpandedHighEdge("opening_range_breakout", "short", "ny_1200_1559", 1.5, dow=4, trend_bin=-1, volume_bin=1, range_bin=0),
+    ExpandedHighEdge("vwap_pullback_bounce", "short", "ny_1200_1559", 1.5, dow=4, trend_bin=-1, volume_bin=0, range_bin=0),
+    ExpandedHighEdge("opening_range_breakout", "long", "ny_0930_1159", 1.5, dow=2, trend_bin=1, volume_bin=1, range_bin=0),
+    ExpandedHighEdge("range_expansion_continuation", "short", "ny_0930_1159", 1.25, dow=2, trend_bin=-1, volume_bin=3, range_bin=3),
+    ExpandedHighEdge("opening_range_breakout", "short", "ny_1200_1559", 1.25, dow=4, trend_bin=-1, volume_bin=0, range_bin=0),
+)
+
+
 EXPANDED_HIGH_EDGE_CAP24_SPEC = ExpandedHighEdgePresetSpec(
     preset=EXPANDED_HIGH_EDGE_CAP24_PRESET,
     source_label="robust_expanded_positive_edge_top_32",
@@ -170,15 +194,31 @@ EXPANDED_HIGH_EDGE_NETMAX_SPEC = ExpandedHighEdgePresetSpec(
 )
 
 
+EXPANDED_HIGH_EDGE_WF_ORB_2026_SPEC = ExpandedHighEdgePresetSpec(
+    preset=EXPANDED_HIGH_EDGE_WF_ORB_2026_PRESET,
+    source_label="walk_forward_no_prior_highvol_donchian_min13_2026",
+    max_concurrent_positions=EXPANDED_HIGH_EDGE_WF_ORB_2026_MAX_CONCURRENT_POSITIONS,
+    max_hold_minutes=EXPANDED_HIGH_EDGE_WF_ORB_2026_MAX_HOLD_MINUTES,
+    stop_range_multiple=EXPANDED_HIGH_EDGE_WF_ORB_2026_STOP_RANGE_MULTIPLE,
+    min_stop_points=EXPANDED_HIGH_EDGE_WF_ORB_2026_MIN_STOP_POINTS,
+    max_stop_points=EXPANDED_HIGH_EDGE_WF_ORB_2026_MAX_STOP_POINTS,
+    source_report=EXPANDED_HIGH_EDGE_WF_ORB_2026_SOURCE_REPORT,
+    edges=EXPANDED_HIGH_EDGE_WF_ORB_2026_EDGES,
+    yearly_results=(),
+)
+
+
 EXPANDED_HIGH_EDGE_PRESETS: dict[str, tuple[ExpandedHighEdge, ...]] = {
     EXPANDED_HIGH_EDGE_CAP24_PRESET: EXPANDED_HIGH_EDGE_CAP24_EDGES,
     EXPANDED_HIGH_EDGE_NETMAX_PRESET: EXPANDED_HIGH_EDGE_NETMAX_EDGES,
+    EXPANDED_HIGH_EDGE_WF_ORB_2026_PRESET: EXPANDED_HIGH_EDGE_WF_ORB_2026_EDGES,
 }
 
 
 EXPANDED_HIGH_EDGE_PRESET_SPECS: dict[str, ExpandedHighEdgePresetSpec] = {
     EXPANDED_HIGH_EDGE_CAP24_PRESET: EXPANDED_HIGH_EDGE_CAP24_SPEC,
     EXPANDED_HIGH_EDGE_NETMAX_PRESET: EXPANDED_HIGH_EDGE_NETMAX_SPEC,
+    EXPANDED_HIGH_EDGE_WF_ORB_2026_PRESET: EXPANDED_HIGH_EDGE_WF_ORB_2026_SPEC,
 }
 
 

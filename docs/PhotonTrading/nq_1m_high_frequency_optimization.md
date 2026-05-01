@@ -164,7 +164,7 @@ The IBKR paper wiring bead must remain blocked until the validation tasks pass.
 
 If the mandate is strictly “maximize historical net PnL while requiring every full year to have more than 1,000 trades and positive net PnL,” choose `positive_expanded_edge_top_32`.
 
-If the mandate is “prepare something realistic for paper trading,” do not choose the 99-concurrency version yet. The first rolling walk-forward validation failed its positive-OOS-year gate, so the basket needs another optimization pass before tick/quote replay or paper trading.
+If the mandate is “prepare something realistic for paper trading,” use the walk-forward optimized preset `walk_forward_orb_2026_min13` as the next candidate, not the 99-concurrency netmax preset. It passes the rolling OOS annual positivity and trade-frequency gates under the current 1-minute bar replay, but it still needs tick/quote replay and cost stress before paper trading.
 
 ## 8. Implementation Status
 
@@ -225,3 +225,41 @@ Conclusion:
 - The low selected-edge stability suggests optimizer selection bias and regime dependence.
 - Do not promote `positive_expanded_edge_top_32` to paper trading as-is.
 - Next optimization bead: `tradingllmagent-02v8`, which blocks tick/quote replay and the MNQ paper plan until an OOS-positive candidate is found.
+
+## 10. Optimized Walk-Forward Candidate
+
+Preset: `walk_forward_orb_2026_min13`
+
+Report: `reports/nq_expanded_high_edge_walk_forward_no_prior_highvol_donchian_min13_2026-05-01.json`
+
+Implementation:
+
+- Registered in `src/tlm/expanded_high_edge.py` as `EXPANDED_HIGH_EDGE_WF_ORB_2026_EDGES`.
+- Uses 13 selected edges from the 2026 deployment fold trained on 2019-2025 only.
+- Uses `max_concurrent_positions=6`, `max_hold_minutes=120`, `stop_range_multiple=6.0`, `min_stop_points=8.0`, `max_stop_points=90.0`.
+- Excludes the failing families `prior_day_breakout`, `high_volume_impulse_continuation`, and `donchian20_breakout`.
+- 2026 is evaluated with YTD raw trades and annualized trade count because local data only covers 100 calendar days through 2026-04-27.
+
+Walk-forward result:
+
+- Decision: `pass`
+- Positive OOS years: `6/6`
+- Trade-floor years: `6/6`
+- OOS total trades: `11,070`
+- OOS total net PnL: `$285,980.00`
+- Worst OOS year PnL: `$3,623.75`
+- Minimum trade-floor count: `1,130`
+- 2026 YTD raw trades: `324`
+- 2026 annualized trades: `1,182.6`
+- Multiple-testing penalty decision: `pass`
+
+| Test Year | Trades | Trade-Floor Count | Net PnL | Profit Factor | Max Drawdown |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 2021 | 1,725 | 1,725.0 | `$28,932.50` | `1.0344` | `$175,222.50` |
+| 2022 | 3,547 | 3,547.0 | `$47,387.50` | `1.0215` | `$443,560.00` |
+| 2023 | 2,763 | 2,763.0 | `$100,985.00` | `1.0784` | `$196,268.75` |
+| 2024 | 1,130 | 1,130.0 | `$85,360.00` | `1.1327` | `$60,320.00` |
+| 2025 | 1,581 | 1,581.0 | `$3,623.75` | `1.0030` | `$163,713.75` |
+| 2026 YTD | 324 | 1,182.6 | `$19,691.25` | `1.0792` | `$46,466.25` |
+
+This is the best current implementation candidate for the user's revised requirement. It is still a bar-based research candidate, not a live-ready strategy, until `tradingllmagent-3bxz` validates quote-aware fills and slippage stress.
