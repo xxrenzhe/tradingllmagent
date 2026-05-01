@@ -68,6 +68,7 @@ from .research_config import (
     PRIMARY_TOP_STRATEGY_OBJECTIVE,
 )
 from .research_pipeline import ResearchPipeline
+from .smc_validation import build_smc_validation_report, write_smc_validation_outputs
 from .storage import (
     bar_path,
     compute_data_version_hash,
@@ -1089,6 +1090,35 @@ def cmd_report_experiment(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_report_smc_validation(args: argparse.Namespace) -> int:
+    spec = load_strategy_spec(Path(args.spec))
+    symbol = get_symbol(args.symbol or spec.symbol, Path(args.config_dir))
+    spec = with_strategy_symbol(spec, symbol.alias)
+    cost_model = get_cost_model(spec.cost_model, Path(args.config_dir))
+    report = build_smc_validation_report(
+        spec=spec,
+        symbol_config=symbol,
+        data_root=Path(args.data_root),
+        date_from=parse_date(args.date_from),
+        date_to=parse_date(args.date_to),
+        cost_model=cost_model,
+        starting_equity=args.starting_equity,
+        train_days=args.train_days,
+        validation_days=args.validation_days,
+        test_days=args.test_days,
+        step_days=args.step_days,
+        embargo_days=args.embargo_days,
+        final_holdout_days=args.final_holdout_days,
+        min_folds=args.min_folds,
+        indicator_warmup_days=args.indicator_warmup_days,
+        sample_trade_count=args.sample_trade_count,
+        min_trade_count=args.min_trade_count,
+    )
+    outputs = write_smc_validation_outputs(report, Path(args.output_dir), args.basename)
+    print(json.dumps({**outputs, "status": report["status"]}, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_ibkr_health(args: argparse.Namespace) -> int:
     gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     print(json.dumps(gateway.health(), indent=2, sort_keys=True))
@@ -1733,6 +1763,26 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument("--experiment-id", required=True)
     experiment.add_argument("--experiment-db", default="experiments/research.sqlite3")
     experiment.set_defaults(func=cmd_report_experiment)
+
+    smc_validation = report_subparsers.add_parser("smc-validation")
+    smc_validation.add_argument("--spec", required=True)
+    smc_validation.add_argument("--symbol")
+    smc_validation.add_argument("--from", dest="date_from", required=True)
+    smc_validation.add_argument("--to", dest="date_to", required=True)
+    smc_validation.add_argument("--output-dir", default="reports")
+    smc_validation.add_argument("--basename")
+    smc_validation.add_argument("--starting-equity", type=float, default=100_000)
+    smc_validation.add_argument("--train-days", type=int, default=730)
+    smc_validation.add_argument("--validation-days", type=int, default=182)
+    smc_validation.add_argument("--test-days", type=int, default=182)
+    smc_validation.add_argument("--step-days", type=int, default=91)
+    smc_validation.add_argument("--embargo-days", type=int, default=5)
+    smc_validation.add_argument("--final-holdout-days", type=int, default=365)
+    smc_validation.add_argument("--min-folds", type=int, default=1)
+    smc_validation.add_argument("--indicator-warmup-days", type=int, default=0)
+    smc_validation.add_argument("--sample-trade-count", type=int, default=5)
+    smc_validation.add_argument("--min-trade-count", type=int, default=200)
+    smc_validation.set_defaults(func=cmd_report_smc_validation)
 
     ibkr = subparsers.add_parser("ibkr")
     ibkr_subparsers = ibkr.add_subparsers(dest="ibkr_command", required=True)

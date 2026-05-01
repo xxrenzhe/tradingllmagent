@@ -1,0 +1,203 @@
+{
+  "artifact": "smc_lqem_ce_optimization_report",
+  "baseline_report": "reports/nq_smc_lqem_baseline_2026-05-01.json",
+  "created_at": "2026-05-01T17:53:59",
+  "decision": "reject_for_paper_trading",
+  "next_change_families": [
+    "session/timezone alignment audit before more parameter search",
+    "target model using opposing HTF liquidity instead of fixed R only",
+    "OB definition sensitivity and displacement filter ablation",
+    "PBL/sweep definition ablation with quote replay fill checks"
+  ],
+  "reason": "No tested parameter set passed minimum trade count, positive expectancy after 2x slippage, and final holdout profit factor gates.",
+  "rows": [
+    {
+      "avg_trade_net_pnl": -112.27272727272727,
+      "failed_gates": [
+        {
+          "actual": 22,
+          "name": "minimum_trade_count",
+          "passed": false,
+          "threshold": 200
+        },
+        {
+          "actual": -122.27272727272727,
+          "name": "positive_expectancy_after_2x_cost",
+          "passed": false,
+          "threshold": "> 0"
+        },
+        {
+          "actual": 0.0,
+          "name": "final_holdout_profit_factor",
+          "passed": false,
+          "threshold": "> 1.05"
+        },
+        {
+          "actual": 0.8414634146341463,
+          "name": "yearly_profit_concentration",
+          "passed": false,
+          "threshold": "<= 0.40"
+        }
+      ],
+      "final_holdout_net_pnl": -1360.0,
+      "final_holdout_profit_factor": 0.0,
+      "final_holdout_trade_count": 5,
+      "net_pnl": -2470.0,
+      "passed_gates": [],
+      "profit_factor": 0.44431946006749157,
+      "report_path": "reports/nq_smc_lqem_baseline_2026-05-01.json",
+      "strategy_name": "nq_smc_lqem_ce_v1",
+      "stress_2x_avg_trade_net_pnl": -122.27272727272727,
+      "trade_count": 22
+    },
+    {
+      "avg_trade_net_pnl": -38.275862068965516,
+      "failed_gates": [
+        {
+          "actual": 58,
+          "name": "minimum_trade_count",
+          "passed": false,
+          "threshold": 200
+        },
+        {
+          "actual": -48.275862068965516,
+          "name": "positive_expectancy_after_2x_cost",
+          "passed": false,
+          "threshold": "> 0"
+        },
+        {
+          "actual": 0.7015384615384616,
+          "name": "final_holdout_profit_factor",
+          "passed": false,
+          "threshold": "> 1.05"
+        },
+        {
+          "actual": 0.46564885496183206,
+          "name": "yearly_profit_concentration",
+          "passed": false,
+          "threshold": "<= 0.40"
+        }
+      ],
+      "final_holdout_net_pnl": -485.0,
+      "final_holdout_profit_factor": 0.7015384615384616,
+      "final_holdout_trade_count": 7,
+      "net_pnl": -2220.0,
+      "passed_gates": [],
+      "profit_factor": 0.7819253438113949,
+      "report_path": "reports/nq_smc_lqem_optimization_relaxed_sweeps_2026-05-01.json",
+      "strategy_name": "nq_smc_lqem_ce_relaxed_sweeps_20260501",
+      "stress_2x_avg_trade_net_pnl": -48.275862068965516,
+      "trade_count": 58
+    },
+    {
+      "avg_trade_net_pnl": -11.714285714285714,
+      "failed_gates": [
+        {
+          "actual": 35,
+          "name": "minimum_trade_count",
+          "passed": false,
+          "threshold": 200
+        },
+        {
+          "actual": -21.714285714285715,
+          "name": "positive_expectancy_after_2x_cost",
+          "passed": false,
+          "threshold": "> 0"
+        },
+        {
+          "actual": 0.9285714285714286,
+          "name": "final_holdout_profit_factor",
+          "passed": false,
+          "threshold": "> 1.05"
+        }
+      ],
+      "final_holdout_net_pnl": -65.0,
+      "final_holdout_profit_factor": 0.9285714285714286,
+      "final_holdout_trade_count": 4,
+      "net_pnl": -410.0,
+      "passed_gates": [
+        "yearly_profit_concentration"
+      ],
+      "profit_factor": 0.9384846211552889,
+      "report_path": "reports/nq_smc_lqem_optimization_balanced_r2_2026-05-01.json",
+      "strategy_name": "nq_smc_lqem_ce_balanced_r2_20260501",
+      "stress_2x_avg_trade_net_pnl": -21.714285714285715,
+      "trade_count": 35
+    },
+    {
+      "avg_trade_net_pnl": -10.25,
+      "failed_gates": [
+        {
+          "actual": 40,
+          "name": "minimum_trade_count",
+          "passed": false,
+          "threshold": 200
+        },
+        {
+          "actual": -20.25,
+          "name": "positive_expectancy_after_2x_cost",
+          "passed": false,
+          "threshold": "> 0"
+        },
+        {
+          "actual": 0.0,
+          "name": "final_holdout_profit_factor",
+          "passed": false,
+          "threshold": "> 1.05"
+        }
+      ],
+      "final_holdout_net_pnl": -1165.0,
+      "final_holdout_profit_factor": 0.0,
+      "final_holdout_trade_count": 5,
+      "net_pnl": -410.0,
+      "passed_gates": [
+        "yearly_profit_concentration"
+      ],
+      "profit_factor": 0.9249771271729186,
+      "report_path": "reports/nq_smc_lqem_optimization_strict_small_stop_2026-05-01.json",
+      "strategy_name": "nq_smc_lqem_ce_strict_small_stop_20260501",
+      "stress_2x_avg_trade_net_pnl": -20.25,
+      "trade_count": 40
+    }
+  ],
+  "selected_for_review": {
+    "avg_trade_net_pnl": -11.714285714285714,
+    "failed_gates": [
+      {
+        "actual": 35,
+        "name": "minimum_trade_count",
+        "passed": false,
+        "threshold": 200
+      },
+      {
+        "actual": -21.714285714285715,
+        "name": "positive_expectancy_after_2x_cost",
+        "passed": false,
+        "threshold": "> 0"
+      },
+      {
+        "actual": 0.9285714285714286,
+        "name": "final_holdout_profit_factor",
+        "passed": false,
+        "threshold": "> 1.05"
+      }
+    ],
+    "final_holdout_net_pnl": -65.0,
+    "final_holdout_profit_factor": 0.9285714285714286,
+    "final_holdout_trade_count": 4,
+    "net_pnl": -410.0,
+    "passed_gates": [
+      "yearly_profit_concentration"
+    ],
+    "profit_factor": 0.9384846211552889,
+    "report_path": "reports/nq_smc_lqem_optimization_balanced_r2_2026-05-01.json",
+    "strategy_name": "nq_smc_lqem_ce_balanced_r2_20260501",
+    "stress_2x_avg_trade_net_pnl": -21.714285714285715,
+    "trade_count": 35
+  },
+  "variant_reports": [
+    "reports/nq_smc_lqem_optimization_relaxed_sweeps_2026-05-01.json",
+    "reports/nq_smc_lqem_optimization_balanced_r2_2026-05-01.json",
+    "reports/nq_smc_lqem_optimization_strict_small_stop_2026-05-01.json"
+  ]
+}

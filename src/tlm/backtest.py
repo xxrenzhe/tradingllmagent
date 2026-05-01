@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from dataclasses import asdict, dataclass, field, replace
-from datetime import datetime, timedelta, time
+from datetime import date, datetime, timedelta, time
 from math import ceil, floor
 from pathlib import Path
 from typing import Sequence
@@ -13,6 +13,7 @@ import duckdb
 from .config import CostModelConfig, SymbolConfig
 from .features import compute_executable_features, feature_snapshot_hash, feature_value
 from .metrics import BacktestMetrics, calculate_metrics
+from .smc_state import SmcLqemParameters, SmcLqemStateMachine
 from .storage import compute_data_version_hash
 from .strategy import StrategySpec
 
@@ -30,6 +31,7 @@ EXECUTABLE_STRATEGY_FAMILIES = {
     "volume_absorption_reversion",
     "macd_ma_volume_confirm",
     "rsi_reversion_low_volume",
+    "smc_lqem_ce",
 }
 
 
@@ -184,12 +186,15 @@ def run_bar_backtest(
         raise ValueError(f"Bar backtester does not support strategy_family: {spec.strategy_family}")
     cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
     bars = load_bar_rows(bar_files)
-    feature_bars = compute_executable_features(
-        bars,
-        session_trade=spec.session.trade,
-        flatten=spec.session.flatten,
-        tick_size=cost_model.tick_size,
-    )
+    if spec.strategy_family == "smc_lqem_ce":
+        feature_bars = bars
+    else:
+        feature_bars = compute_executable_features(
+            bars,
+            session_trade=spec.session.trade,
+            flatten=spec.session.flatten,
+            tick_size=cost_model.tick_size,
+        )
     signal_health_bars = feature_bars
     if signal_health_start is not None and signal_health_end is not None:
         signal_health_bars = [
@@ -437,6 +442,8 @@ def run_bar_strategy(
         return run_time_of_day_edge(spec, symbol_config, bars, cost_model)
     if spec.strategy_family == "gap_fade_or_continuation":
         return run_gap_fade_or_continuation(spec, symbol_config, bars, cost_model)
+    if spec.strategy_family == "smc_lqem_ce":
+        return run_smc_lqem_ce(spec, symbol_config, bars, cost_model)
     raise ValueError(f"Unsupported strategy_family: {spec.strategy_family}")
 
 
@@ -756,6 +763,87 @@ def run_gap_fade_or_continuation(
         return None, None
 
     return run_signal_bar_strategy(spec, bars, cost_model or default_cost_model(symbol_config, spec.cost_model), signal)
+
+
+def run_smc_lqem_ce(
+    spec: StrategySpec,
+    symbol_config: SymbolConfig,
+    bars: Sequence[dict],
+    cost_model: CostModelConfig | None = None,
+) -> list[Trade]:
+    if not bars:
+        return []
+    cost_model = cost_model or default_cost_model(symbol_config, spec.cost_model)
+    parameters = _smc_parameters_from_spec(spec, cost_model)
+    contracts = int(spec.risk.get("position_sizing", {}).get("contracts", 1))
+    max_trades_per_day = int(spec.risk.get("max_trades_per_day", 999_999))
+    trade_ranges = parse_session_ranges(spec.session.trade)
+    flatten_time = parse_clock(spec.session.flatten)
+    warmup_start = _session_warmup_start(
+        trade_ranges[0][0],
+        parameters.htf_minutes * (parameters.htf_swing_left + parameters.htf_swing_right + 2),
+    )
+
+    trades: list[Trade] = []
+    by_day: dict[object, list[tuple[int, dict]]] = {}
+    for index, bar in enumerate(bars):
+        by_day.setdefault(bar["timestamp"].date(), []).append((index, bar))
+
+    for _, indexed_day_bars in sorted(by_day.items(), key=lambda item: item[0]):
+        machine = SmcLqemStateMachine(parameters)
+        day_bars = [
+            (global_index, bar)
+            for global_index, bar in indexed_day_bars
+            if _time_in_warmup_to_flatten(bar["timestamp"].time(), warmup_start, flatten_time)
+        ]
+        position = None
+        trades_today = 0
+
+        for session_index, (_global_index, bar) in enumerate(day_bars):
+            bar_time = bar["timestamp"].time()
+            session_allowed = (
+                _time_in_ranges(bar_time, trade_ranges)
+                and trades_today < max_trades_per_day
+                and position is None
+            )
+            decision = machine.on_bar(
+                bar,
+                session_allowed=session_allowed,
+                force_flatten=bar_time >= flatten_time,
+            )
+            transition = decision.transition
+            if (
+                transition is not None
+                and transition.to_state == "IN_POSITION"
+                and decision.signal is not None
+                and _smc_side_allowed(spec, decision.signal.direction)
+            ):
+                position = _open_limit_position(
+                    decision.signal.direction,
+                    bar,
+                    contracts,
+                    session_index,
+                    decision.signal.entry_price,
+                    decision.signal.reason,
+                    decision.signal.audit,
+                )
+                trades_today += 1
+                continue
+
+            if decision.exit_reason is not None and position is not None:
+                exit_reason = (
+                    "session_flatten" if decision.exit_reason == "force_flatten" else decision.exit_reason
+                )
+                exit_price = _smc_exit_price(position, bar, decision.exit_reason)
+                trades.append(_close_position(position, bar, exit_price, exit_reason, cost_model))
+                position = None
+
+        if position is not None and day_bars:
+            last_bar = day_bars[-1][1]
+            exit_price = _smc_market_exit_price(position, last_bar)
+            trades.append(_close_position(position, last_bar, exit_price, "end_of_data", cost_model))
+
+    return trades
 
 
 def run_signal_grammar_strategy(
@@ -1374,6 +1462,83 @@ def _parameter_first(spec: StrategySpec, name: str, default):
     return default
 
 
+def _smc_parameters_from_spec(spec: StrategySpec, cost_model: CostModelConfig) -> SmcLqemParameters:
+    return SmcLqemParameters(
+        tick_size=float(_parameter_first(spec, "tick_size", cost_model.tick_size)),
+        htf_minutes=int(_parameter_first(spec, "htf_minutes", 15)),
+        htf_swing_left=int(_parameter_first(spec, "htf_swing_left", 3)),
+        htf_swing_right=int(_parameter_first(spec, "htf_swing_right", 3)),
+        ltf_swing_left=int(_parameter_first(spec, "ltf_swing_left", 2)),
+        ltf_swing_right=int(_parameter_first(spec, "ltf_swing_right", 2)),
+        break_buffer_ticks=int(_parameter_first(spec, "break_buffer_ticks", 1)),
+        min_htf_range_ticks=int(_parameter_first(spec, "min_htf_range_ticks", 80)),
+        min_ob_ticks=int(_parameter_first(spec, "min_ob_ticks", 8)),
+        max_ob_ticks=int(_parameter_first(spec, "max_ob_ticks", 120)),
+        min_micro_ob_ticks=int(_parameter_first(spec, "min_micro_ob_ticks", 4)),
+        max_micro_ob_ticks=int(_parameter_first(spec, "max_micro_ob_ticks", 60)),
+        pbl_clearance_ticks=int(_parameter_first(spec, "pbl_clearance_ticks", 4)),
+        sweep_buffer_ticks=int(_parameter_first(spec, "sweep_buffer_ticks", 1)),
+        max_reclaim_bars=int(_parameter_first(spec, "max_reclaim_bars", 3)),
+        stop_buffer_ticks=int(_parameter_first(spec, "stop_buffer_ticks", 4)),
+        min_stop_ticks=int(_parameter_first(spec, "min_stop_ticks", 8)),
+        max_stop_ticks=int(_parameter_first(spec, "max_stop_ticks", 80)),
+        min_reward_r=float(_parameter_first(spec, "min_reward_r", 2.0)),
+        default_take_profit_r=float(_parameter_first(spec, "default_take_profit_r", 3.0)),
+        pending_ttl_bars=int(_parameter_first(spec, "pending_ttl_bars", 10)),
+        max_spread_ticks=float(_parameter_first(spec, "max_spread_ticks", 4.0)),
+        cooldown_bars_after_cancel=int(_parameter_first(spec, "cooldown_bars_after_cancel", 5)),
+        cooldown_bars_after_exit=int(_parameter_first(spec, "cooldown_bars_after_exit", 15)),
+        max_context_bars=int(_parameter_first(spec, "max_context_bars", 360)),
+    )
+
+
+def _smc_side_allowed(spec: StrategySpec, side: str) -> bool:
+    return spec.direction == "long_short" or spec.direction == side
+
+
+def _open_limit_position(
+    side: str,
+    bar: dict,
+    contracts: int,
+    entry_index: int,
+    entry_price: float,
+    entry_reason: str,
+    audit: dict,
+) -> dict:
+    return {
+        "side": side,
+        "entry_time": bar["timestamp"],
+        "entry_price": entry_price,
+        "entry_index": entry_index,
+        "contracts": contracts,
+        "entry_reason": entry_reason,
+        "feature_values": {
+            "smc_direction": audit.get("direction"),
+            "smc_entry_price": audit.get("entry_price"),
+            "smc_stop_price": audit.get("stop_price"),
+            "smc_take_profit_price": audit.get("take_profit_price"),
+            "smc_stop_ticks": audit.get("stop_ticks"),
+            "smc_signal_audit": audit,
+        },
+        "predicate_evaluation": [],
+    }
+
+
+def _smc_exit_price(position: dict, bar: dict, exit_reason: str) -> float:
+    audit = position.get("feature_values", {}).get("smc_signal_audit", {})
+    if exit_reason == "stop_loss":
+        return float(audit["stop_price"])
+    if exit_reason == "take_profit":
+        return float(audit["take_profit_price"])
+    return _smc_market_exit_price(position, bar)
+
+
+def _smc_market_exit_price(position: dict, bar: dict) -> float:
+    if position["side"] == "long":
+        return float(bar.get("bid_close", bar["close"]))
+    return float(bar.get("ask_close", bar["close"]))
+
+
 def _ema_pair(spec: StrategySpec) -> tuple[str, dict, str, dict]:
     emas = [
         (name, config)
@@ -1541,8 +1706,36 @@ def backtest_data_version_hash(
 
 
 def parse_session_range(value: str) -> tuple[time, time]:
-    start, end = value.split("-", 1)
-    return parse_clock(start), parse_clock(end)
+    ranges = parse_session_ranges(value)
+    return ranges[0][0], ranges[-1][1]
+
+
+def parse_session_ranges(value: str) -> list[tuple[time, time]]:
+    ranges = []
+    for part in value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        start, end = part.split("-", 1)
+        ranges.append((parse_clock(start), parse_clock(end)))
+    if not ranges:
+        raise ValueError("session range must contain at least one HH:MM-HH:MM window")
+    return ranges
+
+
+def _time_in_ranges(value: time, ranges: Sequence[tuple[time, time]]) -> bool:
+    return any(start <= value <= end for start, end in ranges)
+
+
+def _session_warmup_start(session_start: time, warmup_minutes: int) -> time:
+    anchor = datetime.combine(date.min, session_start)
+    return (anchor - timedelta(minutes=max(warmup_minutes, 0))).time()
+
+
+def _time_in_warmup_to_flatten(value: time, warmup_start: time, flatten_time: time) -> bool:
+    if warmup_start <= flatten_time:
+        return warmup_start <= value <= flatten_time
+    return value >= warmup_start or value <= flatten_time
 
 
 def parse_clock(value: str) -> time:

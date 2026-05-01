@@ -355,6 +355,7 @@ max_stop_ticks = 80
 min_reward_r = 2.0
 default_take_profit_r = 3.0
 pending_ttl_bars = 10
+max_context_bars = 360
 ```
 
 Target priority:
@@ -989,6 +990,7 @@ Promotion gate:
     "default_take_profit_r": 3.0,
     "pending_ttl_bars": 10,
     "max_spread_ticks": 4,
+    "max_context_bars": 360,
     "max_setups_per_day": 3,
     "max_filled_trades_per_day": 2,
     "fvg_required": false,
@@ -1007,7 +1009,52 @@ Promotion gate:
 }
 ```
 
-## 18. Known Limits
+## 18. Current Implementation Snapshot
+
+The executable v1 implementation now has these concrete artifacts:
+
+- Python SMC primitives in `src/tlm/smc.py`: completed-bar aggregation, no-lookahead pivots, BOS/ChoCh, OB/FVG, PBL, liquidity sweep, tick rounding, and audit-friendly dataclasses.
+- Python state machine in `src/tlm/smc_state.py`: `IDLE -> FINDING_HTF_POI -> WAITING_FOR_PBL -> WAITING_FOR_SWEEP -> MONITORING_LTF_CHOCH -> ORDER_PENDING -> IN_POSITION -> COOLDOWN`.
+- Backtest integration in `src/tlm/backtest.py`: registered `smc_lqem_ce`, reads parameters from Strategy Spec, supports comma-separated session windows, feeds completed 1-minute bars into the shared state machine, models pending limit fills, stop/target exits, session flattening, costs, and SMC audit payloads.
+- Validation reporting in `src/tlm/smc_validation.py`: generates full-history metrics, 1x/2x/3x cost stress, walk-forward/final-holdout summaries, yearly attribution, R distribution, setup attribution, audited trade samples, and promotion gates.
+- Strategy validation in `src/tlm/strategy.py`: allows `smc_lqem_ce`, requires an `smc_lqem_ce` indicator marker, and validates positive/bounded SMC parameters.
+- First executable spec in `strategies/nq_smc_lqem_ce_v1.yaml`: `NQ_CME`, 1-minute bars, 15-minute HTF context, RTH split windows, fixed one-contract research sizing, macro-event entry blackout, and conservative NQ cost model.
+- Visual review script in `docs/PhotonTrading/nq_smc_lqem_visual_strategy.pine`: TradingView strategy overlay for HTF OB, PBL, sweep, ChoCh, entry, stop, and target review.
+- CLI report command: `python3 -m tlm.cli report smc-validation --spec strategies/nq_smc_lqem_ce_v1.yaml --from <YYYY-MM-DD> --to <YYYY-MM-DD> --output-dir reports`.
+- Deterministic tests in `tests/test_smc.py`, `tests/test_smc_state.py`, `tests/test_smc_backtest.py`, and `tests/test_smc_validation.py`: primitive correctness, state transitions, strategy spec loading, synthetic trade generation, no-lookahead confirmation behavior, and validation report output.
+
+The remaining validation stages are intentionally not marked complete in this document. TradingView compile/screenshot validation, quote/tick replay, IBKR paper wiring, and thesis review are tracked as bd issues in Section 21.
+
+## 19. Historical Backtest Result
+
+The first full-history NQ_CME validation run has been completed for `2010-06-06` through `2026-04-27`.
+
+Baseline report:
+
+- JSON: `reports/nq_smc_lqem_baseline_2026-05-01.json`
+- Markdown: `reports/nq_smc_lqem_baseline_2026-05-01.md`
+- Full-history trades: 22
+- Full-history net PnL: `-2470.00`
+- Full-history profit factor: `0.4443`
+- 2x cost-stress average trade: `-122.27`
+- Final holdout trades: 5
+- Final holdout profit factor: `0.0`
+
+Bounded optimization was executed after the baseline failed gates. The tested variants were:
+
+- `relaxed_sweeps`: 58 trades, full-history PF `0.7819`, final holdout PF `0.7015`
+- `balanced_r2`: 35 trades, full-history PF `0.9385`, final holdout PF `0.9286`
+- `strict_small_stop`: 40 trades, full-history PF `0.9250`, final holdout PF `0.0`
+
+Optimization report:
+
+- JSON: `reports/nq_smc_lqem_optimization_2026-05-01.json`
+- Markdown: `reports/nq_smc_lqem_optimization_2026-05-01.md`
+- Decision: `reject_for_paper_trading`
+
+Conclusion: this v1 SMC LQ-EM CE translation is mechanically implemented and testable, but current evidence does not justify MNQ paper auto-submit. Further work must start with the bd thesis review issue, especially session/timezone alignment, target model, OB definition, and PBL/sweep assumptions.
+
+## 20. Known Limits
 
 This plan does not claim that SMC has edge on NQ before testing. It only makes the strategy mechanically implementable and testable.
 
@@ -1022,7 +1069,7 @@ The first version deliberately avoids:
 
 These can be added after v1 generates audited evidence.
 
-## 19. bd Work Breakdown Reference
+## 21. bd Work Breakdown Reference
 
 Implementation work is tracked in bd, not in markdown task lists. The related bd epic and child issues created for this plan are the source of truth for sequencing, ownership, and completion state.
 
@@ -1044,3 +1091,4 @@ Additional required issues:
 | --- | --- | --- |
 | `tradingllmagent-u4gk` | TradingView Pine visual strategy validation | `tradingllmagent-ysm0` |
 | `tradingllmagent-m0un` | Historical backtest and bounded optimization loop | `tradingllmagent-8nr8` |
+| `tradingllmagent-yuop` | Thesis review after failed NQ optimization | `tradingllmagent-m0un` |

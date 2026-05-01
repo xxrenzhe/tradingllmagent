@@ -322,8 +322,16 @@ def _round_feature(value):
 
 
 def _parse_session_range(value: str) -> tuple[time, time]:
-    start, end = value.split("-", 1)
-    return _parse_clock(start), _parse_clock(end)
+    ranges = []
+    for part in value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        start, end = part.split("-", 1)
+        ranges.append((_parse_clock(start), _parse_clock(end)))
+    if not ranges:
+        raise ValueError("session range must contain at least one HH:MM-HH:MM window")
+    return ranges[0][0], ranges[-1][1]
 
 
 def _parse_clock(value: str) -> time:

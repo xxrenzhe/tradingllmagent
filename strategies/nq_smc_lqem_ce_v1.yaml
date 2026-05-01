@@ -1,0 +1,69 @@
+{
+  "schema_version": 0,
+  "name": "nq_smc_lqem_ce_v1",
+  "strategy_family": "smc_lqem_ce",
+  "market_hypothesis": "NQ intraday reversals from premium or discount order blocks can produce positive expectancy when confirmed by a PBL liquidity sweep and 1-minute ChoCh entry.",
+  "symbol": "NQ_CME",
+  "timeframe": "1m",
+  "direction": "long_short",
+  "session": {"timezone": "America/New_York", "trade": "09:35-11:30,13:30-15:30", "flatten": "15:55"},
+  "regime_filter": {},
+  "indicators": {
+    "smc_lqem_ce": {"type": "smc_lqem_ce", "htf_timeframe": "15m", "ltf_timeframe": "1m"}
+  },
+  "entry": {
+    "long": {"all": [{"left": "smc_lqem_ce", "op": "==", "right": "long_signal"}]},
+    "short": {"all": [{"left": "smc_lqem_ce", "op": "==", "right": "short_signal"}]}
+  },
+  "exit": {
+    "stop_loss": {"type": "points", "value": 10},
+    "take_profit": {"type": "points", "value": 30},
+    "max_holding_minutes": 45
+  },
+  "risk": {
+    "position_sizing": {"type": "fixed_contracts", "contracts": 1},
+    "max_position_contracts": 1,
+    "max_trades_per_day": 2,
+    "max_daily_loss_r": 3
+  },
+  "event_policy": {
+    "calendar_ref": "configs/macro_events.yaml",
+    "policy_ref": "high_impact_macro_v1",
+    "new_entries": "block",
+    "pre_event_blackout_minutes": 10,
+    "post_event_blackout_minutes": 10
+  },
+  "anti_martingale_constraints": {
+    "forbid_loss_doubling": true,
+    "forbid_position_increase_when_unrealized_loss": true,
+    "max_grid_levels": 0
+  },
+  "parameters": {
+    "tick_size": {"values": [0.25]},
+    "htf_minutes": {"values": [15]},
+    "htf_swing_left": {"values": [3]},
+    "htf_swing_right": {"values": [3]},
+    "ltf_swing_left": {"values": [2]},
+    "ltf_swing_right": {"values": [2]},
+    "break_buffer_ticks": {"values": [1]},
+    "min_htf_range_ticks": {"values": [80]},
+    "min_ob_ticks": {"values": [8]},
+    "max_ob_ticks": {"values": [120]},
+    "min_micro_ob_ticks": {"values": [4]},
+    "max_micro_ob_ticks": {"values": [60]},
+    "pbl_clearance_ticks": {"values": [4]},
+    "sweep_buffer_ticks": {"values": [1]},
+    "max_reclaim_bars": {"values": [3]},
+    "stop_buffer_ticks": {"values": [4]},
+    "min_stop_ticks": {"values": [8]},
+    "max_stop_ticks": {"values": [80]},
+    "min_reward_r": {"values": [2.0]},
+    "default_take_profit_r": {"values": [3.0]},
+    "pending_ttl_bars": {"values": [10]},
+    "max_spread_ticks": {"values": [4.0]},
+    "cooldown_bars_after_cancel": {"values": [5]},
+    "cooldown_bars_after_exit": {"values": [15]},
+    "max_context_bars": {"values": [360]}
+  },
+  "cost_model": "nq_conservative_v1"
+}

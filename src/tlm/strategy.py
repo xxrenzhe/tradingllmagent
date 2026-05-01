@@ -21,6 +21,7 @@ ALLOWED_FAMILIES = {
     "macd_ma_volume_confirm",
     "rsi_reversion_low_volume",
     "controlled_grid",
+    "smc_lqem_ce",
 }
 
 BANNED_FAMILIES = {
@@ -48,6 +49,7 @@ ALLOWED_INDICATOR_TYPES = {
     "momentum",
     "time_of_day",
     "gap",
+    "smc_lqem_ce",
 }
 ALLOWED_EXIT_TYPES = {"points", "atr_multiple"}
 ALLOWED_POSITION_SIZING_TYPES = {"fixed_contracts"}
@@ -190,6 +192,7 @@ def parse_strategy_spec(payload: dict[str, Any]) -> StrategySpec:
     _validate_risk(risk)
     _validate_event_policy(event_policy)
     _validate_controlled_grid(family, indicators, exit_spec, risk, anti_martingale)
+    _validate_smc_lqem_ce(family, indicators, entry, parameters)
 
     return StrategySpec(
         schema_version=int(payload["schema_version"]),
@@ -383,6 +386,67 @@ def _validate_controlled_grid(
     stop_loss = _require_object(exit_spec.get("stop_loss"), "exit.stop_loss")
     if float(stop_loss.get("value", 0)) <= 0:
         raise StrategySpecError("controlled_grid requires positive hard stop loss")
+
+
+def _validate_smc_lqem_ce(
+    family: str,
+    indicators: dict[str, Any],
+    entry: dict[str, Any],
+    parameters: dict[str, Any],
+) -> None:
+    if family != "smc_lqem_ce":
+        return
+    if not any(config.get("type") == "smc_lqem_ce" for config in indicators.values()):
+        raise StrategySpecError("smc_lqem_ce requires an smc_lqem_ce indicator marker")
+    if "long" not in entry and "short" not in entry:
+        raise StrategySpecError("smc_lqem_ce requires at least one entry side")
+
+    positive_ints = {
+        "htf_minutes",
+        "htf_swing_left",
+        "htf_swing_right",
+        "ltf_swing_left",
+        "ltf_swing_right",
+        "min_htf_range_ticks",
+        "min_ob_ticks",
+        "max_ob_ticks",
+        "min_micro_ob_ticks",
+        "max_micro_ob_ticks",
+        "min_stop_ticks",
+        "max_stop_ticks",
+        "pending_ttl_bars",
+        "max_context_bars",
+    }
+    non_negative_ints = {
+        "break_buffer_ticks",
+        "pbl_clearance_ticks",
+        "sweep_buffer_ticks",
+        "max_reclaim_bars",
+        "stop_buffer_ticks",
+        "cooldown_bars_after_cancel",
+        "cooldown_bars_after_exit",
+    }
+    positive_floats = {"tick_size", "min_reward_r", "default_take_profit_r", "max_spread_ticks"}
+
+    for name in positive_ints:
+        if name in parameters and int(parameters[name]["values"][0]) <= 0:
+            raise StrategySpecError(f"parameters.{name} must be positive")
+    for name in non_negative_ints:
+        if name in parameters and int(parameters[name]["values"][0]) < 0:
+            raise StrategySpecError(f"parameters.{name} must be non-negative")
+    for name in positive_floats:
+        if name in parameters and float(parameters[name]["values"][0]) <= 0:
+            raise StrategySpecError(f"parameters.{name} must be positive")
+
+    if "min_ob_ticks" in parameters and "max_ob_ticks" in parameters:
+        if int(parameters["min_ob_ticks"]["values"][0]) > int(parameters["max_ob_ticks"]["values"][0]):
+            raise StrategySpecError("parameters.min_ob_ticks cannot exceed max_ob_ticks")
+    if "min_micro_ob_ticks" in parameters and "max_micro_ob_ticks" in parameters:
+        if int(parameters["min_micro_ob_ticks"]["values"][0]) > int(parameters["max_micro_ob_ticks"]["values"][0]):
+            raise StrategySpecError("parameters.min_micro_ob_ticks cannot exceed max_micro_ob_ticks")
+    if "min_stop_ticks" in parameters and "max_stop_ticks" in parameters:
+        if int(parameters["min_stop_ticks"]["values"][0]) > int(parameters["max_stop_ticks"]["values"][0]):
+            raise StrategySpecError("parameters.min_stop_ticks cannot exceed max_stop_ticks")
 
 
 def _reject_codelike_values(value: Any, path: str = "strategy_spec") -> None:
