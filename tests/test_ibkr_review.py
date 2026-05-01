@@ -48,6 +48,30 @@ class IbkrReviewTests(unittest.TestCase):
         self.assertEqual(result["fast_path_control_diff"]["changes"][0]["change"], "safe_mode")
         self.assertIn("data_stale", result["risk_review"]["blocked_reasons"])
 
+    def test_five_minute_review_blocks_in_safe_mode(self) -> None:
+        request = build_five_minute_review_request(
+            bars_1m=[{"symbol": "MNQ", "close": 19000}],
+            signals=[{"signal_class": "strong_review", "symbol": "MNQ", "side": "BUY", "bar_1m": {"close": 19000}}],
+            execution_ledger={"positions": [], "fill_count": 0, "net_realized_pnl": 0, "total_commission": 0},
+            risk_context={"safe_mode": True},
+        )
+        result = deterministic_fallback_review(request)
+
+        self.assertEqual(result["action"], "paper_block")
+        self.assertIn("safe_mode", result["risk_review"]["blocked_reasons"])
+
+    def test_five_minute_review_blocks_when_daily_trade_cap_is_reached(self) -> None:
+        request = build_five_minute_review_request(
+            bars_1m=[{"symbol": "MNQ", "close": 19000}],
+            signals=[{"signal_class": "strong_review", "symbol": "MNQ", "side": "BUY", "bar_1m": {"close": 19000}}],
+            execution_ledger={"positions": [], "fill_count": 0, "net_realized_pnl": 0, "total_commission": 0},
+            risk_context={"daily_trade_cap_reached": True},
+        )
+        result = deterministic_fallback_review(request)
+
+        self.assertEqual(result["action"], "paper_block")
+        self.assertIn("daily_trade_cap_reached", result["risk_review"]["blocked_reasons"])
+
     def test_five_minute_review_blocks_when_concurrency_cap_is_reached(self) -> None:
         request = build_five_minute_review_request(
             bars_1m=[{"symbol": "MNQ", "close": 19000}],

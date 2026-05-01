@@ -7,7 +7,7 @@ import threading
 from datetime import UTC, datetime
 import unittest
 
-from tlm.ibkr_adapter import OfficialIbkrAdapter, _optional_broker_float
+from tlm.ibkr_adapter import OfficialIbkrAdapter, _ibkr_time_to_iso, _optional_broker_float
 
 
 class FakeEWrapper:
@@ -400,6 +400,12 @@ class OfficialIbkrAdapterTests(unittest.TestCase):
         self.assertIsNone(_optional_broker_float(""))
         self.assertIsNone(_optional_broker_float(1.7976931348623157e308))
         self.assertEqual(_optional_broker_float("12.5"), 12.5)
+
+    def test_ibkr_execution_time_interprets_naive_value_as_local_time(self) -> None:
+        local_tz = datetime.now().astimezone().tzinfo
+        expected = datetime(2026, 5, 1, 21, 30, 4).replace(tzinfo=local_tz).astimezone(UTC).isoformat()
+
+        self.assertEqual(_ibkr_time_to_iso("20260501  21:30:04"), expected)
 
     def test_drain_runtime_events_merges_out_of_order_commission_reports(self) -> None:
         adapter = OfficialIbkrAdapter()

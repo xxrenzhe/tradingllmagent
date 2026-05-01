@@ -263,9 +263,15 @@ def run_ibkr_decision_cycle(
     latest_account = ledger.get("latest_account_snapshot") or {}
     daily_pnl = latest_account.get("daily_pnl")
     daily_loss_limit = state.get("daily_loss_limit")
-    open_bracket_order_count = int(gateway.bracket_order_report().get("open_bracket_order_count", 0))
+    bracket_report = gateway.bracket_order_report()
+    open_bracket_order_count = int(bracket_report.get("open_bracket_order_count", 0))
+    completed_bracket_order_count = int(bracket_report.get("completed_bracket_order_count", 0))
+    daily_trade_cap = int(control_state.get("daily_trade_cap") or 0)
     open_position_quantity = sum(abs(int(position.get("quantity", 0))) for position in ledger.get("positions", []))
     max_concurrent_positions = max(int(strategy.get("max_concurrent_positions", 1) or 1), 1)
+    daily_trade_cap_reached = (
+        daily_trade_cap > 0 and completed_bracket_order_count + open_bracket_order_count >= daily_trade_cap
+    )
     risk_context = {
         "data_stale": market_data.get("status") != "ready",
         "daily_loss_limit_hit": (
@@ -277,6 +283,9 @@ def run_ibkr_decision_cycle(
         "open_bracket_order_count": open_bracket_order_count,
         "open_position_quantity": open_position_quantity,
         "max_concurrent_positions": max_concurrent_positions,
+        "daily_trade_cap": daily_trade_cap,
+        "completed_bracket_order_count": completed_bracket_order_count,
+        "daily_trade_cap_reached": daily_trade_cap_reached,
     }
 
     last_review_at = _parse_state_time(state.get("last_review_at"))
@@ -336,12 +345,15 @@ def run_ibkr_decision_cycle(
     submit_event = None
     plan = review["review_result"].get("paper_plan")
     signal_hash = signal.get("signal_hash")
+    plan_quantity = int((plan or {}).get("quantity", 1) or 1)
+    position_slots_after_plan = open_bracket_order_count + open_position_quantity + plan_quantity
     if (
         review["review_result"].get("action") == "paper_allow"
         and plan
         and signal_hash
         and signal_hash != state.get("last_planned_signal_hash")
-        and open_bracket_order_count + open_position_quantity < max_concurrent_positions
+        and not daily_trade_cap_reached
+        and position_slots_after_plan <= max_concurrent_positions
     ):
         bracket_event = gateway.build_bracket_order(plan)
         if bracket_event.get("event_type") == "bracket_order_built":

@@ -407,6 +407,77 @@ class IbkrPaperLoopTests(unittest.TestCase):
         self.assertEqual(decision["bracket_event_type"], "bracket_order_built")
         self.assertEqual(gateway.bracket_order_report()["open_bracket_order_count"], 2)
 
+    def test_decision_cycle_blocks_new_bracket_when_daily_trade_cap_is_reached(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+        gateway.connect()
+        gateway.record_contract_details(
+            {
+                "symbol": "MNQ",
+                "tick_size": 0.25,
+                "point_value": 2.0,
+                "exchange": "CME",
+                "currency": "USD",
+            }
+        )
+        for snapshot in _breakout_snapshots():
+            gateway.record_market_data(snapshot)
+        gateway.build_bracket_order(
+            {
+                "symbol": "MNQ",
+                "action": "BUY",
+                "quantity": 1,
+                "entry_order_type": "MKT",
+                "reference_price": 100.0,
+                "stop_price": 95.0,
+                "take_profit_price": 110.0,
+                "max_holding_minutes": 20,
+            }
+        )
+
+        state = {
+            "review_interval_seconds": 0,
+            "market_data_history_limit": 100,
+            "readiness_max_stale_seconds": 600,
+            "strategy": {
+                "strategy_id": "mnq_1m_breakout",
+                "strategy_spec_hash": "strategy-hash",
+                "module_id": "range_breakout",
+                "family": "range_breakout",
+                "symbol": "MNQ",
+                "timeframe": "1m",
+                "lookback_bars": 5,
+                "breakout_ticks": 1,
+                "enabled": True,
+                "tick_size": 0.25,
+                "stop_loss_ticks": 20,
+                "take_profit_ticks": 40,
+                "max_holding_minutes": 20,
+                "max_concurrent_positions": 2,
+            },
+            "control_state": {
+                "mode": "paper",
+                "min_confidence": 0.55,
+                "max_spread_ticks": 2.0,
+                "daily_trade_cap": 1,
+                "strategies": {},
+                "trade_session": {"start": "09:30", "end": "15:55"},
+                "safe_mode": False,
+                "kill_switch": False,
+            },
+        }
+
+        decision = run_ibkr_decision_cycle(
+            gateway,
+            symbol="MNQ",
+            review_history=[],
+            optimizer_history=[],
+            state=state,
+        )
+
+        self.assertEqual(decision["review_result_action"], "paper_block")
+        self.assertIsNone(decision["bracket_event_type"])
+        self.assertEqual(gateway.bracket_order_report()["open_bracket_order_count"], 1)
+
     def test_signal_review_bracket_fill_pnl_and_fast_path_risk_reduction(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
         gateway.connect()

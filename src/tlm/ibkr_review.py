@@ -80,12 +80,17 @@ def deterministic_fallback_review(request: dict[str, Any]) -> dict[str, Any]:
     )
     open_position_quantity = abs(int(ledger.get("open_position_quantity") or 0))
     open_bracket_order_count = int(risk_context.get("open_bracket_order_count") or 0)
+    if risk_context.get("safe_mode"):
+        blocked_reasons.append("safe_mode")
+        fast_changes.append({"change": "safe_mode", "reason": "safe_mode"})
     if risk_context.get("data_stale"):
         blocked_reasons.append("data_stale")
         fast_changes.append({"change": "safe_mode", "reason": "data_stale"})
     if risk_context.get("daily_loss_limit_hit"):
         blocked_reasons.append("daily_loss_limit_hit")
         fast_changes.append({"change": "safe_mode", "reason": "daily_loss_limit_hit"})
+    if risk_context.get("daily_trade_cap_reached"):
+        blocked_reasons.append("daily_trade_cap_reached")
     if (
         request.get("strong_signal_count", 0)
         and open_position_quantity + open_bracket_order_count >= max_concurrent_positions

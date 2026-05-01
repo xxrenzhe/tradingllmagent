@@ -808,10 +808,17 @@ def _ibkr_time_to_iso(value: str) -> str:
     cleaned = value.strip()
     for pattern in ("%Y%m%d  %H:%M:%S", "%Y%m%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
         try:
-            return datetime.strptime(cleaned, pattern).replace(tzinfo=UTC).isoformat()
+            return _local_naive_time_to_utc_iso(datetime.strptime(cleaned, pattern))
         except ValueError:
             continue
     return _now()
+
+
+def _local_naive_time_to_utc_iso(parsed: datetime) -> str:
+    local_tz = datetime.now().astimezone().tzinfo
+    if local_tz is not None:
+        return parsed.replace(tzinfo=local_tz).astimezone(UTC).isoformat()
+    return parsed.replace(tzinfo=UTC).isoformat()
 
 
 def _ibkr_bar_time_to_iso(value: Any) -> str:
@@ -823,15 +830,9 @@ def _ibkr_bar_time_to_iso(value: Any) -> str:
             return datetime.fromtimestamp(int(cleaned), tz=UTC).isoformat()
         except ValueError:
             return _now()
-    local_tz = datetime.now().astimezone().tzinfo
     for pattern in ("%Y%m%d  %H:%M:%S", "%Y%m%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
         try:
-            parsed = datetime.strptime(cleaned, pattern)
-            if local_tz is not None:
-                parsed = parsed.replace(tzinfo=local_tz).astimezone(UTC)
-            else:
-                parsed = parsed.replace(tzinfo=UTC)
-            return parsed.isoformat()
+            return _local_naive_time_to_utc_iso(datetime.strptime(cleaned, pattern))
         except ValueError:
             continue
     return _ibkr_time_to_iso(cleaned)
