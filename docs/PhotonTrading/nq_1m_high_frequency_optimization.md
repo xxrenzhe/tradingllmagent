@@ -164,3 +164,17 @@ The IBKR paper wiring bead must remain blocked until the validation tasks pass.
 If the mandate is strictly “maximize historical net PnL while requiring every full year to have more than 1,000 trades and positive net PnL,” choose `positive_expanded_edge_top_32`.
 
 If the mandate is “prepare something realistic for paper trading,” do not choose the 99-concurrency version yet. First validate the 24-concurrency robust variant, then downscale to MNQ with strict daily loss limits.
+
+## 8. Implementation Status
+
+The net-PnL maximizer is now registered in `src/tlm/expanded_high_edge.py` as preset `positive_expanded_edge_top_32`.
+
+Versioned implementation details:
+
+- 32 selected edges are stored as `EXPANDED_HIGH_EDGE_NETMAX_EDGES`.
+- Replay parameters are stored as `EXPANDED_HIGH_EDGE_NETMAX_SPEC`: `max_concurrent_positions=99`, `max_hold_minutes=120`, `stop_range_multiple=6.0`, `min_stop_points=8.0`, `max_stop_points=90.0`.
+- Historical yearly gate snapshots are stored in `EXPANDED_HIGH_EDGE_NETMAX_YEARLY_RESULTS`.
+- `expanded_high_edge_yearly_gate_report()` checks the deterministic yearly gate snapshot.
+- `check_expanded_high_edge_replay()` compares a replay result against the versioned yearly baseline and flags drift.
+- IBKR strategy construction now reads preset-specific parameters, so selecting `TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET=positive_expanded_edge_top_32` uses the 99-concurrency and 120-minute netmax research settings.
+- Unit coverage in `tests/test_expanded_high_edge.py` verifies preset registration, edge-family mix, annual hard gates, and preset-specific IBKR strategy parameters.

@@ -20,12 +20,8 @@ from .events import (
 from .experiments import load_experiment_audit_logs, load_experiment_summary
 from .feature_catalog import FEATURE_CATALOG, feature_readiness_report
 from .expanded_high_edge import (
-    EXPANDED_HIGH_EDGE_CAP24_MAX_CONCURRENT_POSITIONS,
-    EXPANDED_HIGH_EDGE_CAP24_MAX_HOLD_MINUTES,
-    EXPANDED_HIGH_EDGE_CAP24_MAX_STOP_POINTS,
-    EXPANDED_HIGH_EDGE_CAP24_MIN_STOP_POINTS,
     EXPANDED_HIGH_EDGE_CAP24_PRESET,
-    EXPANDED_HIGH_EDGE_CAP24_STOP_RANGE_MULTIPLE,
+    EXPANDED_HIGH_EDGE_PRESET_SPECS,
 )
 from .ibkr_adapter import build_ibkr_gateway_adapter
 from .ibkr_gateway import IbkrPaperGateway
@@ -119,6 +115,10 @@ def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
             os.environ.get("TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET", EXPANDED_HIGH_EDGE_CAP24_PRESET).strip()
             or EXPANDED_HIGH_EDGE_CAP24_PRESET
         )
+        preset_spec = EXPANDED_HIGH_EDGE_PRESET_SPECS.get(
+            preset,
+            EXPANDED_HIGH_EDGE_PRESET_SPECS[EXPANDED_HIGH_EDGE_CAP24_PRESET],
+        )
         return {
             "strategy_id": f"{symbol.lower()}_1m_{preset}",
             "strategy_spec_hash": f"ibkr-paper-expanded-high-edge:{preset}",
@@ -131,11 +131,11 @@ def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
             "tick_size": 0.25,
             "stop_loss_ticks": 32,
             "take_profit_ticks": 48,
-            "stop_range_multiple": EXPANDED_HIGH_EDGE_CAP24_STOP_RANGE_MULTIPLE,
-            "min_stop_points": EXPANDED_HIGH_EDGE_CAP24_MIN_STOP_POINTS,
-            "max_stop_points": EXPANDED_HIGH_EDGE_CAP24_MAX_STOP_POINTS,
-            "max_holding_minutes": EXPANDED_HIGH_EDGE_CAP24_MAX_HOLD_MINUTES,
-            "max_concurrent_positions": EXPANDED_HIGH_EDGE_CAP24_MAX_CONCURRENT_POSITIONS,
+            "stop_range_multiple": preset_spec.stop_range_multiple,
+            "min_stop_points": preset_spec.min_stop_points,
+            "max_stop_points": preset_spec.max_stop_points,
+            "max_holding_minutes": preset_spec.max_hold_minutes,
+            "max_concurrent_positions": preset_spec.max_concurrent_positions,
         }
     preset = os.environ.get("TLM_IBKR_LOW_R_PRESET", "simple_robust_low_r").strip() or "simple_robust_low_r"
     return {
