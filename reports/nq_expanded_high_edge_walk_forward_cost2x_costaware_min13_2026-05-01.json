@@ -1,0 +1,1724 @@
+{
+  "artifact": "expanded_high_edge_walk_forward_validation",
+  "date_from": "2019-01-01",
+  "date_to": "2026-04-27",
+  "symbol": "NQ_CME",
+  "method": {
+    "folds": [
+      {
+        "train_years": [
+          2019,
+          2020
+        ],
+        "test_year": 2021
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021
+        ],
+        "test_year": 2022
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "test_year": 2023
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "test_year": 2024
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "test_year": 2025
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "test_year": 2026
+      }
+    ],
+    "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+    "max_preselect": 40,
+    "max_specs": 6,
+    "min_edge_count": 13,
+    "selection_profile": "net",
+    "excluded_scan_types": [
+      "prior_day_breakout",
+      "high_volume_impulse_continuation",
+      "donchian20_breakout"
+    ],
+    "slippage_ticks_per_side": 2.0,
+    "full_grid": false,
+    "min_full_year_trades": 1000
+  },
+  "summary": {
+    "decision": {
+      "passed": false,
+      "positive_test_years": 6,
+      "test_year_count": 6,
+      "trade_floor_years": 5,
+      "failed_positive_years": [],
+      "failed_trade_floor_years": [
+        2024
+      ]
+    },
+    "oos_total_net_pnl": 229172.5,
+    "oos_min_year_pnl": 5056.25,
+    "oos_min_year_trades": 426,
+    "oos_min_year_trade_floor_count": 867.0,
+    "oos_total_trades": 9799,
+    "average_turnover_jaccard": 0.3111406975937868,
+    "min_turnover_jaccard": 0.23333333333333334,
+    "multiple_testing": {
+      "candidate_group_count": 16538,
+      "evaluated_train_combo_count": 144,
+      "effective_trial_count_floor": 16682,
+      "penalty_decision": "fail",
+      "selection_bias_note": "Treat in-sample net PnL as rejected unless rolling OOS gates pass; statistical deflated Sharpe is not estimated because per-trial return paths are not persisted."
+    }
+  },
+  "folds": [
+    {
+      "train_years": [
+        2019,
+        2020
+      ],
+      "test_year": 2021,
+      "status": "ok",
+      "candidate_group_count": 36,
+      "evaluated_single_count": 180,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_net_top_13",
+        "edge_count": 13,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 24
+        },
+        "edge_summary": {
+          "scan_types": {
+            "low_volume_drift": 2,
+            "opening_range_breakout": 6,
+            "opening_range_retest_reclaim": 2,
+            "range_expansion_continuation": 1,
+            "trend_pullback_reclaim": 1,
+            "vwap_pullback_bounce": 1
+          },
+          "take_profit_r": {
+            "1.0": 2,
+            "1.25": 6,
+            "1.5": 5
+          },
+          "sessions": {
+            "ny_0930_1159": 12,
+            "ny_1200_1559": 1
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "vwap_pullback_bounce|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0|range=0",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0|range=1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=0",
+        "opening_range_retest_reclaim|dir=long|sess=ny_0930_1159|dow=1|trend=1",
+        "low_volume_drift|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=-1|range=1",
+        "low_volume_drift|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=-1|range=-1",
+        "trend_pullback_reclaim|dir=long|sess=ny_0930_1159|dow=1|trend=1",
+        "opening_range_retest_reclaim|dir=long|sess=ny_1200_1559|dow=5|trend=1",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=5|trend=-1"
+      ],
+      "selected_edges": [
+        {
+          "scan_type": "vwap_pullback_bounce",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 1,
+          "take_profit_r": 1.0
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_retest_reclaim",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": -1,
+          "range_bin": 1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": -1,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "trend_pullback_reclaim",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_retest_reclaim",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 5,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.0
+        },
+        {
+          "scan_type": "range_expansion_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        }
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": null,
+        "added_count": null,
+        "removed_count": null
+      },
+      "train_metrics": {
+        "trade_count": 4028,
+        "net_pnl": 647146.25,
+        "profit_factor": 1.5970920255021543,
+        "avg_trade_net_pnl": 160.66192899702085,
+        "max_drawdown": 115212.5,
+        "net_pnl_to_max_drawdown": 5.616979494412498,
+        "win_rate": 0.5593346573982125
+      },
+      "test_metrics": {
+        "trade_count": 1844,
+        "net_pnl": 13502.5,
+        "profit_factor": 1.0148394612624394,
+        "avg_trade_net_pnl": 7.322396963123644,
+        "max_drawdown": 213811.25,
+        "net_pnl_to_max_drawdown": 0.0631514946009623,
+        "win_rate": 0.4745119305856833
+      },
+      "test_yearly_result": {
+        "year": 2021,
+        "trade_count": 1844,
+        "annualized_trade_count": 1844.0,
+        "coverage_days": 311,
+        "net_pnl": 13502.5,
+        "profit_factor": 1.0148394612624394,
+        "avg_trade_net_pnl": 7.322396963123644,
+        "max_drawdown": 213811.25
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021
+      ],
+      "test_year": 2022,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_net_top_24",
+        "edge_count": 24,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 24
+        },
+        "edge_summary": {
+          "scan_types": {
+            "low_volume_drift": 2,
+            "opening_range_breakout": 11,
+            "opening_range_retest_reclaim": 2,
+            "range_expansion_continuation": 3,
+            "selling_absorption_reversal": 1,
+            "trend_pullback_reclaim": 2,
+            "vwap_pullback_bounce": 1,
+            "vwap_reclaim_continuation": 2
+          },
+          "take_profit_r": {
+            "0.75": 1,
+            "1.0": 3,
+            "1.25": 9,
+            "1.5": 11
+          },
+          "sessions": {
+            "ny_0930_1159": 18,
+            "ny_1200_1559": 6
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "opening_range_retest_reclaim|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0|range=0",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0",
+        "opening_range_breakout|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=0|range=1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=1|range=0",
+        "vwap_pullback_bounce|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "trend_pullback_reclaim|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0",
+        "low_volume_drift|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=-1|range=1",
+        "opening_range_retest_reclaim|dir=short|sess=ny_0930_1159|dow=2|trend=-1",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=3",
+        "trend_pullback_reclaim|dir=long|sess=ny_0930_1159|dow=1|trend=1",
+        "selling_absorption_reversal|dir=long|sess=ny_0930_1159|dow=4|trend=-1",
+        "low_volume_drift|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=-1|range=-1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=3|trend=-1|vol=0|range=-1",
+        "vwap_reclaim_continuation|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=3|trend=-1|vol=1|range=0",
+        "vwap_reclaim_continuation|dir=long|sess=ny_0930_1159|dow=4|trend=1",
+        "opening_range_breakout|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=3",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=1|trend=-1|vol=0|range=-1",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=2|trend=-1",
+        "opening_range_breakout|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=2",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=0",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=1|trend=-1|vol=2"
+      ],
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_retest_reclaim",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 1,
+          "take_profit_r": 1.0
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "vwap_pullback_bounce",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "trend_pullback_reclaim",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": -1,
+          "range_bin": 1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_retest_reclaim",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "range_expansion_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 3,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "trend_pullback_reclaim",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "selling_absorption_reversal",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.0
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": -1,
+          "range_bin": -1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 3,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "vwap_reclaim_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "range_expansion_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 3,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 3,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "vwap_reclaim_continuation",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 4,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.0
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 3,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 1,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "range_expansion_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 2,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 1,
+          "trend_bin": -1,
+          "volume_bin": 2,
+          "range_bin": 0,
+          "take_profit_r": 0.75
+        }
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.23333333333333334,
+        "added_count": 17,
+        "removed_count": 6
+      },
+      "train_metrics": {
+        "trade_count": 10645,
+        "net_pnl": 920437.5,
+        "profit_factor": 1.2527216441064222,
+        "avg_trade_net_pnl": 86.46665100986378,
+        "max_drawdown": 208363.75,
+        "net_pnl_to_max_drawdown": 4.417455051562472,
+        "win_rate": 0.5162987317989667
+      },
+      "test_metrics": {
+        "trade_count": 3696,
+        "net_pnl": 75951.25,
+        "profit_factor": 1.0311601263615664,
+        "avg_trade_net_pnl": 20.549580627705627,
+        "max_drawdown": 347723.75,
+        "net_pnl_to_max_drawdown": 0.2184241082180898,
+        "win_rate": 0.49053030303030304
+      },
+      "test_yearly_result": {
+        "year": 2022,
+        "trade_count": 3696,
+        "annualized_trade_count": 3696.0,
+        "coverage_days": 310,
+        "net_pnl": 75951.25,
+        "profit_factor": 1.0311601263615664,
+        "avg_trade_net_pnl": 20.549580627705627,
+        "max_drawdown": 347723.75
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022
+      ],
+      "test_year": 2023,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_net_top_13",
+        "edge_count": 13,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 24
+        },
+        "edge_summary": {
+          "scan_types": {
+            "low_volume_drift": 1,
+            "opening_range_breakout": 5,
+            "opening_range_retest_reclaim": 1,
+            "range_expansion_continuation": 2,
+            "session_extreme_reversion": 2,
+            "vwap_pullback_bounce": 1,
+            "vwap_reclaim_continuation": 1
+          },
+          "take_profit_r": {
+            "1.25": 9,
+            "1.5": 4
+          },
+          "sessions": {
+            "ny_0930_1159": 10,
+            "ny_1200_1559": 3
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "opening_range_retest_reclaim|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=1|range=0",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=0",
+        "vwap_pullback_bounce|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=3",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3|range=3",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=-1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=3|trend=-1|vol=0|range=-1",
+        "vwap_reclaim_continuation|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "low_volume_drift|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=-1|range=-1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=0",
+        "session_extreme_reversion|dir=long|sess=ny_0930_1159|dow=4|trend=-1",
+        "session_extreme_reversion|dir=short|sess=ny_0930_1159|dow=4|trend=1"
+      ],
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_retest_reclaim",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "vwap_pullback_bounce",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "range_expansion_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 3,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "range_expansion_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 3,
+          "range_bin": 3,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 3,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "vwap_reclaim_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": -1,
+          "range_bin": -1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "session_extreme_reversion",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "session_extreme_reversion",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 4,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        }
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.23333333333333334,
+        "added_count": 6,
+        "removed_count": 17
+      },
+      "train_metrics": {
+        "trade_count": 7246,
+        "net_pnl": 1237203.75,
+        "profit_factor": 1.3904606171543992,
+        "avg_trade_net_pnl": 170.74299613579907,
+        "max_drawdown": 169482.5,
+        "net_pnl_to_max_drawdown": 7.299890844187453,
+        "win_rate": 0.5045542368203146
+      },
+      "test_metrics": {
+        "trade_count": 1883,
+        "net_pnl": 5056.25,
+        "profit_factor": 1.005192367925158,
+        "avg_trade_net_pnl": 2.6852097716409986,
+        "max_drawdown": 146888.75,
+        "net_pnl_to_max_drawdown": 0.03442230940082205,
+        "win_rate": 0.4726500265533723
+      },
+      "test_yearly_result": {
+        "year": 2023,
+        "trade_count": 1883,
+        "annualized_trade_count": 1883.0,
+        "coverage_days": 310,
+        "net_pnl": 5056.25,
+        "profit_factor": 1.005192367925158,
+        "avg_trade_net_pnl": 2.6852097716409986,
+        "max_drawdown": 146888.75
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023
+      ],
+      "test_year": 2024,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_net_top_14",
+        "edge_count": 14,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 6
+        },
+        "edge_summary": {
+          "scan_types": {
+            "opening_range_breakout": 6,
+            "opening_range_retest_reclaim": 2,
+            "prior_day_rejection": 1,
+            "range_expansion_continuation": 2,
+            "session_extreme_reversion": 2,
+            "vwap_reclaim_continuation": 1
+          },
+          "take_profit_r": {
+            "1.25": 7,
+            "1.5": 7
+          },
+          "sessions": {
+            "ny_0930_1159": 9,
+            "ny_1200_1559": 5
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=-1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=0",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=1|range=-1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=-1",
+        "session_extreme_reversion|dir=long|sess=ny_0930_1159|dow=4|trend=-1|vol=1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=0",
+        "prior_day_rejection|dir=long|sess=ny_0930_1159|dow=1|trend=-1",
+        "opening_range_retest_reclaim|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "session_extreme_reversion|dir=long|sess=ny_0930_1159|dow=4|trend=-1",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=3",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0",
+        "vwap_reclaim_continuation|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "opening_range_retest_reclaim|dir=short|sess=ny_1200_1559|dow=4|trend=-1",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3|range=3"
+      ],
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": -1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "session_extreme_reversion",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "prior_day_rejection",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_retest_reclaim",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "session_extreme_reversion",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "range_expansion_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 3,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "vwap_reclaim_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_retest_reclaim",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "range_expansion_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 3,
+          "range_bin": 3,
+          "take_profit_r": 1.25
+        }
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.42105263157894735,
+        "added_count": 6,
+        "removed_count": 5
+      },
+      "train_metrics": {
+        "trade_count": 3928,
+        "net_pnl": 595888.75,
+        "profit_factor": 1.3293522267206477,
+        "avg_trade_net_pnl": 151.70283859470467,
+        "max_drawdown": 57587.5,
+        "net_pnl_to_max_drawdown": 10.347536357716518,
+        "win_rate": 0.5007637474541752
+      },
+      "test_metrics": {
+        "trade_count": 867,
+        "net_pnl": 26220.0,
+        "profit_factor": 1.044840825331133,
+        "avg_trade_net_pnl": 30.242214532871973,
+        "max_drawdown": 134580.0,
+        "net_pnl_to_max_drawdown": 0.19482835488185465,
+        "win_rate": 0.4717416378316032
+      },
+      "test_yearly_result": {
+        "year": 2024,
+        "trade_count": 867,
+        "annualized_trade_count": 867.0,
+        "coverage_days": 313,
+        "net_pnl": 26220.0,
+        "profit_factor": 1.044840825331133,
+        "avg_trade_net_pnl": 30.242214532871973,
+        "max_drawdown": 134580.0
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "test_year": 2025,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_net_top_16",
+        "edge_count": 16,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 6
+        },
+        "edge_summary": {
+          "scan_types": {
+            "opening_range_breakout": 12,
+            "range_expansion_continuation": 1,
+            "session_extreme_reversion": 2,
+            "vwap_pullback_bounce": 1
+          },
+          "take_profit_r": {
+            "1.25": 8,
+            "1.5": 8
+          },
+          "sessions": {
+            "ny_0930_1159": 7,
+            "ny_1200_1559": 9
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "session_extreme_reversion|dir=long|sess=ny_1200_1559|dow=2|trend=-1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=-1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=1|range=0",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=0",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=-1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=1|range=0",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=0",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=2",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=2|range=2",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0",
+        "vwap_pullback_bounce|dir=long|sess=ny_0930_1159|dow=2|trend=1|vol=0",
+        "opening_range_breakout|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=1|range=2",
+        "session_extreme_reversion|dir=long|sess=ny_0930_1159|dow=4|trend=-1|vol=1",
+        "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=2|trend=-1|vol=3|range=3"
+      ],
+      "selected_edges": [
+        {
+          "scan_type": "session_extreme_reversion",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 3,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 2,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 2,
+          "range_bin": 2,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "vwap_pullback_bounce",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 2,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "session_extreme_reversion",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "range_expansion_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 3,
+          "range_bin": 3,
+          "take_profit_r": 1.25
+        }
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.30434782608695654,
+        "added_count": 9,
+        "removed_count": 7
+      },
+      "train_metrics": {
+        "trade_count": 4937,
+        "net_pnl": 775160.0,
+        "profit_factor": 1.3560058418833645,
+        "avg_trade_net_pnl": 157.0103301600162,
+        "max_drawdown": 112736.25,
+        "net_pnl_to_max_drawdown": 6.8758717803723295,
+        "win_rate": 0.5067854972655459
+      },
+      "test_metrics": {
+        "trade_count": 1083,
+        "net_pnl": 19037.5,
+        "profit_factor": 1.021403676429254,
+        "avg_trade_net_pnl": 17.57848568790397,
+        "max_drawdown": 133755.0,
+        "net_pnl_to_max_drawdown": 0.14233112780830623,
+        "win_rate": 0.45706371191135736
+      },
+      "test_yearly_result": {
+        "year": 2025,
+        "trade_count": 1083,
+        "annualized_trade_count": 1083.0,
+        "coverage_days": 312,
+        "net_pnl": 19037.5,
+        "profit_factor": 1.021403676429254,
+        "avg_trade_net_pnl": 17.57848568790397,
+        "max_drawdown": 133755.0
+      }
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "test_year": 2026,
+      "status": "ok",
+      "candidate_group_count": 40,
+      "evaluated_single_count": 200,
+      "evaluated_combo_count": 24,
+      "selection": {
+        "label": "walk_forward_net_top_14",
+        "edge_count": 14,
+        "params": {
+          "max_hold_minutes": 120,
+          "stop_range_multiple": 6.0,
+          "min_stop_points": 8.0,
+          "max_stop_points": 90.0,
+          "flatten_on_date_change": true,
+          "max_concurrent_positions": 12
+        },
+        "edge_summary": {
+          "scan_types": {
+            "opening_range_breakout": 9,
+            "opening_range_retest_reclaim": 1,
+            "session_extreme_reversion": 1,
+            "trend_pullback_reclaim": 1,
+            "vwap_pullback_bounce": 1,
+            "vwap_reclaim_continuation": 1
+          },
+          "take_profit_r": {
+            "1.0": 2,
+            "1.25": 2,
+            "1.5": 10
+          },
+          "sessions": {
+            "ny_0930_1159": 8,
+            "ny_1200_1559": 6
+          }
+        }
+      },
+      "selected_candidate_ids": [
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=-1",
+        "session_extreme_reversion|dir=long|sess=ny_1200_1559|dow=2|trend=-1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=4|trend=-1|vol=1|range=2",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=0",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0",
+        "trend_pullback_reclaim|dir=long|sess=ny_0930_1159|dow=1|trend=1|vol=1",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=0|range=-1",
+        "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=3",
+        "opening_range_breakout|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=1|range=2",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=1|range=0",
+        "opening_range_retest_reclaim|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+        "vwap_pullback_bounce|dir=long|sess=ny_0930_1159|dow=2|trend=1|vol=0",
+        "opening_range_breakout|dir=short|sess=ny_1200_1559|dow=4|trend=-1|vol=1",
+        "vwap_reclaim_continuation|dir=short|sess=ny_1200_1559|dow=4|trend=-1"
+      ],
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "session_extreme_reversion",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 2,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 2,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "trend_pullback_reclaim",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": -1,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 3,
+          "range_bin": 0,
+          "take_profit_r": 1.0
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 2,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_retest_reclaim",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 5,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.0
+        },
+        {
+          "scan_type": "vwap_pullback_bounce",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_0930_1159",
+          "dow": 2,
+          "trend_bin": 1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.25
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "vwap_reclaim_continuation",
+          "direction_label": "short",
+          "horizon_minutes": 120,
+          "session_bucket": "ny_1200_1559",
+          "dow": 4,
+          "trend_bin": -1,
+          "volume_bin": 0,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        }
+      ],
+      "selected_edge_turnover": {
+        "jaccard_similarity": 0.36363636363636365,
+        "added_count": 6,
+        "removed_count": 8
+      },
+      "train_metrics": {
+        "trade_count": 8117,
+        "net_pnl": 1321592.5,
+        "profit_factor": 1.3277677884973091,
+        "avg_trade_net_pnl": 162.8178514229395,
+        "max_drawdown": 129283.75,
+        "net_pnl_to_max_drawdown": 10.222417743915999,
+        "win_rate": 0.5093014660588887
+      },
+      "test_metrics": {
+        "trade_count": 426,
+        "net_pnl": 89405.0,
+        "profit_factor": 1.2997050048607153,
+        "avg_trade_net_pnl": 209.87089201877933,
+        "max_drawdown": 56465.0,
+        "net_pnl_to_max_drawdown": 1.5833702293456122,
+        "win_rate": 0.5187793427230047
+      },
+      "test_yearly_result": {
+        "year": 2026,
+        "trade_count": 426,
+        "annualized_trade_count": 1554.9,
+        "coverage_days": 100,
+        "net_pnl": 89405.0,
+        "profit_factor": 1.2997050048607153,
+        "avg_trade_net_pnl": 209.87089201877933,
+        "max_drawdown": 56465.0
+      }
+    }
+  ]
+}

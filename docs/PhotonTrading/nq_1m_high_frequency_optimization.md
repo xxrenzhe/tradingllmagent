@@ -298,3 +298,24 @@ Conclusion:
 - `walk_forward_orb_2026_min13` remains valid only at the current 1x bar-based cost assumption.
 - It is not yet acceptable for paper trading because 2x/3x cost stress breaks annual positivity and quote/tick data is unavailable locally.
 - Follow-up beads: `tradingllmagent-1d3t` imports normalized NQ quote/tick data; `tradingllmagent-dmww` optimizes the walk-forward preset for 2x/3x cost stress.
+
+Cost-stress optimization attempt:
+
+- `reports/nq_expanded_high_edge_walk_forward_cost2x_min13_2026-05-01.json`: running the same walk-forward selection under 2x slippage still fails, with negative OOS years `2023` and `2025`.
+- `reports/nq_expanded_high_edge_walk_forward_cost3x_min13_2026-05-01.json`: running the same walk-forward selection under 3x slippage still fails, with negative OOS years `2021`, `2022`, and `2023`.
+- This rules out a simple “same filters, higher slippage during selection” fix. The next optimization pass needs either a broader candidate search or a stricter annual worst-year objective.
+
+Cost-aware preselection update:
+
+- `scripts/walk_forward_expanded_high_edge.py` now adjusts fixed-horizon candidate preselection by the replay cost implied by `--slippage-ticks-per-side`, instead of ranking candidates on fee-only fixed exits.
+- Best 2x cost-aware result so far: `reports/nq_expanded_high_edge_walk_forward_cost2x_costaware_min13_2026-05-01.json`.
+- 2x result: OOS net PnL `$229,172.50`; `6/6` positive OOS years; `5/6` trade-floor years; only failed trade-floor year is `2024` with `867` trades.
+- Best 3x cost-aware result so far: `reports/nq_expanded_high_edge_walk_forward_cost3x_costaware_min13_2026-05-01.json`.
+- 3x result: OOS net PnL `$216,357.50`; `5/6` positive OOS years; failed positive year `2021`; failed trade-floor years `2024` and `2025`.
+- Additional attempted fixes did not pass: `min_edge_count=16/20` restored frequency but broke 2021/2023 profitability; `floor` profile restored frequency but broke four positive years; re-allowing high-volume or Donchian families still failed 2024 frequency; all-family selection restored frequency but broke 2022 and 2026 profitability.
+
+Current decision:
+
+- The best defensible candidate remains the 1x walk-forward preset for research visualization and Pine translation.
+- The best execution-stressed research candidate is now the 2x cost-aware run, but it is still not paper-trading ready because `2024` fails the annual trade-frequency gate.
+- Further optimization should not keep re-ranking the same candidate set. The next BD task must add new, independent signal families or import quote/tick data to validate whether 2x/3x slippage assumptions are too conservative for this bar-based fill model.

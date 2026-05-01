@@ -53,8 +53,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--max-preselect", type=int, default=40)
     parser.add_argument("--max-specs", type=int, default=6)
     parser.add_argument("--min-edge-count", type=int, default=1)
-    parser.add_argument("--selection-profile", choices=("net", "stable", "defensive"), default="net")
+    parser.add_argument("--selection-profile", choices=("net", "stable", "defensive", "stress", "floor"), default="net")
     parser.add_argument("--exclude-scan-type", action="append", default=[])
+    parser.add_argument("--slippage-ticks-per-side", type=float, default=1.0)
     parser.add_argument("--full-grid", action="store_true")
     parser.add_argument("--min-full-year-trades", type=int, default=1000)
     parser.add_argument("--output", type=Path, default=Path("reports/nq_expanded_high_edge_walk_forward_2026-05-01.json"))
@@ -66,6 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         date_from=args.date_from,
         date_to=args.date_to,
         preset="walk_forward_expanded_high_edge",
+        slippage_ticks_per_side=args.slippage_ticks_per_side,
         flatten_on_date_change=True,
     )
     pattern = str(Path(args.data_root) / "bars" / "1m" / args.symbol / "date=*" / "part-000.parquet")
@@ -80,7 +82,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("building expanded signal table", flush=True)
         build_signal_table(con)
         print("loading global candidate stats", flush=True)
-        all_candidate_stats = load_candidate_stats_for_years(con, tuple(range(2019, 2027)))
+        cost_adjustment_usd = fixed_horizon_cost_adjustment_usd(config)
+        all_candidate_stats = load_candidate_stats_for_years(
+            con,
+            tuple(range(2019, 2027)),
+            cost_adjustment_usd=cost_adjustment_usd,
+        )
         folds = []
         previous_ids: tuple[str, ...] = ()
         parameter_grid = low_r_grid(full_grid=args.full_grid)
@@ -103,6 +110,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_positions_grid=max_positions_grid,
                 min_full_year_trades=args.min_full_year_trades,
                 previous_ids=previous_ids,
+                cost_adjustment_usd=cost_adjustment_usd,
             )
             previous_ids = tuple(fold["selected_candidate_ids"])
             folds.append(fold)
@@ -131,6 +139,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "min_edge_count": args.min_edge_count,
             "selection_profile": args.selection_profile,
             "excluded_scan_types": list(args.exclude_scan_type),
+            "slippage_ticks_per_side": args.slippage_ticks_per_side,
             "full_grid": args.full_grid,
             "min_full_year_trades": args.min_full_year_trades,
         },
@@ -160,11 +169,12 @@ def run_fold(
     max_positions_grid: Sequence[int],
     min_full_year_trades: int,
     previous_ids: Sequence[str],
+    cost_adjustment_usd: float,
 ) -> dict[str, Any]:
     excluded = set(excluded_scan_types)
     raw_candidate_stats = [
         row
-        for row in load_candidate_stats_for_years(con, train_years)
+        for row in load_candidate_stats_for_years(con, train_years, cost_adjustment_usd=cost_adjustment_usd)
         if row.scan_type not in excluded
     ]
     candidate_stats = select_candidate_stats_for_profile(
@@ -237,7 +247,17 @@ def run_fold(
                     params={**params, "max_concurrent_positions": max_positions},
                 )
                 evaluated_combo_count += 1
-                if best_train_combo is None or train_combo_sort_key(train_result, train_years) > train_combo_sort_key(best_train_combo, train_years):
+                if best_train_combo is None or train_combo_sort_key(
+                    train_result,
+                    train_years,
+                    selection_profile,
+                    min_full_year_trades,
+                ) > train_combo_sort_key(
+                    best_train_combo,
+                    train_years,
+                    selection_profile,
+                    min_full_year_trades,
+                ):
                     best_train_combo = train_result
 
     if best_train_combo is None:
@@ -296,6 +316,8 @@ def run_fold(
 def load_candidate_stats_for_years(
     con: duckdb.DuckDBPyConnection,
     years: Sequence[int],
+    *,
+    cost_adjustment_usd: float = 0.0,
 ) -> list[CandidateStats]:
     year_values = ", ".join(str(int(year)) for year in years)
     rows = con.execute(
@@ -311,14 +333,21 @@ def load_candidate_stats_for_years(
                CASE WHEN contains(candidate_id, '|range=') THEN any_value(range_bin) ELSE NULL END AS range_bin,
                year,
                count(*) AS trades,
-               sum(fixed_pnl) AS net_pnl,
-               sum(CASE WHEN fixed_pnl > 0 THEN fixed_pnl ELSE 0 END) AS gross_profit,
-               sum(CASE WHEN fixed_pnl < 0 THEN fixed_pnl ELSE 0 END) AS gross_loss
+               sum(fixed_pnl - ?) AS net_pnl,
+               sum(CASE WHEN fixed_pnl - ? > 0 THEN fixed_pnl - ? ELSE 0 END) AS gross_profit,
+               sum(CASE WHEN fixed_pnl - ? < 0 THEN fixed_pnl - ? ELSE 0 END) AS gross_loss
         FROM candidate_signals
         WHERE year IN ({year_values})
         GROUP BY candidate_id, year
         ORDER BY candidate_id, year
-        """
+        """,
+        [
+            cost_adjustment_usd,
+            cost_adjustment_usd,
+            cost_adjustment_usd,
+            cost_adjustment_usd,
+            cost_adjustment_usd,
+        ],
     ).fetchall()
     grouped: dict[str, dict[str, Any]] = {}
     year_set = tuple(int(year) for year in years)
@@ -384,6 +413,29 @@ def select_candidate_stats_for_profile(
 ) -> list[CandidateStats]:
     if selection_profile == "net":
         return select_candidate_stats(stats, max_preselect)
+    if selection_profile in {"stress", "floor"}:
+        viable = [
+            row
+            for row in stats
+            if row.total_trades >= 250
+            and row.fixed_net_pnl > 0
+            and row.fixed_avg_pnl >= 0.0
+            and (row.fixed_profit_factor or 0.0) >= 1.0
+            and row.fixed_min_full_year_trades >= 15
+        ]
+
+        def stress_rank(row: CandidateStats) -> tuple[float, ...]:
+            return (
+                float(row.fixed_positive_years),
+                float(row.fixed_worst_year_pnl),
+                float(row.fixed_min_full_year_trades),
+                float(row.fixed_net_pnl),
+                float(row.fixed_avg_pnl),
+                float(row.fixed_profit_factor or 0.0),
+                -float(row.total_trades),
+            )
+
+        return sorted({row.candidate_id: row for row in viable}.values(), key=stress_rank, reverse=True)[:max_preselect]
     viable = [
         row
         for row in stats
@@ -565,7 +617,7 @@ def build_walk_forward_specs(
         reverse=True,
     )
     specs: list[dict[str, Any]] = []
-    for size in (4, 8, 12, 13, 14, 16, 24, 32):
+    for size in (4, 6, 8, 10, 12, 13, 14, 16, 20, 24, 32):
         if size < min_edge_count:
             continue
         prefix = ranked[:size]
@@ -589,6 +641,34 @@ def single_train_sort_key(
     positive_train_years = sum(1 for value in train_pnls if value > 0)
     worst_train_pnl = min(train_pnls) if train_pnls else 0.0
     min_train_trades = min(train_counts) if train_counts else 0
+    train_avg_pnls = [
+        pnl / trade_count
+        for pnl, trade_count in zip(train_pnls, train_counts)
+        if trade_count > 0
+    ]
+    if selection_profile == "floor":
+        return (
+            float(positive_train_years),
+            float(min_train_trades),
+            float(worst_train_pnl),
+            float(metrics.get("net_pnl") or 0.0),
+            float(metrics.get("avg_trade_net_pnl") or 0.0),
+            float(metrics.get("profit_factor") or 0.0),
+            float(metrics.get("net_pnl_to_max_drawdown") or 0.0),
+            -float(row.get("avg_hold_bars") or 0.0),
+        )
+    if selection_profile == "stress":
+        return (
+            float(positive_train_years),
+            float(worst_train_pnl),
+            float(min_train_trades),
+            float(metrics.get("net_pnl") or 0.0),
+            float(min(train_avg_pnls) if train_avg_pnls else 0.0),
+            float(metrics.get("avg_trade_net_pnl") or 0.0),
+            float(metrics.get("profit_factor") or 0.0),
+            float(metrics.get("net_pnl_to_max_drawdown") or 0.0),
+            -float(row.get("avg_hold_bars") or 0.0),
+        )
     if selection_profile == "defensive":
         return (
             float(worst_train_pnl),
@@ -612,21 +692,66 @@ def single_train_sort_key(
     )
 
 
-def train_combo_sort_key(row: dict[str, Any], train_years: Sequence[int]) -> tuple[float, ...]:
+def train_combo_sort_key(
+    row: dict[str, Any],
+    train_years: Sequence[int],
+    selection_profile: str,
+    min_full_year_trades: int,
+) -> tuple[float, ...]:
     by_year = {int(item["year"]): item for item in row["yearly_results"]}
     train_pnls = [float(by_year.get(year, {}).get("net_pnl") or 0.0) for year in train_years]
     train_counts = [int(by_year.get(year, {}).get("trade_count") or 0) for year in train_years]
     metrics = row["metrics"]
     all_positive = all(value > 0 for value in train_pnls)
+    min_train_trades = min(train_counts) if train_counts else 0
+    train_avg_pnls = [
+        pnl / trade_count
+        for pnl, trade_count in zip(train_pnls, train_counts)
+        if trade_count > 0
+    ]
+    if selection_profile == "floor":
+        return (
+            1.0 if all_positive else 0.0,
+            1.0 if min_train_trades > min_full_year_trades else 0.0,
+            float(min_train_trades),
+            float(min(train_pnls) if train_pnls else 0.0),
+            float(metrics.get("net_pnl") or 0.0),
+            float(metrics.get("avg_trade_net_pnl") or 0.0),
+            float(metrics.get("profit_factor") or 0.0),
+            float(metrics.get("net_pnl_to_max_drawdown") or 0.0),
+            -float(metrics.get("trade_count") or 0.0),
+        )
+    if selection_profile == "stress":
+        return (
+            1.0 if all_positive else 0.0,
+            1.0 if min_train_trades > min_full_year_trades else 0.0,
+            float(min(train_pnls) if train_pnls else 0.0),
+            float(min_train_trades),
+            float(metrics.get("net_pnl") or 0.0),
+            float(min(train_avg_pnls) if train_avg_pnls else 0.0),
+            float(metrics.get("avg_trade_net_pnl") or 0.0),
+            float(metrics.get("profit_factor") or 0.0),
+            float(metrics.get("net_pnl_to_max_drawdown") or 0.0),
+            -float(metrics.get("trade_count") or 0.0),
+        )
     return (
         1.0 if all_positive else 0.0,
         float(min(train_pnls) if train_pnls else 0.0),
-        float(min(train_counts) if train_counts else 0),
+        float(min_train_trades),
         float(metrics.get("net_pnl") or 0.0),
         float(metrics.get("profit_factor") or 0.0),
         float(metrics.get("net_pnl_to_max_drawdown") or 0.0),
         -float(row.get("avg_hold_bars") or 0.0),
     )
+
+
+def fixed_horizon_cost_adjustment_usd(config: LowRRegimeBasketConfig) -> float:
+    replay_round_trip_cost = (
+        config.round_trip_fees_usd
+        + config.slippage_ticks_per_side * config.tick_size * 2.0 * config.point_value
+    )
+    fixed_horizon_base_cost = 15.0
+    return max(replay_round_trip_cost - fixed_horizon_base_cost, 0.0)
 
 
 def selected_edge_turnover(previous_ids: Sequence[str], current_ids: Sequence[str]) -> dict[str, float | None]:
