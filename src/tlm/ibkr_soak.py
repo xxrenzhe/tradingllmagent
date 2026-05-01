@@ -96,7 +96,7 @@ def summarize_soak_sample(sample: dict[str, Any]) -> dict[str, Any]:
     poller = _dict(sample.get("poller") or health.get("poller"))
     acceptance = _dict(report.get("acceptance_evidence"))
     gates = _dict(acceptance.get("gates"))
-    return {
+    summary = {
         "collected_at": sample.get("collected_at"),
         "symbol": sample.get("symbol"),
         "gateway_status": health.get("status"),
@@ -137,6 +137,8 @@ def summarize_soak_sample(sample: dict[str, Any]) -> dict[str, Any]:
             if isinstance(payload, dict) and payload.get("error")
         ),
     }
+    summary["closeout_status"] = soak_closeout_status(summary)
+    return summary
 
 
 def write_soak_sample(output_dir: Path, sample: dict[str, Any]) -> dict[str, Any]:
@@ -150,6 +152,7 @@ def write_soak_sample(output_dir: Path, sample: dict[str, Any]) -> dict[str, Any
         encoding="utf-8",
     )
     (output_dir / "latest_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    write_soak_closeout(output_dir, summary)
     return summary
 
 
@@ -347,9 +350,98 @@ def _compact_report_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def soak_closeout_status(summary: dict[str, Any]) -> str:
+    if _soak_failure_reasons(summary):
+        return "failed"
+    if summary.get("acceptance_status") == "ready":
+        return "ready"
+    return "pending"
+
+
+def write_soak_closeout(output_dir: Path, summary: dict[str, Any]) -> dict[str, Any]:
+    previous = _load_json(output_dir / "latest_closeout.json")
+    closeout = build_soak_closeout(summary, previous=previous)
+    latest_closeout = output_dir / "latest_closeout.json"
+    latest_closeout.write_text(json.dumps(closeout, indent=2, sort_keys=True), encoding="utf-8")
+    if closeout["status"] in {"ready", "failed"}:
+        final_closeout = output_dir / "final_closeout.json"
+        if not final_closeout.exists():
+            final_closeout.write_text(json.dumps(closeout, indent=2, sort_keys=True), encoding="utf-8")
+    return closeout
+
+
+def build_soak_closeout(summary: dict[str, Any], *, previous: dict[str, Any] | None = None) -> dict[str, Any]:
+    previous = previous if isinstance(previous, dict) else {}
+    status = soak_closeout_status(summary)
+    collected_at = summary.get("collected_at")
+    started_at = previous.get("started_at") or collected_at
+    ready_at = previous.get("ready_at")
+    failed_at = previous.get("failed_at")
+    if status == "ready" and ready_at is None:
+        ready_at = collected_at
+    if status == "failed" and failed_at is None:
+        failed_at = collected_at
+    warnings = _soak_warning_reasons(summary)
+    failures = _soak_failure_reasons(summary)
+    return {
+        "status": status,
+        "started_at": started_at,
+        "last_collected_at": collected_at,
+        "ready_at": ready_at,
+        "failed_at": failed_at,
+        "missing_requirements": list(summary.get("missing_requirements", [])),
+        "warning_reasons": warnings,
+        "failure_reasons": failures,
+        "counts": {
+            "trading_day_count": summary.get("trading_day_count", 0),
+            "readiness_check_count": summary.get("readiness_check_count", 0),
+            "review_cycle_count": summary.get("review_cycle_count", 0),
+            "paper_order_lifecycle_event_count": summary.get("paper_order_lifecycle_event_count", 0),
+            "live_order_attempt_count": summary.get("live_order_attempt_count", 0),
+            "unexplained_duplicate_order_count": summary.get("unexplained_duplicate_order_count", 0),
+            "bracket_child_missing_after_accept_count": summary.get("bracket_child_missing_after_accept_count", 0),
+        },
+        "summary": summary,
+    }
+
+
 def _dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
 def _pick(payload: dict[str, Any], *keys: str) -> dict[str, Any]:
     return {key: payload.get(key) for key in keys if key in payload}
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    return _dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _soak_warning_reasons(summary: dict[str, Any]) -> list[str]:
+    warnings: list[str] = []
+    if summary.get("endpoint_errors"):
+        warnings.extend(f"endpoint_error:{name}" for name in summary.get("endpoint_errors", []))
+    if summary.get("connected") is False:
+        warnings.append("gateway_disconnected")
+    if summary.get("paper_account_verified") is False:
+        warnings.append("paper_account_unverified")
+    if summary.get("safe_mode"):
+        warnings.append("safe_mode")
+    if summary.get("readiness_status") not in {None, "ready"}:
+        warnings.append(f"readiness:{summary.get('readiness_status')}")
+    if summary.get("market_data_status") not in {None, "ready"}:
+        warnings.append(f"market_data:{summary.get('market_data_status')}")
+    return warnings
+
+
+def _soak_failure_reasons(summary: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    if int(summary.get("live_order_attempt_count", 0) or 0) > 0:
+        failures.append("live_order_attempts_detected")
+    if int(summary.get("unexplained_duplicate_order_count", 0) or 0) > 0:
+        failures.append("unexplained_duplicate_orders_detected")
+    if int(summary.get("bracket_child_missing_after_accept_count", 0) or 0) > 0:
+        failures.append("missing_bracket_child_after_accept_detected")
+    return failures

@@ -5,7 +5,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-from tlm.cli import build_parser, cmd_ibkr_loop
+from tlm.cli import build_parser, cmd_ibkr_loop, cmd_ibkr_soak_monitor
 
 
 class IbkrCliTests(unittest.TestCase):
@@ -42,6 +42,16 @@ class IbkrCliTests(unittest.TestCase):
         self.assertEqual(args.output_dir, "experiments/ibkr_paper/soak_test")
         self.assertEqual(args.max_samples, 1)
         self.assertEqual(args.max_stale_seconds, 30)
+        self.assertFalse(args.require_ready)
+
+    def test_ibkr_soak_monitor_can_require_ready(self) -> None:
+        args = build_parser().parse_args(["ibkr", "soak-monitor", "--require-ready"])
+
+        with patch("tlm.cli.run_ibkr_soak_monitor", return_value={"closeout_status": "pending"}):
+            self.assertEqual(cmd_ibkr_soak_monitor(args), 2)
+
+        with patch("tlm.cli.run_ibkr_soak_monitor", return_value={"closeout_status": "ready"}):
+            self.assertEqual(cmd_ibkr_soak_monitor(args), 0)
 
     def test_ibkr_loop_sets_runtime_env_and_runs_uvicorn(self) -> None:
         run_calls: list[dict[str, object]] = []

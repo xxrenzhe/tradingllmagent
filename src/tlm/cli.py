@@ -1190,6 +1190,8 @@ def cmd_ibkr_soak_monitor(args: argparse.Namespace) -> int:
         timeout_seconds=args.timeout_seconds,
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
+    if args.require_ready and summary.get("closeout_status") != "ready":
+        return 2
     return 0
 
 
@@ -1783,6 +1785,7 @@ def build_parser() -> argparse.ArgumentParser:
     ibkr_soak_monitor.add_argument("--interval-seconds", type=float, default=60.0)
     ibkr_soak_monitor.add_argument("--max-samples", type=int)
     ibkr_soak_monitor.add_argument("--stop-when-ready", action="store_true")
+    ibkr_soak_monitor.add_argument("--require-ready", action="store_true")
     ibkr_soak_monitor.add_argument("--timeout-seconds", type=float, default=10.0)
     ibkr_soak_monitor.set_defaults(func=cmd_ibkr_soak_monitor)
 

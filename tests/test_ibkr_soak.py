@@ -5,7 +5,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from tlm.ibkr_soak import compact_soak_sample, collect_soak_sample, run_ibkr_soak_monitor, summarize_soak_sample
+from tlm.ibkr_soak import (
+    build_soak_closeout,
+    compact_soak_sample,
+    collect_soak_sample,
+    run_ibkr_soak_monitor,
+    summarize_soak_sample,
+)
 
 
 class IbkrSoakMonitorTests(unittest.TestCase):
@@ -46,6 +52,7 @@ class IbkrSoakMonitorTests(unittest.TestCase):
         self.assertEqual(summary["readiness_status"], "ready")
         self.assertEqual(summary["market_data_type"], "delayed")
         self.assertEqual(summary["acceptance_status"], "pending")
+        self.assertEqual(summary["closeout_status"], "pending")
         self.assertEqual(summary["paper_order_lifecycle_event_count"], 24)
         self.assertEqual(summary["completed_bracket_order_count"], 1)
         self.assertEqual(summary["missing_requirements"], ["trading_days<5"])
@@ -94,9 +101,14 @@ class IbkrSoakMonitorTests(unittest.TestCase):
 
             self.assertEqual(summary["acceptance_status"], "ready")
             self.assertEqual((output_dir / "latest_summary.json").exists(), True)
+            self.assertEqual((output_dir / "latest_closeout.json").exists(), True)
+            self.assertEqual((output_dir / "final_closeout.json").exists(), True)
             self.assertEqual(len((output_dir / "samples.jsonl").read_text(encoding="utf-8").splitlines()), 1)
             latest = json.loads((output_dir / "latest_summary.json").read_text(encoding="utf-8"))
+            closeout = json.loads((output_dir / "latest_closeout.json").read_text(encoding="utf-8"))
             self.assertEqual(latest["readiness_check_count"], 100)
+            self.assertEqual(closeout["status"], "ready")
+            self.assertEqual(closeout["ready_at"], closeout["last_collected_at"])
 
     def test_compact_sample_drops_growing_histories(self) -> None:
         sample = {
@@ -134,6 +146,56 @@ class IbkrSoakMonitorTests(unittest.TestCase):
         self.assertEqual(compact["report"]["acceptance_evidence"]["status"], "pending")
         self.assertNotIn("reviews", compact["report"])
         self.assertNotIn("one_minute_bars", compact["report"])
+
+    def test_build_closeout_tracks_pending_ready_and_failures(self) -> None:
+        pending = build_soak_closeout(
+            {
+                "collected_at": "2026-04-30T12:00:00+00:00",
+                "acceptance_status": "pending",
+                "missing_requirements": ["trading_days<5"],
+                "trading_day_count": 1,
+                "readiness_check_count": 100,
+                "review_cycle_count": 30,
+                "paper_order_lifecycle_event_count": 20,
+                "live_order_attempt_count": 0,
+                "unexplained_duplicate_order_count": 0,
+                "bracket_child_missing_after_accept_count": 0,
+                "endpoint_errors": [],
+                "connected": True,
+                "paper_account_verified": True,
+                "safe_mode": False,
+                "readiness_status": "ready",
+                "market_data_status": "ready",
+            }
+        )
+        ready = build_soak_closeout(
+            {
+                **pending["summary"],
+                "collected_at": "2026-05-05T12:00:00+00:00",
+                "acceptance_status": "ready",
+                "missing_requirements": [],
+            },
+            previous=pending,
+        )
+        failed = build_soak_closeout(
+            {
+                **ready["summary"],
+                "collected_at": "2026-05-05T12:05:00+00:00",
+                "acceptance_status": "ready",
+                "live_order_attempt_count": 1,
+            },
+            previous=ready,
+        )
+
+        self.assertEqual(pending["status"], "pending")
+        self.assertEqual(pending["started_at"], "2026-04-30T12:00:00+00:00")
+        self.assertIsNone(pending["ready_at"])
+        self.assertEqual(ready["status"], "ready")
+        self.assertEqual(ready["started_at"], "2026-04-30T12:00:00+00:00")
+        self.assertEqual(ready["ready_at"], "2026-05-05T12:00:00+00:00")
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(failed["failed_at"], "2026-05-05T12:05:00+00:00")
+        self.assertIn("live_order_attempts_detected", failed["failure_reasons"])
 
     def test_collect_sample_records_endpoint_errors(self) -> None:
         def fake_fetch(api_base: str, path: str, timeout_seconds: float) -> dict:
