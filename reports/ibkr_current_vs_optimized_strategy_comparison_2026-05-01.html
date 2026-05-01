@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IBKR 运行策略 vs 当前优化策略对比报告</title>
+  <style>
+    :root {
+      --ink: #172018;
+      --muted: #5d6b60;
+      --paper: #f8f4ea;
+      --panel: #fffdf6;
+      --line: #d9cfb9;
+      --green: #146c43;
+      --red: #9f2d20;
+      --amber: #946200;
+      --blue: #24536b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at 10% 0%, #fff4cf, transparent 30%), linear-gradient(135deg, #f6f0df, #eef4ea 50%, #f8f4ea); color: var(--ink); font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; }
+    header { padding: 42px 5vw 26px; border-bottom: 1px solid var(--line); background: rgba(255,253,246,.78); }
+    h1 { margin: 0 0 12px; font-size: clamp(30px, 5vw, 58px); letter-spacing: -0.04em; line-height: .95; }
+    h2 { margin: 34px 0 14px; font-size: 25px; letter-spacing: -0.02em; }
+    h3 { margin: 22px 0 10px; font-size: 19px; }
+    .meta { color: var(--muted); max-width: 1100px; line-height: 1.55; }
+    main { padding: 28px 5vw 56px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    .card { background: rgba(255,253,246,.86); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: 0 14px 40px rgba(54,45,22,.08); }
+    .card strong { display: block; font-size: 28px; letter-spacing: -0.03em; margin: 8px 0; }
+    .small { color: var(--muted); font-size: 14px; line-height: 1.55; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin: 12px 0 24px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #efe7d2; font-weight: 700; }
+    tr:last-child th, tr:last-child td { border-bottom: 0; }
+    .kv th { width: 230px; }
+    code { background: #eadfc5; padding: 2px 6px; border-radius: 6px; }
+    .good { color: var(--green); font-weight: 700; }
+    .bad { color: var(--red); font-weight: 700; }
+    .warn { color: var(--amber); font-weight: 700; }
+    .badge { display: inline-block; margin: 4px 6px 4px 0; padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: #fbf7ed; font-size: 13px; }
+    .callout { border-left: 5px solid var(--blue); padding: 14px 16px; background: rgba(255,253,246,.9); border-radius: 12px; margin: 18px 0; line-height: 1.6; }
+    ul { line-height: 1.65; }
+    footer { padding: 20px 5vw 40px; color: var(--muted); border-top: 1px solid var(--line); }
+  </style>
+</head>
+<body>
+<header>
+  <h1>IBKR 运行策略 vs 当前优化策略对比报告</h1>
+  <div class="meta">生成时间：2026-05-01T23:29:26。比较对象：当前优化策略 <code>walk_forward_orb_2026_min13</code> / cost-aware walk-forward 结果，对比当前本机 IBKR Paper loop 正在运行的 <code>expanded_high_edge_cap24</code>。所有历史回测美元值为 1 NQ 合约口径；IBKR 当前运行标的是 MNQ，点值约为 NQ 的 1/10。</div>
+</header>
+<main>
+  <section class="grid">
+    <div class="card"><div class="small">当前优化策略 1x OOS 决策</div><strong class="good">PASS</strong><div class="small">6/6 年度盈利，6/6 交易频率通过，OOS PnL $285,980.00</div></div>
+    <div class="card"><div class="small">2x cost-aware 决策</div><strong class="warn">未完全通过</strong><div class="small">6/6 年度盈利，但 2024 只有 867 笔，未达 1000 笔。</div></div>
+    <div class="card"><div class="small">IBKR 当前运行</div><strong>expanded_high_edge_cap24</strong><div class="small">MNQ paper, auto-submit False, max_concurrent_positions=24</div></div>
+    <div class="card"><div class="small">核心风险差异</div><strong class="bad">prior_day_breakout</strong><div class="small">优化版已剔除；IBKR cap24 仍有 14 条。</div></div>
+  </section>
+
+  <section>
+    <h2>结论</h2>
+    <div class="callout">
+      当前 IBKR 运行策略不是最新的 walk-forward 优化策略。IBKR 仍运行 <code>expanded_high_edge_cap24</code>，它来自 all-history 搜索候选，包含大量 <code>prior_day_breakout</code>，并且运行上限是 24 并发、300 分钟持仓。最新优化策略 <code>walk_forward_orb_2026_min13</code> 在 1x bar replay 下通过 rolling OOS，但在 2x/3x 执行成本下仍未达到全部硬门槛，因此也不能直接声明为 paper/live ready。
+    </div>
+    <ul>
+      <li>若目标是降低当前 IBKR paper 风险，应优先把运行 preset 从 <code>expanded_high_edge_cap24</code> 切到 <code>walk_forward_orb_2026_min13</code>，并保持低并发/低日内交易上限。</li>
+      <li>若目标是追求最大历史净收益，IBKR cap24 的 all-history 表现更高，但验证质量弱于 rolling walk-forward，且包含已经在 OOS 中表现脆弱的信号族。</li>
+      <li>当前不建议用 auto-submit 放大仓位；应先完成 quote/tick replay、2x/3x 成本压力优化和 paper soak。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>运行时快照</h2>
+    <table class="kv"><tbody><tr><th>运行进程策略</th><td>mnq_1m_expanded_high_edge_cap24</td></tr><tr><th>IBKR preset</th><td><code>expanded_high_edge_cap24</code></td></tr><tr><th>交易标的</th><td>MNQ</td></tr><tr><th>合约</th><td>MNQM6</td></tr><tr><th>账户/环境</th><td>IBKR Paper, live_execution_claim=false</td></tr><tr><th>auto-submit</th><td><span class="good">OFF</span></td></tr><tr><th>readiness</th><td><span class="good">ready</span></td></tr><tr><th>health</th><td><span class="good">paper_armed</span></td></tr><tr><th>market data</th><td>ready / delayed</td></tr><tr><th>open brackets</th><td>2</td></tr><tr><th>completed brackets in current process</th><td>0</td></tr><tr><th>fills in current process</th><td>2</td></tr><tr><th>open position count</th><td>1</td></tr><tr><th>net realized PnL</th><td>$0.00</td></tr><tr><th>total commission</th><td>$1.24</td></tr><tr><th>daily trade cap</th><td>24</td></tr><tr><th>max spread ticks</th><td>4.0</td></tr><tr><th>signal cooldown</th><td>300 seconds</td></tr><tr><th>latest signal class</th><td>none</td></tr><tr><th>latest signal reasons</th><td>no_expanded_high_edge_match</td></tr></tbody></table>
+  </section>
+
+  <section>
+    <h2>核心指标对比</h2>
+    <table><tr><th>指标</th><th>当前优化策略：WF 1x</th><th>优化策略：2x cost-aware</th><th>优化策略：3x cost-aware</th><th>IBKR 运行策略：cap24 搜索回放</th></tr><tr class=""><th>验证类型</th><td>Rolling walk-forward OOS</td><td>Rolling walk-forward OOS</td><td>Rolling walk-forward OOS</td><td>All-history search replay, not rolling OOS</td></tr><tr class=""><th>通过决策</th><td><span class="good">pass</span></td><td><span class="warn">fail</span></td><td><span class="bad">fail</span></td><td><span class="warn">未做 rolling OOS</span></td></tr><tr class=""><th>OOS / replay net PnL, 1 NQ</th><td>$285,980.00</td><td>$229,172.50</td><td>$216,357.50</td><td>$5,371,751.25</td></tr><tr class=""><th>总交易数</th><td>11,070</td><td>9,799</td><td>9,050</td><td>33,238</td></tr><tr class=""><th>年度盈利通过</th><td>6 / 6</td><td>6 / 6</td><td>5 / 6</td><td>8 / 8</td></tr><tr class=""><th>交易频率通过</th><td>6 / 6</td><td>5 / 6</td><td>4 / 6</td><td>search replay pass</td></tr><tr class=""><th>最差年份 PnL</th><td>$3,623.75</td><td>$5,056.25</td><td>$-145,250.00</td><td>$72,637.50</td></tr><tr class=""><th>最低年度/年化交易数</th><td>1,130.0</td><td>867.0</td><td>888.0</td><td>full-year min 3,741; 2026 annualized 6,602.9</td></tr></table>
+  </section>
+
+  <section>
+    <h2>参数与信号差异</h2>
+    <table><tr><th>配置项</th><th>当前优化策略</th><th>IBKR 运行策略</th><th>影响</th></tr><tr class=""><th>preset</th><td><code>walk_forward_orb_2026_min13</code></td><td><code>expanded_high_edge_cap24</code></td><td>IBKR 仍运行旧 cap24，而不是最新 walk-forward preset</td></tr><tr class=""><th>symbol</th><td>NQ research / deploy 可映射 MNQ</td><td>MNQ</td><td>IBKR 当前用 MNQ，美元点值约为 NQ 的 1/10</td></tr><tr class=""><th>edge count</th><td>13</td><td>32</td><td>IBKR 信号更多，包含更高过拟合/重复信号风险</td></tr><tr class=""><th>max concurrent positions</th><td>6</td><td>24</td><td>IBKR 暴露上限高 4 倍</td></tr><tr class=""><th>max holding minutes</th><td>120</td><td>300</td><td>IBKR 最长持仓 300m，优化版 120m</td></tr><tr class=""><th>stop range multiple</th><td>6.0</td><td>6.0</td><td>相同</td></tr><tr class=""><th>prior_day_breakout</th><td>0 edges</td><td>14 edges</td><td>这是主要风险差异；优化版已剔除该类</td></tr><tr class=""><th>auto-submit</th><td>未建议开启</td><td>OFF</td><td>当前 IBKR 运行风险高于优化结论建议</td></tr></table>
+    <h3>当前优化策略 edge 构成</h3>
+    <p><span class="badge">opening_range_breakout: 10</span><span class="badge">opening_range_retest_reclaim: 1</span><span class="badge">range_expansion_continuation: 1</span><span class="badge">vwap_pullback_bounce: 1</span></p>
+    <h3>IBKR 当前 cap24 edge 构成</h3>
+    <p><span class="badge">opening_range_breakout: 11</span><span class="badge">prior_day_breakout: 14</span><span class="badge">selling_absorption_reversal: 1</span><span class="badge">session_extreme_reversion: 1</span><span class="badge">trend_pullback_reclaim: 2</span><span class="badge">vwap_pullback_bounce: 2</span><span class="badge">vwap_reclaim_continuation: 1</span></p>
+  </section>
+
+  <section>
+    <h2>当前优化策略：1x Walk-forward 年度结果</h2>
+    <table><tr><th>Year</th><th>Trades</th><th>Annualized Trades</th><th>Net PnL</th><th>PF</th><th>Edges</th><th>Selected Max Pos</th></tr><tr><td>2021</td><td>1,725</td><td>1,725.0</td><td>$28,932.50</td><td>1.034</td><td>13</td><td>24</td></tr><tr><td>2022</td><td>3,547</td><td>3,547.0</td><td>$47,387.50</td><td>1.022</td><td>16</td><td>99</td></tr><tr><td>2023</td><td>2,763</td><td>2,763.0</td><td>$100,985.00</td><td>1.078</td><td>13</td><td>24</td></tr><tr><td>2024</td><td>1,130</td><td>1,130.0</td><td>$85,360.00</td><td>1.133</td><td>13</td><td>6</td></tr><tr><td>2025</td><td>1,581</td><td>1,581.0</td><td>$3,623.75</td><td>1.003</td><td>16</td><td>6</td></tr><tr><td>2026</td><td>324</td><td>1,182.6</td><td>$19,691.25</td><td>1.079</td><td>13</td><td>6</td></tr></table>
+  </section>
+
+  <section>
+    <h2>2x Cost-aware 年度结果</h2>
+    <table><tr><th>Year</th><th>Trades</th><th>Annualized Trades</th><th>Net PnL</th><th>PF</th><th>Edges</th><th>Selected Max Pos</th></tr><tr><td>2021</td><td>1,844</td><td>1,844.0</td><td>$13,502.50</td><td>1.015</td><td>13</td><td>24</td></tr><tr><td>2022</td><td>3,696</td><td>3,696.0</td><td>$75,951.25</td><td>1.031</td><td>24</td><td>24</td></tr><tr><td>2023</td><td>1,883</td><td>1,883.0</td><td>$5,056.25</td><td>1.005</td><td>13</td><td>24</td></tr><tr><td>2024</td><td>867</td><td>867.0</td><td>$26,220.00</td><td>1.045</td><td>14</td><td>6</td></tr><tr><td>2025</td><td>1,083</td><td>1,083.0</td><td>$19,037.50</td><td>1.021</td><td>16</td><td>6</td></tr><tr><td>2026</td><td>426</td><td>1,554.9</td><td>$89,405.00</td><td>1.300</td><td>14</td><td>12</td></tr></table>
+  </section>
+
+  <section>
+    <h2>IBKR cap24 历史搜索回放年度结果</h2>
+    <p class="small">这是 all-history search replay，不是 rolling OOS。用于解释当前 IBKR preset 的来源和风险，不应与 walk-forward OOS 等价。</p>
+    <table><tr><th>Year</th><th>Trades</th><th>Net PnL</th><th>PF</th><th>Max DD</th></tr><tr><td>2019</td><td>3,741</td><td>$148,962.50</td><td>1.176</td><td>$97,133.75</td></tr><tr><td>2020</td><td>4,505</td><td>$919,658.75</td><td>1.417</td><td>$269,410.00</td></tr><tr><td>2021</td><td>4,212</td><td>$1,040,317.50</td><td>1.559</td><td>$141,905.00</td></tr><tr><td>2022</td><td>4,729</td><td>$1,045,131.25</td><td>1.328</td><td>$227,368.75</td></tr><tr><td>2023</td><td>4,314</td><td>$776,675.00</td><td>1.359</td><td>$151,831.25</td></tr><tr><td>2024</td><td>4,651</td><td>$725,038.75</td><td>1.263</td><td>$224,962.50</td></tr><tr><td>2025</td><td>5,277</td><td>$643,330.00</td><td>1.165</td><td>$269,020.00</td></tr><tr><td>2026</td><td>1,809</td><td>$72,637.50</td><td>1.049</td><td>$272,130.00</td></tr></table>
+  </section>
+
+  <section>
+    <h2>执行状态与风险</h2>
+    <ul>
+      <li>IBKR 当前 readiness 为 <strong>ready</strong>，paper account verified=True，live trading enabled=False。</li>
+      <li>当前 open bracket 数：<strong>2</strong>，当前进程 fill 数：<strong>2</strong>，open position count：<strong>1</strong>。</li>
+      <li>最新信号状态：<strong>none</strong>；原因：no_expanded_high_edge_match。</li>
+      <li>quote/tick replay 仍未完成；执行压力报告中 quote replay 状态为 <code>blocked_no_quote_or_tick_files</code>。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>建议</h2>
+    <ol>
+      <li>不要把当前 IBKR cap24 视为最新优化策略；它是更激进的旧候选。</li>
+      <li>如继续 paper，应切换到 <code>walk_forward_orb_2026_min13</code> 或更低风险配置，并把 daily cap 降到 1-3。</li>
+      <li>保留 300 秒 same-regime cooldown；该保护解决重复 1 分钟信号堆叠，但不替代历史参数搜索。</li>
+      <li>下一轮优化应新增独立信号族或导入 quote/tick 数据，不应继续只重排同一信号池。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>数据来源</h2>
+    <ul>
+      <li>Local API: /api/gateways/ibkr/poller</li><li>Local API: /api/ibkr-paper/reports/current</li><li>reports/nq_expanded_high_edge_walk_forward_no_prior_highvol_donchian_min13_2026-05-01.json</li><li>reports/nq_expanded_high_edge_walk_forward_cost2x_costaware_min13_2026-05-01.json</li><li>reports/nq_expanded_high_edge_walk_forward_cost3x_costaware_min13_2026-05-01.json</li><li>reports/nq_expanded_high_edge_execution_stress_2026-05-01.json</li><li>experiments/profit_mining/expanded_high_edge_strategy_search_2019_2026.json</li><li>src/tlm/expanded_high_edge.py</li>
+    </ul>
+  </section>
+</main>
+<footer>本报告为本地研究与 IBKR Paper runtime 对比，不构成实盘交易建议。</footer>
+</body>
+</html>
