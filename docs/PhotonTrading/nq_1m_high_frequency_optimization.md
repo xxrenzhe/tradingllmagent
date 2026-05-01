@@ -263,3 +263,38 @@ Walk-forward result:
 | 2026 YTD | 324 | 1,182.6 | `$19,691.25` | `1.0792` | `$46,466.25` |
 
 This is the best current implementation candidate for the user's revised requirement. It is still a bar-based research candidate, not a live-ready strategy, until `tradingllmagent-3bxz` validates quote-aware fills and slippage stress.
+
+## 11. Execution Stress Result
+
+Script: `scripts/validate_expanded_high_edge_execution_stress.py`
+
+Report: `reports/nq_expanded_high_edge_execution_stress_2026-05-01.json`
+
+Scope:
+
+- Replays the passing walk-forward OOS report by fold, not a fixed all-history 2026 deployment basket.
+- Applies `1x`, `2x`, and `3x` slippage stress through `slippage_ticks_per_side`.
+- Uses 2026 annualized trade count for the trade-frequency gate.
+- Checks local normalized quote/tick parquet availability before claiming quote replay.
+
+Result:
+
+- Overall decision: `fail`
+- Quote replay: `blocked_no_quote_or_tick_files`
+- Local quote files: `0`
+- Local tick files: `0`
+- 1x slippage: `pass`
+- 2x slippage: `fail`, failed positive year `2025`
+- 3x slippage: `fail`, failed positive years `2021`, `2022`, `2025`
+
+| Stress | OOS Net PnL | Trades | Min Trade-Floor Count | Failed Positive Years | Trade Gate |
+| ---: | ---: | ---: | ---: | --- | --- |
+| 1x | `$285,980.00` | 11,070 | 1,130.0 | none | pass |
+| 2x | `$175,280.00` | 11,070 | 1,130.0 | 2025 | pass |
+| 3x | `$64,580.00` | 11,070 | 1,130.0 | 2021, 2022, 2025 | pass |
+
+Conclusion:
+
+- `walk_forward_orb_2026_min13` remains valid only at the current 1x bar-based cost assumption.
+- It is not yet acceptable for paper trading because 2x/3x cost stress breaks annual positivity and quote/tick data is unavailable locally.
+- Follow-up beads: `tradingllmagent-1d3t` imports normalized NQ quote/tick data; `tradingllmagent-dmww` optimizes the walk-forward preset for 2x/3x cost stress.

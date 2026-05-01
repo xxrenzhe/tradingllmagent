@@ -1,0 +1,1200 @@
+{
+  "artifact": "expanded_high_edge_execution_stress",
+  "preset": "walk_forward_orb_2026_min13",
+  "source_label": "walk_forward_no_prior_highvol_donchian_min13_2026",
+  "source_report": "reports/nq_expanded_high_edge_walk_forward_no_prior_highvol_donchian_min13_2026-05-01.json",
+  "walk_forward_report": "reports/nq_expanded_high_edge_walk_forward_no_prior_highvol_donchian_min13_2026-05-01.json",
+  "date_from": "2019-01-01",
+  "date_to": "2026-04-27",
+  "symbol": "NQ_CME",
+  "signal_count": 106789,
+  "quote_replay": {
+    "status": "blocked_no_quote_or_tick_files",
+    "quote_file_count": 0,
+    "tick_file_count": 0,
+    "quote_sample": [],
+    "tick_sample": []
+  },
+  "cost_stress_passed": false,
+  "stress_results": [
+    {
+      "stress_multiple": 1,
+      "mode": "walk_forward_oos",
+      "slippage_ticks_per_side": 1.0,
+      "fold_results": [
+        {
+          "test_year": 2021,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 24
+            },
+            "edge_summary": {
+              "scan_types": {
+                "low_volume_drift": 3,
+                "opening_range_breakout": 7,
+                "range_expansion_continuation": 1,
+                "trend_pullback_reclaim": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "0.75": 1,
+                "1.0": 1,
+                "1.25": 4,
+                "1.5": 7
+              },
+              "sessions": {
+                "ny_0930_1159": 13
+              }
+            }
+          },
+          "trade_count": 1725,
+          "trade_floor_count": 1725.0,
+          "net_pnl": 28932.5,
+          "profit_factor": 1.0343949309604903,
+          "max_drawdown": 175222.5,
+          "yearly_result": {
+            "year": 2021,
+            "trade_count": 1725,
+            "net_pnl": 28932.5,
+            "gross_profit": 870117.5,
+            "gross_loss": -841185.0,
+            "profit_factor": 1.0343949309604903,
+            "sharpe": 0.21747441943668286,
+            "max_drawdown": 175222.5,
+            "annual_trades": 1725.0,
+            "avg_trade_net_pnl": 16.77246376811594,
+            "winning_trade_count": 797,
+            "losing_trade_count": 926,
+            "win_rate": 0.46202898550724636,
+            "avg_win_net_pnl": 1091.7409033877038,
+            "avg_loss_net_pnl": -908.4071274298057,
+            "largest_win_net_pnl": 2675.0,
+            "largest_loss_net_pnl": -1825.0,
+            "payoff_ratio": 1.2018189536630037,
+            "max_consecutive_losses": 82,
+            "max_drawdown_pct": 1.752225,
+            "net_pnl_to_max_drawdown": 0.1651186348785116
+          }
+        },
+        {
+          "test_year": 2022,
+          "selection": {
+            "label": "walk_forward_net_top_16",
+            "edge_count": 16,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 99
+            },
+            "edge_summary": {
+              "scan_types": {
+                "low_volume_drift": 2,
+                "opening_range_breakout": 7,
+                "opening_range_retest_reclaim": 1,
+                "range_expansion_continuation": 3,
+                "selling_absorption_reversal": 1,
+                "trend_pullback_reclaim": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 2,
+                "1.25": 7,
+                "1.5": 7
+              },
+              "sessions": {
+                "ny_0930_1159": 13,
+                "ny_1200_1559": 3
+              }
+            }
+          },
+          "trade_count": 3547,
+          "trade_floor_count": 3547.0,
+          "net_pnl": 47387.5,
+          "profit_factor": 1.0215149327594504,
+          "max_drawdown": 443560.0,
+          "yearly_result": {
+            "year": 2022,
+            "trade_count": 3547,
+            "net_pnl": 47387.5,
+            "gross_profit": 2249927.5,
+            "gross_loss": -2202540.0,
+            "profit_factor": 1.0215149327594504,
+            "sharpe": 0.14716810495541635,
+            "max_drawdown": 443560.0,
+            "annual_trades": 3547.0,
+            "avg_trade_net_pnl": 13.359881590076121,
+            "winning_trade_count": 1812,
+            "losing_trade_count": 1729,
+            "win_rate": 0.5108542430222723,
+            "avg_win_net_pnl": 1241.6818432671082,
+            "avg_loss_net_pnl": -1273.880855986119,
+            "largest_win_net_pnl": 2675.0,
+            "largest_loss_net_pnl": -1825.0,
+            "payoff_ratio": 0.9747236858394537,
+            "max_consecutive_losses": 63,
+            "max_drawdown_pct": 4.4356,
+            "net_pnl_to_max_drawdown": 0.10683447560645686
+          }
+        },
+        {
+          "test_year": 2023,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 24
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 8,
+                "range_expansion_continuation": 3,
+                "trend_pullback_reclaim": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 1,
+                "1.25": 6,
+                "1.5": 6
+              },
+              "sessions": {
+                "ny_0930_1159": 7,
+                "ny_1200_1559": 6
+              }
+            }
+          },
+          "trade_count": 2763,
+          "trade_floor_count": 2763.0,
+          "net_pnl": 100985.0,
+          "profit_factor": 1.0783895920418864,
+          "max_drawdown": 196268.75,
+          "yearly_result": {
+            "year": 2023,
+            "trade_count": 2763,
+            "net_pnl": 100985.0,
+            "gross_profit": 1389230.0,
+            "gross_loss": -1288245.0,
+            "profit_factor": 1.0783895920418864,
+            "sharpe": 0.508180909668341,
+            "max_drawdown": 196268.75,
+            "annual_trades": 2763.0,
+            "avg_trade_net_pnl": 36.5490408975751,
+            "winning_trade_count": 1341,
+            "losing_trade_count": 1419,
+            "win_rate": 0.48534201954397393,
+            "avg_win_net_pnl": 1035.965697240865,
+            "avg_loss_net_pnl": -907.8541226215644,
+            "largest_win_net_pnl": 2675.0,
+            "largest_loss_net_pnl": -1825.0,
+            "payoff_ratio": 1.1411147137266495,
+            "max_consecutive_losses": 62,
+            "max_drawdown_pct": 1.9626875,
+            "net_pnl_to_max_drawdown": 0.5145240900550903
+          }
+        },
+        {
+          "test_year": 2024,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 10,
+                "range_expansion_continuation": 3
+              },
+              "take_profit_r": {
+                "1.25": 6,
+                "1.5": 7
+              },
+              "sessions": {
+                "ny_0930_1159": 5,
+                "ny_1200_1559": 8
+              }
+            }
+          },
+          "trade_count": 1130,
+          "trade_floor_count": 1130.0,
+          "net_pnl": 85360.0,
+          "profit_factor": 1.1326629729498705,
+          "max_drawdown": 60320.0,
+          "yearly_result": {
+            "year": 2024,
+            "trade_count": 1130,
+            "net_pnl": 85360.0,
+            "gross_profit": 728795.0,
+            "gross_loss": -643435.0,
+            "profit_factor": 1.1326629729498705,
+            "sharpe": 0.8438962902303463,
+            "max_drawdown": 60320.0,
+            "annual_trades": 1130.0,
+            "avg_trade_net_pnl": 75.53982300884955,
+            "winning_trade_count": 519,
+            "losing_trade_count": 609,
+            "win_rate": 0.4592920353982301,
+            "avg_win_net_pnl": 1404.2292870905587,
+            "avg_loss_net_pnl": -1056.5435139573071,
+            "largest_win_net_pnl": 2675.0,
+            "largest_loss_net_pnl": -1825.0,
+            "payoff_ratio": 1.3290785173920445,
+            "max_consecutive_losses": 26,
+            "max_drawdown_pct": 0.6032,
+            "net_pnl_to_max_drawdown": 1.4151193633952255
+          }
+        },
+        {
+          "test_year": 2025,
+          "selection": {
+            "label": "walk_forward_net_top_16",
+            "edge_count": 16,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 13,
+                "range_expansion_continuation": 2,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "0.75": 1,
+                "1.25": 6,
+                "1.5": 9
+              },
+              "sessions": {
+                "ny_0930_1159": 5,
+                "ny_1200_1559": 11
+              }
+            }
+          },
+          "trade_count": 1581,
+          "trade_floor_count": 1581.0,
+          "net_pnl": 3623.75,
+          "profit_factor": 1.0029903862023437,
+          "max_drawdown": 163713.75,
+          "yearly_result": {
+            "year": 2025,
+            "trade_count": 1581,
+            "net_pnl": 3623.75,
+            "gross_profit": 1215423.75,
+            "gross_loss": -1211800.0,
+            "profit_factor": 1.0029903862023437,
+            "sharpe": 0.021635132299419355,
+            "max_drawdown": 163713.75,
+            "annual_trades": 1580.9999999999998,
+            "avg_trade_net_pnl": 2.2920619860847564,
+            "winning_trade_count": 738,
+            "losing_trade_count": 843,
+            "win_rate": 0.4667931688804554,
+            "avg_win_net_pnl": 1646.915650406504,
+            "avg_loss_net_pnl": -1437.485172004745,
+            "largest_win_net_pnl": 2675.0,
+            "largest_loss_net_pnl": -1825.0,
+            "payoff_ratio": 1.1456922704181243,
+            "max_consecutive_losses": 29,
+            "max_drawdown_pct": 1.6371375,
+            "net_pnl_to_max_drawdown": 0.022134671034045705
+          }
+        },
+        {
+          "test_year": 2026,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 10,
+                "opening_range_retest_reclaim": 1,
+                "range_expansion_continuation": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 1,
+                "1.25": 2,
+                "1.5": 10
+              },
+              "sessions": {
+                "ny_0930_1159": 8,
+                "ny_1200_1559": 5
+              }
+            }
+          },
+          "trade_count": 324,
+          "trade_floor_count": 1182.6,
+          "net_pnl": 19691.25,
+          "profit_factor": 1.0791703522032807,
+          "max_drawdown": 46466.25,
+          "yearly_result": {
+            "year": 2026,
+            "trade_count": 324,
+            "net_pnl": 19691.25,
+            "gross_profit": 268411.25,
+            "gross_loss": -248720.0,
+            "profit_factor": 1.0791703522032807,
+            "sharpe": 0.5505712515344219,
+            "max_drawdown": 46466.25,
+            "annual_trades": 324.0,
+            "avg_trade_net_pnl": 60.77546296296296,
+            "winning_trade_count": 157,
+            "losing_trade_count": 167,
+            "win_rate": 0.4845679012345679,
+            "avg_win_net_pnl": 1709.625796178344,
+            "avg_loss_net_pnl": -1489.3413173652696,
+            "largest_win_net_pnl": 2675.0,
+            "largest_loss_net_pnl": -1825.0,
+            "payoff_ratio": 1.14790731731177,
+            "max_consecutive_losses": 20,
+            "max_drawdown_pct": 0.4646625,
+            "net_pnl_to_max_drawdown": 0.4237753207973529
+          }
+        }
+      ],
+      "decision": {
+        "passed": true,
+        "positive_years": 6,
+        "checked_years": [
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "trade_floor_years": 6,
+        "failed_positive_years": [],
+        "failed_trade_floor_years": [],
+        "min_trade_floor_count": 1130.0
+      },
+      "metrics": {
+        "net_pnl": 285980.0,
+        "trade_count": 11070,
+        "min_year_pnl": 3623.75,
+        "min_trade_floor_count": 1130.0
+      }
+    },
+    {
+      "stress_multiple": 2,
+      "mode": "walk_forward_oos",
+      "slippage_ticks_per_side": 2.0,
+      "fold_results": [
+        {
+          "test_year": 2021,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 24
+            },
+            "edge_summary": {
+              "scan_types": {
+                "low_volume_drift": 3,
+                "opening_range_breakout": 7,
+                "range_expansion_continuation": 1,
+                "trend_pullback_reclaim": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "0.75": 1,
+                "1.0": 1,
+                "1.25": 4,
+                "1.5": 7
+              },
+              "sessions": {
+                "ny_0930_1159": 13
+              }
+            }
+          },
+          "trade_count": 1725,
+          "trade_floor_count": 1725.0,
+          "net_pnl": 11682.5,
+          "profit_factor": 1.0137365221583359,
+          "max_drawdown": 186806.25,
+          "yearly_result": {
+            "year": 2021,
+            "trade_count": 1725,
+            "net_pnl": 11682.5,
+            "gross_profit": 862152.5,
+            "gross_loss": -850470.0,
+            "profit_factor": 1.0137365221583359,
+            "sharpe": 0.08781283695045505,
+            "max_drawdown": 186806.25,
+            "annual_trades": 1725.0,
+            "avg_trade_net_pnl": 6.772463768115942,
+            "winning_trade_count": 791,
+            "losing_trade_count": 929,
+            "win_rate": 0.45855072463768115,
+            "avg_win_net_pnl": 1089.9525916561315,
+            "avg_loss_net_pnl": -915.4682454251883,
+            "largest_win_net_pnl": 2665.0,
+            "largest_loss_net_pnl": -1835.0,
+            "payoff_ratio": 1.1905957384135197,
+            "max_consecutive_losses": 82,
+            "max_drawdown_pct": 1.8680625,
+            "net_pnl_to_max_drawdown": 0.06253805747934023
+          }
+        },
+        {
+          "test_year": 2022,
+          "selection": {
+            "label": "walk_forward_net_top_16",
+            "edge_count": 16,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 99
+            },
+            "edge_summary": {
+              "scan_types": {
+                "low_volume_drift": 2,
+                "opening_range_breakout": 7,
+                "opening_range_retest_reclaim": 1,
+                "range_expansion_continuation": 3,
+                "selling_absorption_reversal": 1,
+                "trend_pullback_reclaim": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 2,
+                "1.25": 7,
+                "1.5": 7
+              },
+              "sessions": {
+                "ny_0930_1159": 13,
+                "ny_1200_1559": 3
+              }
+            }
+          },
+          "trade_count": 3547,
+          "trade_floor_count": 3547.0,
+          "net_pnl": 11917.5,
+          "profit_factor": 1.005368485066895,
+          "max_drawdown": 465540.0,
+          "yearly_result": {
+            "year": 2022,
+            "trade_count": 3547,
+            "net_pnl": 11917.5,
+            "gross_profit": 2231817.5,
+            "gross_loss": -2219900.0,
+            "profit_factor": 1.005368485066895,
+            "sharpe": 0.03701136145198956,
+            "max_drawdown": 465540.0,
+            "annual_trades": 3547.0,
+            "avg_trade_net_pnl": 3.3598815900761205,
+            "winning_trade_count": 1806,
+            "losing_trade_count": 1737,
+            "win_rate": 0.509162672681139,
+            "avg_win_net_pnl": 1235.77934662237,
+            "avg_loss_net_pnl": -1278.0080598733448,
+            "largest_win_net_pnl": 2665.0,
+            "largest_loss_net_pnl": -1835.0,
+            "payoff_ratio": 0.9669573967669971,
+            "max_consecutive_losses": 63,
+            "max_drawdown_pct": 4.6554,
+            "net_pnl_to_max_drawdown": 0.025599304034025005
+          }
+        },
+        {
+          "test_year": 2023,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 24
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 8,
+                "range_expansion_continuation": 3,
+                "trend_pullback_reclaim": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 1,
+                "1.25": 6,
+                "1.5": 6
+              },
+              "sessions": {
+                "ny_0930_1159": 7,
+                "ny_1200_1559": 6
+              }
+            }
+          },
+          "trade_count": 2763,
+          "trade_floor_count": 2763.0,
+          "net_pnl": 73355.0,
+          "profit_factor": 1.0563196990345305,
+          "max_drawdown": 201978.75,
+          "yearly_result": {
+            "year": 2023,
+            "trade_count": 2763,
+            "net_pnl": 73355.0,
+            "gross_profit": 1375830.0,
+            "gross_loss": -1302475.0,
+            "profit_factor": 1.0563196990345305,
+            "sharpe": 0.3691400765333578,
+            "max_drawdown": 201978.75,
+            "annual_trades": 2763.0,
+            "avg_trade_net_pnl": 26.5490408975751,
+            "winning_trade_count": 1336,
+            "losing_trade_count": 1424,
+            "win_rate": 0.4835323923271806,
+            "avg_win_net_pnl": 1029.812874251497,
+            "avg_loss_net_pnl": -914.6594101123595,
+            "largest_win_net_pnl": 2665.0,
+            "largest_loss_net_pnl": -1835.0,
+            "payoff_ratio": 1.125897643282314,
+            "max_consecutive_losses": 62,
+            "max_drawdown_pct": 2.0197875,
+            "net_pnl_to_max_drawdown": 0.36318177035950566
+          }
+        },
+        {
+          "test_year": 2024,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 10,
+                "range_expansion_continuation": 3
+              },
+              "take_profit_r": {
+                "1.25": 6,
+                "1.5": 7
+              },
+              "sessions": {
+                "ny_0930_1159": 5,
+                "ny_1200_1559": 8
+              }
+            }
+          },
+          "trade_count": 1130,
+          "trade_floor_count": 1130.0,
+          "net_pnl": 74060.0,
+          "profit_factor": 1.1140156413572264,
+          "max_drawdown": 61820.0,
+          "yearly_result": {
+            "year": 2024,
+            "trade_count": 1130,
+            "net_pnl": 74060.0,
+            "gross_profit": 723620.0,
+            "gross_loss": -649560.0,
+            "profit_factor": 1.1140156413572264,
+            "sharpe": 0.7321808722406213,
+            "max_drawdown": 61820.0,
+            "annual_trades": 1130.0,
+            "avg_trade_net_pnl": 65.53982300884955,
+            "winning_trade_count": 513,
+            "losing_trade_count": 614,
+            "win_rate": 0.4539823008849557,
+            "avg_win_net_pnl": 1410.5653021442495,
+            "avg_loss_net_pnl": -1057.915309446254,
+            "largest_win_net_pnl": 2665.0,
+            "largest_loss_net_pnl": -1835.0,
+            "payoff_ratio": 1.3333442569070897,
+            "max_consecutive_losses": 26,
+            "max_drawdown_pct": 0.6182,
+            "net_pnl_to_max_drawdown": 1.1979941766418636
+          }
+        },
+        {
+          "test_year": 2025,
+          "selection": {
+            "label": "walk_forward_net_top_16",
+            "edge_count": 16,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 13,
+                "range_expansion_continuation": 2,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "0.75": 1,
+                "1.25": 6,
+                "1.5": 9
+              },
+              "sessions": {
+                "ny_0930_1159": 5,
+                "ny_1200_1559": 11
+              }
+            }
+          },
+          "trade_count": 1581,
+          "trade_floor_count": 1581.0,
+          "net_pnl": -12186.25,
+          "profit_factor": 0.9900131941798096,
+          "max_drawdown": 173683.75,
+          "yearly_result": {
+            "year": 2025,
+            "trade_count": 1581,
+            "net_pnl": -12186.25,
+            "gross_profit": 1208048.75,
+            "gross_loss": -1220235.0,
+            "profit_factor": 0.9900131941798096,
+            "sharpe": -0.07275643490411839,
+            "max_drawdown": 173683.75,
+            "annual_trades": 1580.9999999999998,
+            "avg_trade_net_pnl": -7.707938013915244,
+            "winning_trade_count": 737,
+            "losing_trade_count": 844,
+            "win_rate": 0.4661606578115117,
+            "avg_win_net_pnl": 1639.143487109905,
+            "avg_loss_net_pnl": -1445.7760663507108,
+            "largest_win_net_pnl": 2665.0,
+            "largest_loss_net_pnl": -1835.0,
+            "payoff_ratio": 1.1337464530363084,
+            "max_consecutive_losses": 29,
+            "max_drawdown_pct": 1.7368375,
+            "net_pnl_to_max_drawdown": -0.0701634436151914
+          }
+        },
+        {
+          "test_year": 2026,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 10,
+                "opening_range_retest_reclaim": 1,
+                "range_expansion_continuation": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 1,
+                "1.25": 2,
+                "1.5": 10
+              },
+              "sessions": {
+                "ny_0930_1159": 8,
+                "ny_1200_1559": 5
+              }
+            }
+          },
+          "trade_count": 324,
+          "trade_floor_count": 1182.6,
+          "net_pnl": 16451.25,
+          "profit_factor": 1.065702504093614,
+          "max_drawdown": 47376.25,
+          "yearly_result": {
+            "year": 2026,
+            "trade_count": 324,
+            "net_pnl": 16451.25,
+            "gross_profit": 266841.25,
+            "gross_loss": -250390.0,
+            "profit_factor": 1.065702504093614,
+            "sharpe": 0.4599802095756056,
+            "max_drawdown": 47376.25,
+            "annual_trades": 324.0,
+            "avg_trade_net_pnl": 50.77546296296296,
+            "winning_trade_count": 157,
+            "losing_trade_count": 167,
+            "win_rate": 0.4845679012345679,
+            "avg_win_net_pnl": 1699.625796178344,
+            "avg_loss_net_pnl": -1499.3413173652696,
+            "largest_win_net_pnl": 2665.0,
+            "largest_loss_net_pnl": -1835.0,
+            "payoff_ratio": 1.1335816444817421,
+            "max_consecutive_losses": 20,
+            "max_drawdown_pct": 0.4737625,
+            "net_pnl_to_max_drawdown": 0.3472467744914382
+          }
+        }
+      ],
+      "decision": {
+        "passed": false,
+        "positive_years": 5,
+        "checked_years": [
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "trade_floor_years": 6,
+        "failed_positive_years": [
+          2025
+        ],
+        "failed_trade_floor_years": [],
+        "min_trade_floor_count": 1130.0
+      },
+      "metrics": {
+        "net_pnl": 175280.0,
+        "trade_count": 11070,
+        "min_year_pnl": -12186.25,
+        "min_trade_floor_count": 1130.0
+      }
+    },
+    {
+      "stress_multiple": 3,
+      "mode": "walk_forward_oos",
+      "slippage_ticks_per_side": 3.0,
+      "fold_results": [
+        {
+          "test_year": 2021,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 24
+            },
+            "edge_summary": {
+              "scan_types": {
+                "low_volume_drift": 3,
+                "opening_range_breakout": 7,
+                "range_expansion_continuation": 1,
+                "trend_pullback_reclaim": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "0.75": 1,
+                "1.0": 1,
+                "1.25": 4,
+                "1.5": 7
+              },
+              "sessions": {
+                "ny_0930_1159": 13
+              }
+            }
+          },
+          "trade_count": 1725,
+          "trade_floor_count": 1725.0,
+          "net_pnl": -5567.5,
+          "profit_factor": 0.9935249957841239,
+          "max_drawdown": 198576.25,
+          "yearly_result": {
+            "year": 2021,
+            "trade_count": 1725,
+            "net_pnl": -5567.5,
+            "gross_profit": 854277.5,
+            "gross_loss": -859845.0,
+            "profit_factor": 0.9935249957841239,
+            "sharpe": -0.04184874553577236,
+            "max_drawdown": 198576.25,
+            "annual_trades": 1725.0,
+            "avg_trade_net_pnl": -3.227536231884058,
+            "winning_trade_count": 781,
+            "losing_trade_count": 941,
+            "win_rate": 0.4527536231884058,
+            "avg_win_net_pnl": 1093.825224071703,
+            "avg_loss_net_pnl": -913.7566418703507,
+            "largest_win_net_pnl": 2655.0,
+            "largest_loss_net_pnl": -1845.0,
+            "payoff_ratio": 1.197064047417235,
+            "max_consecutive_losses": 82,
+            "max_drawdown_pct": 1.9857625,
+            "net_pnl_to_max_drawdown": -0.02803708902751462
+          }
+        },
+        {
+          "test_year": 2022,
+          "selection": {
+            "label": "walk_forward_net_top_16",
+            "edge_count": 16,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 99
+            },
+            "edge_summary": {
+              "scan_types": {
+                "low_volume_drift": 2,
+                "opening_range_breakout": 7,
+                "opening_range_retest_reclaim": 1,
+                "range_expansion_continuation": 3,
+                "selling_absorption_reversal": 1,
+                "trend_pullback_reclaim": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 2,
+                "1.25": 7,
+                "1.5": 7
+              },
+              "sessions": {
+                "ny_0930_1159": 13,
+                "ny_1200_1559": 3
+              }
+            }
+          },
+          "trade_count": 3547,
+          "trade_floor_count": 3547.0,
+          "net_pnl": -23552.5,
+          "profit_factor": 0.9894729431956841,
+          "max_drawdown": 487520.0,
+          "yearly_result": {
+            "year": 2022,
+            "trade_count": 3547,
+            "net_pnl": -23552.5,
+            "gross_profit": 2213777.5,
+            "gross_loss": -2237330.0,
+            "profit_factor": 0.9894729431956841,
+            "sharpe": -0.07314538205143654,
+            "max_drawdown": 487520.0,
+            "annual_trades": 3547.0,
+            "avg_trade_net_pnl": -6.640118409923879,
+            "winning_trade_count": 1797,
+            "losing_trade_count": 1745,
+            "win_rate": 0.5066253171694389,
+            "avg_win_net_pnl": 1231.9296048970507,
+            "avg_loss_net_pnl": -1282.137535816619,
+            "largest_win_net_pnl": 2655.0,
+            "largest_loss_net_pnl": -1845.0,
+            "payoff_ratio": 0.960840448456577,
+            "max_consecutive_losses": 63,
+            "max_drawdown_pct": 4.8752,
+            "net_pnl_to_max_drawdown": -0.04831083852970135
+          }
+        },
+        {
+          "test_year": 2023,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 24
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 8,
+                "range_expansion_continuation": 3,
+                "trend_pullback_reclaim": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 1,
+                "1.25": 6,
+                "1.5": 6
+              },
+              "sessions": {
+                "ny_0930_1159": 7,
+                "ny_1200_1559": 6
+              }
+            }
+          },
+          "trade_count": 2763,
+          "trade_floor_count": 2763.0,
+          "net_pnl": 45725.0,
+          "profit_factor": 1.0347253865548771,
+          "max_drawdown": 207688.75,
+          "yearly_result": {
+            "year": 2023,
+            "trade_count": 2763,
+            "net_pnl": 45725.0,
+            "gross_profit": 1362485.0,
+            "gross_loss": -1316760.0,
+            "profit_factor": 1.0347253865548771,
+            "sharpe": 0.2300992433983748,
+            "max_drawdown": 207688.75,
+            "annual_trades": 2763.0,
+            "avg_trade_net_pnl": 16.5490408975751,
+            "winning_trade_count": 1329,
+            "losing_trade_count": 1430,
+            "win_rate": 0.4809989142236699,
+            "avg_win_net_pnl": 1025.1956358164034,
+            "avg_loss_net_pnl": -920.8111888111888,
+            "largest_win_net_pnl": 2655.0,
+            "largest_loss_net_pnl": -1845.0,
+            "payoff_ratio": 1.113361401635421,
+            "max_consecutive_losses": 62,
+            "max_drawdown_pct": 2.0768875,
+            "net_pnl_to_max_drawdown": 0.22016117868685714
+          }
+        },
+        {
+          "test_year": 2024,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 10,
+                "range_expansion_continuation": 3
+              },
+              "take_profit_r": {
+                "1.25": 6,
+                "1.5": 7
+              },
+              "sessions": {
+                "ny_0930_1159": 5,
+                "ny_1200_1559": 8
+              }
+            }
+          },
+          "trade_count": 1130,
+          "trade_floor_count": 1130.0,
+          "net_pnl": 62760.0,
+          "profit_factor": 1.0957086650196723,
+          "max_drawdown": 65608.75,
+          "yearly_result": {
+            "year": 2024,
+            "trade_count": 1130,
+            "net_pnl": 62760.0,
+            "gross_profit": 718500.0,
+            "gross_loss": -655740.0,
+            "profit_factor": 1.0957086650196723,
+            "sharpe": 0.6204654542508965,
+            "max_drawdown": 65608.75,
+            "annual_trades": 1130.0,
+            "avg_trade_net_pnl": 55.53982300884956,
+            "winning_trade_count": 508,
+            "losing_trade_count": 619,
+            "win_rate": 0.4495575221238938,
+            "avg_win_net_pnl": 1414.3700787401574,
+            "avg_loss_net_pnl": -1059.3537964458806,
+            "largest_win_net_pnl": 2655.0,
+            "largest_loss_net_pnl": -1845.0,
+            "payoff_ratio": 1.3351253221401125,
+            "max_consecutive_losses": 26,
+            "max_drawdown_pct": 0.6560875,
+            "net_pnl_to_max_drawdown": 0.9565797245032103
+          }
+        },
+        {
+          "test_year": 2025,
+          "selection": {
+            "label": "walk_forward_net_top_16",
+            "edge_count": 16,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 13,
+                "range_expansion_continuation": 2,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "0.75": 1,
+                "1.25": 6,
+                "1.5": 9
+              },
+              "sessions": {
+                "ny_0930_1159": 5,
+                "ny_1200_1559": 11
+              }
+            }
+          },
+          "trade_count": 1581,
+          "trade_floor_count": 1581.0,
+          "net_pnl": -27996.25,
+          "profit_factor": 0.9772143682651301,
+          "max_drawdown": 183653.75,
+          "yearly_result": {
+            "year": 2025,
+            "trade_count": 1581,
+            "net_pnl": -27996.25,
+            "gross_profit": 1200683.75,
+            "gross_loss": -1228680.0,
+            "profit_factor": 0.9772143682651301,
+            "sharpe": -0.16714800210765512,
+            "max_drawdown": 183653.75,
+            "annual_trades": 1580.9999999999998,
+            "avg_trade_net_pnl": -17.707938013915243,
+            "winning_trade_count": 733,
+            "losing_trade_count": 845,
+            "win_rate": 0.46363061353573687,
+            "avg_win_net_pnl": 1638.0405866302865,
+            "avg_loss_net_pnl": -1454.0591715976332,
+            "largest_win_net_pnl": 2655.0,
+            "largest_loss_net_pnl": -1845.0,
+            "payoff_ratio": 1.1265295241255593,
+            "max_consecutive_losses": 29,
+            "max_drawdown_pct": 1.8365375,
+            "net_pnl_to_max_drawdown": -0.15244039394785022
+          }
+        },
+        {
+          "test_year": 2026,
+          "selection": {
+            "label": "walk_forward_net_top_13",
+            "edge_count": 13,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 10,
+                "opening_range_retest_reclaim": 1,
+                "range_expansion_continuation": 1,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 1,
+                "1.25": 2,
+                "1.5": 10
+              },
+              "sessions": {
+                "ny_0930_1159": 8,
+                "ny_1200_1559": 5
+              }
+            }
+          },
+          "trade_count": 324,
+          "trade_floor_count": 1182.6,
+          "net_pnl": 13211.25,
+          "profit_factor": 1.0524131159247798,
+          "max_drawdown": 48286.25,
+          "yearly_result": {
+            "year": 2026,
+            "trade_count": 324,
+            "net_pnl": 13211.25,
+            "gross_profit": 265271.25,
+            "gross_loss": -252060.0,
+            "profit_factor": 1.0524131159247798,
+            "sharpe": 0.36938916761679036,
+            "max_drawdown": 48286.25,
+            "annual_trades": 324.0,
+            "avg_trade_net_pnl": 40.77546296296296,
+            "winning_trade_count": 157,
+            "losing_trade_count": 167,
+            "win_rate": 0.4845679012345679,
+            "avg_win_net_pnl": 1689.625796178344,
+            "avg_loss_net_pnl": -1509.3413173652696,
+            "largest_win_net_pnl": 2655.0,
+            "largest_loss_net_pnl": -1845.0,
+            "payoff_ratio": 1.1194457984677593,
+            "max_consecutive_losses": 20,
+            "max_drawdown_pct": 0.4828625,
+            "net_pnl_to_max_drawdown": 0.27360273369748117
+          }
+        }
+      ],
+      "decision": {
+        "passed": false,
+        "positive_years": 3,
+        "checked_years": [
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "trade_floor_years": 6,
+        "failed_positive_years": [
+          2021,
+          2022,
+          2025
+        ],
+        "failed_trade_floor_years": [],
+        "min_trade_floor_count": 1130.0
+      },
+      "metrics": {
+        "net_pnl": 64580.0,
+        "trade_count": 11070,
+        "min_year_pnl": -27996.25,
+        "min_trade_floor_count": 1130.0
+      }
+    }
+  ],
+  "decision": {
+    "passed": false,
+    "cost_stress_passed": false,
+    "quote_replay_passed": false,
+    "reason": "No normalized quote/tick parquet files are available locally."
+  }
+}
