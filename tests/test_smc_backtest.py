@@ -145,6 +145,30 @@ def run_result(rows: list[dict]):
         return run_bar_backtest(parse_strategy_spec(smc_spec_payload()), symbol_config(), [output])
 
 
+def run_result_with_payload(rows: list[dict], payload: dict):
+    parquet_rows = [
+        (
+            row["symbol"],
+            row["timestamp"],
+            row["open"],
+            row["high"],
+            row["low"],
+            row["close"],
+            row["bid_close"],
+            row["ask_close"],
+            row["tick_count"],
+            1.0,
+            1.0,
+            row["avg_spread"],
+        )
+        for row in rows
+    ]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output = bar_path(Path(temp_dir), "NQmain", "1m", rows[0]["timestamp"].date())
+        write_bars_parquet(output, parquet_rows)
+        return run_bar_backtest(parse_strategy_spec(payload), symbol_config(), [output])
+
+
 class SmcBacktestTests(unittest.TestCase):
     def test_smc_strategy_spec_file_loads(self) -> None:
         spec = load_strategy_spec(Path("strategies/nq_smc_lqem_ce_v1.yaml"))
@@ -178,6 +202,23 @@ class SmcBacktestTests(unittest.TestCase):
 
         self.assertEqual(result.trades, [])
         self.assertEqual(result.metrics.trade_count, 0)
+
+    def test_smc_session_timezone_is_applied_to_utc_bars(self) -> None:
+        payload = smc_spec_payload()
+        payload["session"] = {"timezone": "America/New_York", "trade": "09:30-16:00", "flatten": "16:00"}
+        rows = [
+            {**row, "timestamp": row["timestamp"] + timedelta(hours=5)}
+            for row in long_setup_rows()
+            + [
+                bar(12, 109, 110, 107, 109),
+                bar(13, 109, 115, 108, 114.75),
+            ]
+        ]
+
+        result = run_result_with_payload(rows, payload)
+
+        self.assertEqual(len(result.trades), 1)
+        self.assertEqual(result.trades[0].entry_time, datetime(2025, 1, 2, 14, 42))
 
 
 if __name__ == "__main__":

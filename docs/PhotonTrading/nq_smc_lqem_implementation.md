@@ -1033,18 +1033,18 @@ Baseline report:
 
 - JSON: `reports/nq_smc_lqem_baseline_2026-05-01.json`
 - Markdown: `reports/nq_smc_lqem_baseline_2026-05-01.md`
-- Full-history trades: 22
-- Full-history net PnL: `-2470.00`
-- Full-history profit factor: `0.4443`
-- 2x cost-stress average trade: `-122.27`
-- Final holdout trades: 5
-- Final holdout profit factor: `0.0`
+- Full-history trades: 4
+- Full-history net PnL: `-760.00`
+- Full-history profit factor: `0.0`
+- 2x cost-stress average trade: `-200.00`
+- Final holdout trades: 0
+- Final holdout profit factor: `null`
 
 Bounded optimization was executed after the baseline failed gates. The tested variants were:
 
-- `relaxed_sweeps`: 58 trades, full-history PF `0.7819`, final holdout PF `0.7015`
-- `balanced_r2`: 35 trades, full-history PF `0.9385`, final holdout PF `0.9286`
-- `strict_small_stop`: 40 trades, full-history PF `0.9250`, final holdout PF `0.0`
+- `relaxed_sweeps`: 30 trades, full-history PF `0.3527`, final holdout PF `0.0`
+- `balanced_r2`: 10 trades, full-history PF `0.8326`, final holdout PF `0.0`
+- `strict_small_stop`: 12 trades, full-history PF `0.8219`, final holdout PF `null`
 
 Optimization report:
 
@@ -1052,7 +1052,14 @@ Optimization report:
 - Markdown: `reports/nq_smc_lqem_optimization_2026-05-01.md`
 - Decision: `reject_for_paper_trading`
 
-Conclusion: this v1 SMC LQ-EM CE translation is mechanically implemented and testable, but current evidence does not justify MNQ paper auto-submit. Further work must start with the bd thesis review issue, especially session/timezone alignment, target model, OB definition, and PBL/sweep assumptions.
+Conclusion: this v1 SMC LQ-EM CE translation is mechanically implemented and testable, but correct `America/New_York` session handling makes the strategy even lower frequency. Current evidence does not justify MNQ paper auto-submit. Further work must start with the bd thesis review issue, especially chart-level setup parity, target model, OB definition, and PBL/sweep assumptions.
+
+Recheck note for the low trade count:
+
+- The original low-count result was suspicious because the backtester compared `America/New_York` session windows directly against UTC bar timestamps. This has been fixed in `src/tlm/backtest.py` by converting each source timestamp from the symbol timezone into the strategy session timezone before grouping trading days and applying session windows.
+- After the timezone fix, the full-history funnel is still too narrow: 5,378,727 loaded 1-minute bars, 4,090 session days, 951,662 signal-window bars, 874 HTF POI detections, 868 PBL confirmations, 11 valid liquidity sweeps that touch the active OB, 7 LTF CHOCH limit signals, and 4 filled trades.
+- The primary bottleneck is therefore the current v1 SMC translation, not just execution cost. It requires a 15-minute structure event, valid premium/discount HTF OB, PBL clearance, sweep-and-reclaim within 3 bars, sweep touching the OB, same-direction 1-minute CHOCH, valid micro OB, stop-size bounds, active NY signal window, and limit fill before TTL. This is much stricter than discretionary PhotonTrading chart selection.
+- The poor PnL is also expected once only 4 baseline trades survive the funnel: all 4 hit stop loss. The relaxed sweep variant increased frequency to 30 trades but still produced negative expectancy and failed holdout gates, so the correct action is thesis review and funnel ablation, not paper trading.
 
 ## 20. Known Limits
 

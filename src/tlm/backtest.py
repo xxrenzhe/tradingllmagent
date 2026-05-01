@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, time
 from math import ceil, floor
 from pathlib import Path
 from typing import Sequence
+from zoneinfo import ZoneInfo
 
 import duckdb
 
@@ -779,6 +780,8 @@ def run_smc_lqem_ce(
     max_trades_per_day = int(spec.risk.get("max_trades_per_day", 999_999))
     trade_ranges = parse_session_ranges(spec.session.trade)
     flatten_time = parse_clock(spec.session.flatten)
+    source_timezone = ZoneInfo(symbol_config.timezone)
+    session_timezone = ZoneInfo(spec.session.timezone)
     warmup_start = _session_warmup_start(
         trade_ranges[0][0],
         parameters.htf_minutes * (parameters.htf_swing_left + parameters.htf_swing_right + 2),
@@ -787,20 +790,21 @@ def run_smc_lqem_ce(
     trades: list[Trade] = []
     by_day: dict[object, list[tuple[int, dict]]] = {}
     for index, bar in enumerate(bars):
-        by_day.setdefault(bar["timestamp"].date(), []).append((index, bar))
+        session_datetime = _session_datetime(bar["timestamp"], source_timezone, session_timezone)
+        by_day.setdefault(session_datetime.date(), []).append((index, {**bar, "_session_time": session_datetime.time()}))
 
     for _, indexed_day_bars in sorted(by_day.items(), key=lambda item: item[0]):
         machine = SmcLqemStateMachine(parameters)
         day_bars = [
             (global_index, bar)
             for global_index, bar in indexed_day_bars
-            if _time_in_warmup_to_flatten(bar["timestamp"].time(), warmup_start, flatten_time)
+            if _time_in_warmup_to_flatten(bar["_session_time"], warmup_start, flatten_time)
         ]
         position = None
         trades_today = 0
 
         for session_index, (_global_index, bar) in enumerate(day_bars):
-            bar_time = bar["timestamp"].time()
+            bar_time = bar["_session_time"]
             session_allowed = (
                 _time_in_ranges(bar_time, trade_ranges)
                 and trades_today < max_trades_per_day
@@ -1736,6 +1740,14 @@ def _time_in_warmup_to_flatten(value: time, warmup_start: time, flatten_time: ti
     if warmup_start <= flatten_time:
         return warmup_start <= value <= flatten_time
     return value >= warmup_start or value <= flatten_time
+
+
+def _session_datetime(timestamp: datetime, source_timezone: ZoneInfo, session_timezone: ZoneInfo) -> datetime:
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=source_timezone)
+    else:
+        timestamp = timestamp.astimezone(source_timezone)
+    return timestamp.astimezone(session_timezone).replace(tzinfo=None)
 
 
 def parse_clock(value: str) -> time:

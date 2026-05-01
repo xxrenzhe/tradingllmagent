@@ -3,23 +3,23 @@
 - Symbol: `NQ_CME`
 - Window: `2010-06-06` to `2026-04-27`
 - Data coverage: 4930/5805 files
-- Full-history trades: 35
-- Full-history net PnL: -410.00
-- Full-history profit factor: 0.9385
-- Full-history max drawdown: 2905.00
+- Full-history trades: 10
+- Full-history net PnL: -200.00
+- Full-history profit factor: 0.8326
+- Full-history max drawdown: 605.00
 
 ## Promotion Gates
 
-- minimum_trade_count: FAIL (actual=35, threshold=200)
-- positive_expectancy_after_2x_cost: FAIL (actual=-21.714285714285715, threshold=> 0)
-- final_holdout_profit_factor: FAIL (actual=0.9285714285714286, threshold=> 1.05)
-- yearly_profit_concentration: PASS (actual=0.33189655172413796, threshold=<= 0.40)
+- minimum_trade_count: FAIL (actual=10, threshold=200)
+- positive_expectancy_after_2x_cost: FAIL (actual=-30.0, threshold=> 0)
+- final_holdout_profit_factor: FAIL (actual=0.0, threshold=> 1.05)
+- yearly_profit_concentration: FAIL (actual=0.8701298701298701, threshold=<= 0.40)
 
 ## Cost Stress
 
-- 1.0x slippage: trades=35, net_pnl=-410.00, avg_trade=-11.7143
-- 2.0x slippage: trades=35, net_pnl=-760.00, avg_trade=-21.7143
-- 3.0x slippage: trades=35, net_pnl=-1110.00, avg_trade=-31.7143
+- 1.0x slippage: trades=10, net_pnl=-200.00, avg_trade=-20.0000
+- 2.0x slippage: trades=10, net_pnl=-300.00, avg_trade=-30.0000
+- 3.0x slippage: trades=10, net_pnl=-400.00, avg_trade=-40.0000
 
 ## Walk Forward
 
@@ -28,13 +28,13 @@
 
 ## Audited Samples
 
-- Winner 2024-02-15T14:01:00 short net=1185.00 r=2.4688
-- Winner 2025-08-28T14:04:00 long net=845.00 r=2.4493
-- Winner 2014-10-14T14:18:00 long net=770.00 r=2.4444
-- Winner 2022-02-08T14:53:00 short net=760.00 r=2.4516
-- Winner 2016-01-21T14:59:00 long net=560.00 r=2.4348
-- Loser 2022-10-27T13:36:00 long net=-505.00 r=-1.0306
-- Loser 2024-07-30T13:43:00 long net=-460.00 r=-1.0337
-- Loser 2023-11-24T14:59:00 long net=-435.00 r=-1.0357
-- Loser 2021-02-01T13:31:00 long net=-400.00 r=-1.0390
-- Loser 2025-07-21T13:36:00 short net=-365.00 r=-1.0429
+- Winner 2024-10-28T18:38:00 short net=775.00 r=1.8452
+- Winner 2020-05-20T17:34:00 long net=220.00 r=2.3158
+- Winner 2015-09-08T17:31:00 long net=-50.00 r=-1.4286
+- Winner 2014-05-20T17:31:00 long net=-60.00 r=-1.3333
+- Winner 2019-03-29T17:31:00 short net=-100.00 r=-1.1765
+- Loser 2025-06-16T17:35:00 short net=-370.00 r=-1.0423
+- Loser 2023-11-16T15:50:00 long net=-235.00 r=-1.0682
+- Loser 2015-09-02T15:07:00 short net=-155.00 r=-1.1071
+- Loser 2020-11-12T18:31:00 long net=-120.00 r=-1.1429
+- Loser 2024-05-20T17:49:00 long net=-105.00 r=-1.1667
