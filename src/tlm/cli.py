@@ -34,6 +34,7 @@ from .feature_catalog import feature_readiness_report
 from .firstrate import import_firstrate_bars
 from .ibkr_adapter import build_ibkr_gateway_adapter
 from .ibkr_gateway import IbkrPaperGateway
+from .expanded_high_edge import EXPANDED_HIGH_EDGE_PRESETS, EXPANDED_HIGH_EDGE_CAP24_PRESET
 from .low_r_regime_basket import PRESETS as LOW_R_PRESETS
 from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
 from .ibkr_soak import run_ibkr_soak_monitor
@@ -1159,9 +1160,12 @@ def cmd_ibkr_loop(args: argparse.Namespace) -> int:
     os.environ["TLM_IBKR_POLL_SYMBOL"] = args.symbol
     os.environ["TLM_IBKR_STRATEGY_FAMILY"] = args.strategy_family
     os.environ["TLM_IBKR_LOW_R_PRESET"] = args.low_r_preset
+    os.environ["TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET"] = args.expanded_high_edge_preset
     os.environ["TLM_IBKR_POLL_INTERVAL_SECONDS"] = str(args.poll_interval_seconds)
     os.environ["TLM_IBKR_REVIEW_INTERVAL_SECONDS"] = str(args.review_interval_seconds)
     os.environ["TLM_IBKR_READINESS_MAX_STALE_SECONDS"] = str(args.max_stale_seconds)
+    if args.max_spread_ticks is not None:
+        os.environ["TLM_IBKR_MAX_SPREAD_TICKS"] = str(args.max_spread_ticks)
     os.environ["TLM_IBKR_AUTO_SUBMIT"] = "1" if args.auto_submit else "0"
     os.environ["TLM_IBKR_AUTO_CONNECT"] = "1" if args.connect else "0"
     os.environ["TLM_IBKR_HOST"] = args.ibkr_host
@@ -1769,11 +1773,21 @@ def build_parser() -> argparse.ArgumentParser:
     ibkr_loop.add_argument("--ibkr-host", default="127.0.0.1")
     ibkr_loop.add_argument("--ibkr-port", type=int, default=7497)
     ibkr_loop.add_argument("--client-id", type=int, default=11)
-    ibkr_loop.add_argument("--strategy-family", choices=["low_r_regime_basket", "range_breakout"], default="low_r_regime_basket")
+    ibkr_loop.add_argument(
+        "--strategy-family",
+        choices=["expanded_high_edge", "low_r_regime_basket", "range_breakout"],
+        default="expanded_high_edge",
+    )
     ibkr_loop.add_argument("--low-r-preset", choices=sorted(LOW_R_PRESETS), default="simple_robust_low_r")
+    ibkr_loop.add_argument(
+        "--expanded-high-edge-preset",
+        choices=sorted(EXPANDED_HIGH_EDGE_PRESETS),
+        default=EXPANDED_HIGH_EDGE_CAP24_PRESET,
+    )
     ibkr_loop.add_argument("--poll-interval-seconds", type=float, default=2.0)
     ibkr_loop.add_argument("--review-interval-seconds", type=float, default=300.0)
     ibkr_loop.add_argument("--max-stale-seconds", type=int, default=5)
+    ibkr_loop.add_argument("--max-spread-ticks", type=float)
     ibkr_loop.add_argument("--auto-submit", action="store_true")
     ibkr_loop.add_argument("--no-connect", action="store_false", dest="connect")
     ibkr_loop.set_defaults(func=cmd_ibkr_loop, connect=True)

@@ -76,6 +76,7 @@ class IbkrSignalEngineTests(unittest.TestCase):
         self.assertEqual(signal["signal_class"], "blocked")
         self.assertTrue(signal["blocked"])
         self.assertIn("spread_above_limit", signal["reasons"])
+        self.assertEqual(signal["risk_context"]["max_spread_ticks"], 2)
 
     def test_build_signal_candidate_requires_sufficient_lookback(self) -> None:
         bars = build_one_minute_bars([snapshot(0, 19000.0), snapshot(60, 19000.25)])

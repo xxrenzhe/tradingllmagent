@@ -48,6 +48,27 @@ class IbkrReviewTests(unittest.TestCase):
         self.assertEqual(result["fast_path_control_diff"]["changes"][0]["change"], "safe_mode")
         self.assertIn("data_stale", result["risk_review"]["blocked_reasons"])
 
+    def test_five_minute_review_blocks_when_concurrency_cap_is_reached(self) -> None:
+        request = build_five_minute_review_request(
+            bars_1m=[{"symbol": "MNQ", "close": 19000}],
+            signals=[
+                {
+                    "signal_class": "strong_review",
+                    "symbol": "MNQ",
+                    "side": "BUY",
+                    "bar_1m": {"close": 19000.0},
+                    "trigger_reasons": ["expanded_high_edge:prior_day_breakout"],
+                }
+            ],
+            execution_ledger={"positions": [{"symbol": "MNQ", "quantity": 20}], "fill_count": 0},
+            risk_context={"open_bracket_order_count": 4},
+            strategy_state={"max_concurrent_positions": 24},
+        )
+        result = deterministic_fallback_review(request)
+
+        self.assertEqual(result["action"], "paper_block")
+        self.assertIn("max_concurrent_positions_reached", result["risk_review"]["blocked_reasons"])
+
     def test_validate_review_result_rejects_forbidden_changes_and_order_objects(self) -> None:
         with self.assertRaisesRegex(ValueError, "fast path change is not allowed"):
             validate_review_result(

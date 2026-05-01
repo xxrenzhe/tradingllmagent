@@ -19,8 +19,10 @@ class IbkrCliTests(unittest.TestCase):
         self.assertTrue(args.connect)
         self.assertEqual(args.api_port, 8000)
         self.assertEqual(args.ibkr_port, 7497)
-        self.assertEqual(args.strategy_family, "low_r_regime_basket")
+        self.assertEqual(args.strategy_family, "expanded_high_edge")
         self.assertEqual(args.low_r_preset, "simple_robust_low_r")
+        self.assertEqual(args.expanded_high_edge_preset, "expanded_high_edge_cap24")
+        self.assertIsNone(args.max_spread_ticks)
 
     def test_parser_exposes_ibkr_soak_monitor(self) -> None:
         parser = build_parser()
@@ -84,6 +86,8 @@ class IbkrCliTests(unittest.TestCase):
                 "120",
                 "--max-stale-seconds",
                 "9",
+                "--max-spread-ticks",
+                "4",
                 "--auto-submit",
             ]
         )
@@ -95,11 +99,13 @@ class IbkrCliTests(unittest.TestCase):
                 self.assertEqual(result, 0)
                 self.assertEqual(os.environ["TLM_IBKR_POLLER_ENABLED"], "1")
                 self.assertEqual(os.environ["TLM_IBKR_POLL_SYMBOL"], "MNQ")
-                self.assertEqual(os.environ["TLM_IBKR_STRATEGY_FAMILY"], "low_r_regime_basket")
+                self.assertEqual(os.environ["TLM_IBKR_STRATEGY_FAMILY"], "expanded_high_edge")
                 self.assertEqual(os.environ["TLM_IBKR_LOW_R_PRESET"], "simple_robust_low_r")
+                self.assertEqual(os.environ["TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET"], "expanded_high_edge_cap24")
                 self.assertEqual(os.environ["TLM_IBKR_POLL_INTERVAL_SECONDS"], "3.0")
                 self.assertEqual(os.environ["TLM_IBKR_REVIEW_INTERVAL_SECONDS"], "120.0")
                 self.assertEqual(os.environ["TLM_IBKR_READINESS_MAX_STALE_SECONDS"], "9")
+                self.assertEqual(os.environ["TLM_IBKR_MAX_SPREAD_TICKS"], "4.0")
                 self.assertEqual(os.environ["TLM_IBKR_AUTO_SUBMIT"], "1")
                 self.assertEqual(os.environ["TLM_IBKR_AUTO_CONNECT"], "1")
                 self.assertEqual(os.environ["TLM_IBKR_PORT"], "7497")

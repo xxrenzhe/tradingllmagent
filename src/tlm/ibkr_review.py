@@ -73,14 +73,24 @@ def deterministic_fallback_review(request: dict[str, Any]) -> dict[str, Any]:
     ledger = request.get("execution_ledger_summary", {})
     blocked_reasons = []
     fast_changes = []
+    strategy_state = request.get("strategy_state", {})
+    max_concurrent_positions = max(
+        int(strategy_state.get("max_concurrent_positions", risk_context.get("max_concurrent_positions", 1)) or 1),
+        1,
+    )
+    open_position_quantity = abs(int(ledger.get("open_position_quantity") or 0))
+    open_bracket_order_count = int(risk_context.get("open_bracket_order_count") or 0)
     if risk_context.get("data_stale"):
         blocked_reasons.append("data_stale")
         fast_changes.append({"change": "safe_mode", "reason": "data_stale"})
     if risk_context.get("daily_loss_limit_hit"):
         blocked_reasons.append("daily_loss_limit_hit")
         fast_changes.append({"change": "safe_mode", "reason": "daily_loss_limit_hit"})
-    if int(ledger.get("open_position_quantity") or 0) != 0 and request.get("strong_signal_count", 0):
-        blocked_reasons.append("open_position_conflict")
+    if (
+        request.get("strong_signal_count", 0)
+        and open_position_quantity + open_bracket_order_count >= max_concurrent_positions
+    ):
+        blocked_reasons.append("max_concurrent_positions_reached")
     if blocked_reasons:
         action = "paper_block"
     elif request.get("strong_signal_count", 0) > 0:

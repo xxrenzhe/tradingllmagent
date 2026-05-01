@@ -1590,6 +1590,33 @@ class APIImportTests(unittest.TestCase):
         self.assertIn("trading_days<5", blocked["blockers"])
         self.assertFalse(poller["auto_submit"])
 
+    def test_ibkr_poller_update_can_adjust_max_spread_ticks(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ModuleNotFoundError:
+            self.skipTest("FastAPI is not installed")
+
+        with patch.dict(
+            os.environ,
+            {
+                "TLM_IBKR_AUTO_CONNECT": "0",
+                "TLM_IBKR_POLLER_ENABLED": "0",
+            },
+            clear=False,
+        ):
+            app = create_app()
+            with TestClient(app) as client:
+                updated = client.post(
+                    "/api/gateways/ibkr/poller",
+                    json={"max_spread_ticks": 3.0, "reason": "test_spread_tuning"},
+                ).json()
+                poller = client.get("/api/gateways/ibkr/poller").json()
+
+        self.assertEqual(updated["status"], "updated")
+        self.assertEqual(updated["updates"][0]["field"], "max_spread_ticks")
+        self.assertEqual(poller["control_state"]["max_spread_ticks"], 3.0)
+        self.assertFalse(poller["auto_submit"])
+
     def test_ibkr_poller_update_force_enables_auto_submit(self) -> None:
         try:
             from fastapi.testclient import TestClient

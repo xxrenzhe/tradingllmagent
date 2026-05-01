@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import tempfile
@@ -7,7 +8,7 @@ import unittest
 
 import duckdb
 
-from tlm.api import _ibkr_default_strategy, _ibkr_load_warm_start_bars, _ibkr_maybe_backfill_warm_start_bars, _ibkr_warm_start_rows_usable, run_ibkr_decision_cycle
+from tlm.api import _ibkr_default_control_state, _ibkr_default_strategy, _ibkr_load_warm_start_bars, _ibkr_maybe_backfill_warm_start_bars, _ibkr_warm_start_rows_usable, run_ibkr_decision_cycle
 from tlm.ibkr_gateway import IbkrPaperGateway
 from tlm.ibkr_optimizer import apply_fast_path_control_diff
 from tlm.ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
@@ -46,16 +47,58 @@ class FakeIbkrAdapter:
 
 
 class IbkrPaperLoopTests(unittest.TestCase):
-    def test_default_ibkr_strategy_uses_simple_robust_low_r(self) -> None:
+    def test_default_ibkr_strategy_uses_expanded_high_edge_cap24(self) -> None:
         strategy = _ibkr_default_strategy("MNQ")
 
-        self.assertEqual(strategy["family"], "low_r_regime_basket")
-        self.assertEqual(strategy["preset"], "simple_robust_low_r")
-        self.assertEqual(strategy["module_id"], "low_r_regime_basket")
+        self.assertEqual(strategy["family"], "expanded_high_edge")
+        self.assertEqual(strategy["preset"], "expanded_high_edge_cap24")
+        self.assertEqual(strategy["module_id"], "expanded_high_edge")
+        self.assertEqual(strategy["max_concurrent_positions"], 24)
         self.assertEqual(strategy["max_holding_minutes"], 300)
 
-    def test_low_r_signal_candidate_matches_simple_robust_opening_range_edge(self) -> None:
+    def test_default_expanded_high_edge_control_uses_four_tick_spread_cap(self) -> None:
         strategy = _ibkr_default_strategy("MNQ")
+        control_state = _ibkr_default_control_state(strategy)
+
+        self.assertEqual(control_state["max_spread_ticks"], 4.0)
+
+    def test_expanded_high_edge_signal_candidate_matches_prior_day_breakout(self) -> None:
+        strategy = _ibkr_default_strategy("MNQ")
+        signal = build_signal_candidate(
+            strategy,
+            _expanded_prior_day_breakout_bars(),
+            tick_size=0.25,
+            max_spread_ticks=2.0,
+        )
+
+        self.assertEqual(signal["signal_class"], "strong_review")
+        self.assertEqual(signal["family"], "expanded_high_edge")
+        self.assertEqual(signal["side"], "BUY")
+        self.assertIn("expanded_high_edge:prior_day_breakout", signal["trigger_reasons"])
+        self.assertEqual(signal["risk_context"]["preset"], "expanded_high_edge_cap24")
+        self.assertEqual(signal["risk_context"]["max_concurrent_positions"], 24)
+        self.assertEqual(signal["risk_context"]["session_bucket"], "ny_0930_1159")
+        self.assertEqual(signal["risk_context"]["dow"], 1)
+
+    def test_expanded_high_edge_signal_candidate_allows_three_tick_spread(self) -> None:
+        strategy = _ibkr_default_strategy("MNQ")
+        bars = _expanded_prior_day_breakout_bars()
+        current = bars[-1]
+        bars[-1] = replace(current, bid=current.close - 0.75, ask=current.close)
+
+        signal = build_signal_candidate(
+            strategy,
+            bars,
+            tick_size=0.25,
+            max_spread_ticks=4.0,
+        )
+
+        self.assertEqual(signal["signal_class"], "strong_review")
+        self.assertEqual(signal["risk_context"]["spread_ticks"], 3.0)
+        self.assertEqual(signal["risk_context"]["max_spread_ticks"], 4.0)
+
+    def test_low_r_signal_candidate_matches_simple_robust_opening_range_edge(self) -> None:
+        strategy = _low_r_strategy()
         signal = build_signal_candidate(
             strategy,
             _low_r_opening_range_bars(),
@@ -119,7 +162,7 @@ class IbkrPaperLoopTests(unittest.TestCase):
             "review_interval_seconds": 0,
             "market_data_history_limit": 500,
             "readiness_max_stale_seconds": 600,
-            "strategy": _ibkr_default_strategy("MNQ"),
+            "strategy": _low_r_strategy(),
             "control_state": {
                 "mode": "paper",
                 "min_confidence": 0.55,
@@ -168,7 +211,7 @@ class IbkrPaperLoopTests(unittest.TestCase):
                 "review_interval_seconds": 0,
                 "market_data_history_limit": 500,
                 "readiness_max_stale_seconds": 600,
-                "strategy": _ibkr_default_strategy("MNQ"),
+                "strategy": _low_r_strategy(),
                 "control_state": {
                     "mode": "paper",
                     "min_confidence": 0.55,
@@ -293,6 +336,76 @@ class IbkrPaperLoopTests(unittest.TestCase):
         self.assertEqual(state["review_cycle_count"], 1)
         self.assertEqual(gateway.bracket_order_report()["open_bracket_order_count"], 1)
         self.assertGreater(len(state["latest_bars"]), 0)
+
+    def test_decision_cycle_allows_additional_paper_bracket_under_concurrency_cap(self) -> None:
+        gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
+        gateway.connect()
+        gateway.record_contract_details(
+            {
+                "symbol": "MNQ",
+                "tick_size": 0.25,
+                "point_value": 2.0,
+                "exchange": "CME",
+                "currency": "USD",
+            }
+        )
+        for snapshot in _breakout_snapshots():
+            gateway.record_market_data(snapshot)
+        gateway.build_bracket_order(
+            {
+                "symbol": "MNQ",
+                "action": "BUY",
+                "quantity": 1,
+                "entry_order_type": "MKT",
+                "reference_price": 100.0,
+                "stop_price": 95.0,
+                "take_profit_price": 110.0,
+                "max_holding_minutes": 20,
+            }
+        )
+
+        state = {
+            "review_interval_seconds": 0,
+            "market_data_history_limit": 100,
+            "readiness_max_stale_seconds": 600,
+            "strategy": {
+                "strategy_id": "mnq_1m_breakout",
+                "strategy_spec_hash": "strategy-hash",
+                "module_id": "range_breakout",
+                "family": "range_breakout",
+                "symbol": "MNQ",
+                "timeframe": "1m",
+                "lookback_bars": 5,
+                "breakout_ticks": 1,
+                "enabled": True,
+                "tick_size": 0.25,
+                "stop_loss_ticks": 20,
+                "take_profit_ticks": 40,
+                "max_holding_minutes": 20,
+                "max_concurrent_positions": 2,
+            },
+            "control_state": {
+                "mode": "paper",
+                "min_confidence": 0.55,
+                "max_spread_ticks": 2.0,
+                "daily_trade_cap": 6,
+                "strategies": {},
+                "trade_session": {"start": "09:30", "end": "15:55"},
+                "safe_mode": False,
+                "kill_switch": False,
+            },
+        }
+
+        decision = run_ibkr_decision_cycle(
+            gateway,
+            symbol="MNQ",
+            review_history=[],
+            optimizer_history=[],
+            state=state,
+        )
+
+        self.assertEqual(decision["bracket_event_type"], "bracket_order_built")
+        self.assertEqual(gateway.bracket_order_report()["open_bracket_order_count"], 2)
 
     def test_signal_review_bracket_fill_pnl_and_fast_path_risk_reduction(self) -> None:
         gateway = IbkrPaperGateway(adapter=FakeIbkrAdapter())
@@ -549,6 +662,79 @@ def _breakout_snapshots() -> list[dict]:
             }
         )
     return snapshots
+
+
+def _low_r_strategy() -> dict:
+    return {
+        "strategy_id": "mnq_1m_simple_robust_low_r",
+        "strategy_spec_hash": "ibkr-paper-low-r:simple_robust_low_r",
+        "module_id": "low_r_regime_basket",
+        "family": "low_r_regime_basket",
+        "symbol": "MNQ",
+        "timeframe": "1m",
+        "preset": "simple_robust_low_r",
+        "enabled": True,
+        "tick_size": 0.25,
+        "stop_loss_ticks": 32,
+        "take_profit_ticks": 40,
+        "stop_range_multiple": 10.0,
+        "min_stop_points": 8.0,
+        "max_stop_points": 90.0,
+        "max_holding_minutes": 300,
+    }
+
+
+def _expanded_prior_day_breakout_bars() -> list[OneMinuteBar]:
+    bars: list[OneMinuteBar] = []
+    prior_start = datetime(2026, 4, 24, 13, 30, tzinfo=UTC)
+    for minute_offset in range(100):
+        bar_time = prior_start + timedelta(minutes=minute_offset)
+        close = 100.0 + minute_offset * 0.01
+        bars.append(
+            OneMinuteBar(
+                symbol="MNQ",
+                bar_time=bar_time,
+                open=close - 0.05,
+                high=close + 0.4,
+                low=close - 0.4,
+                close=close,
+                bid=close - 0.25,
+                ask=close,
+                tick_count=10,
+            )
+        )
+    current_start = datetime(2026, 4, 27, 13, 30, tzinfo=UTC)
+    for minute_offset in range(120):
+        bar_time = current_start + timedelta(minutes=minute_offset)
+        close = 100.0 + minute_offset * 0.02
+        bars.append(
+            OneMinuteBar(
+                symbol="MNQ",
+                bar_time=bar_time,
+                open=close - 0.05,
+                high=close + 0.5,
+                low=close - 0.5,
+                close=close,
+                bid=close - 0.25,
+                ask=close,
+                tick_count=10,
+            )
+        )
+    final_close = 103.0
+    bars.append(
+        OneMinuteBar(
+            symbol="MNQ",
+            bar_time=current_start + timedelta(minutes=120),
+            open=final_close - 0.1,
+            high=final_close + 0.2,
+            low=final_close - 0.3,
+            close=final_close,
+            bid=final_close - 0.25,
+            ask=final_close,
+            tick_count=10,
+        )
+    )
+    return bars
 
 
 def _low_r_opening_range_bars() -> list[OneMinuteBar]:

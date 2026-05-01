@@ -19,6 +19,14 @@ from .events import (
 )
 from .experiments import load_experiment_audit_logs, load_experiment_summary
 from .feature_catalog import FEATURE_CATALOG, feature_readiness_report
+from .expanded_high_edge import (
+    EXPANDED_HIGH_EDGE_CAP24_MAX_CONCURRENT_POSITIONS,
+    EXPANDED_HIGH_EDGE_CAP24_MAX_HOLD_MINUTES,
+    EXPANDED_HIGH_EDGE_CAP24_MAX_STOP_POINTS,
+    EXPANDED_HIGH_EDGE_CAP24_MIN_STOP_POINTS,
+    EXPANDED_HIGH_EDGE_CAP24_PRESET,
+    EXPANDED_HIGH_EDGE_CAP24_STOP_RANGE_MULTIPLE,
+)
 from .ibkr_adapter import build_ibkr_gateway_adapter
 from .ibkr_gateway import IbkrPaperGateway
 from .ibkr_optimizer import apply_fast_path_control_diff
@@ -89,7 +97,7 @@ def _env_bool(name: str, default: bool = True) -> bool:
 
 
 def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
-    family = os.environ.get("TLM_IBKR_STRATEGY_FAMILY", "low_r_regime_basket").strip() or "low_r_regime_basket"
+    family = os.environ.get("TLM_IBKR_STRATEGY_FAMILY", "expanded_high_edge").strip() or "expanded_high_edge"
     if family == "range_breakout":
         return {
             "strategy_id": "mnq_1m_breakout",
@@ -105,6 +113,29 @@ def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
             "stop_loss_ticks": 20,
             "take_profit_ticks": 40,
             "max_holding_minutes": 20,
+        }
+    if family == "expanded_high_edge":
+        preset = (
+            os.environ.get("TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET", EXPANDED_HIGH_EDGE_CAP24_PRESET).strip()
+            or EXPANDED_HIGH_EDGE_CAP24_PRESET
+        )
+        return {
+            "strategy_id": f"{symbol.lower()}_1m_{preset}",
+            "strategy_spec_hash": f"ibkr-paper-expanded-high-edge:{preset}",
+            "module_id": "expanded_high_edge",
+            "family": "expanded_high_edge",
+            "symbol": symbol,
+            "timeframe": "1m",
+            "preset": preset,
+            "enabled": True,
+            "tick_size": 0.25,
+            "stop_loss_ticks": 32,
+            "take_profit_ticks": 48,
+            "stop_range_multiple": EXPANDED_HIGH_EDGE_CAP24_STOP_RANGE_MULTIPLE,
+            "min_stop_points": EXPANDED_HIGH_EDGE_CAP24_MIN_STOP_POINTS,
+            "max_stop_points": EXPANDED_HIGH_EDGE_CAP24_MAX_STOP_POINTS,
+            "max_holding_minutes": EXPANDED_HIGH_EDGE_CAP24_MAX_HOLD_MINUTES,
+            "max_concurrent_positions": EXPANDED_HIGH_EDGE_CAP24_MAX_CONCURRENT_POSITIONS,
         }
     preset = os.environ.get("TLM_IBKR_LOW_R_PRESET", "simple_robust_low_r").strip() or "simple_robust_low_r"
     return {
@@ -126,12 +157,41 @@ def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
     }
 
 
-def _ibkr_default_control_state() -> dict[str, Any]:
+IBKR_DEFAULT_MAX_SPREAD_TICKS = 2.0
+IBKR_HIGH_EDGE_MAX_SPREAD_TICKS = 4.0
+IBKR_MAX_SPREAD_TICKS_HARD_CAP = 4.0
+
+
+def _ibkr_strategy_default_max_spread_ticks(strategy: dict[str, Any] | None = None) -> float:
+    family = str((strategy or {}).get("family", "range_breakout"))
+    if family in {"expanded_high_edge", "low_r_regime_basket"}:
+        return IBKR_HIGH_EDGE_MAX_SPREAD_TICKS
+    return IBKR_DEFAULT_MAX_SPREAD_TICKS
+
+
+def _ibkr_parse_max_spread_ticks(value: object, *, default: float) -> float:
+    if value is None or str(value).strip() == "":
+        parsed = default
+    else:
+        parsed = float(value)
+    if parsed < 0:
+        raise ValueError("max_spread_ticks must be non-negative")
+    if parsed > IBKR_MAX_SPREAD_TICKS_HARD_CAP:
+        raise ValueError(f"max_spread_ticks must be <= {IBKR_MAX_SPREAD_TICKS_HARD_CAP}")
+    return parsed
+
+
+def _ibkr_configured_max_spread_ticks(strategy: dict[str, Any] | None = None) -> float:
+    default = _ibkr_strategy_default_max_spread_ticks(strategy)
+    return _ibkr_parse_max_spread_ticks(os.environ.get("TLM_IBKR_MAX_SPREAD_TICKS"), default=default)
+
+
+def _ibkr_default_control_state(strategy: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "mode": "paper",
         "min_confidence": 0.55,
-        "max_spread_ticks": 2.0,
-        "daily_trade_cap": 6,
+        "max_spread_ticks": _ibkr_configured_max_spread_ticks(strategy),
+        "daily_trade_cap": 24,
         "strategies": {},
         "trade_session": {"start": "09:30", "end": "15:55"},
         "safe_mode": False,
@@ -159,7 +219,7 @@ def run_ibkr_decision_cycle(
 ) -> dict[str, Any]:
     current = now or datetime.now(UTC)
     strategy = state.setdefault("strategy", _ibkr_default_strategy(symbol))
-    control_state = state.setdefault("control_state", _ibkr_default_control_state())
+    control_state = state.setdefault("control_state", _ibkr_default_control_state(strategy))
     review_interval_seconds = float(state.get("review_interval_seconds", 300.0))
     auto_submit = bool(state.get("auto_submit", False))
     recent_snapshots = gateway.recent_market_data(symbol, limit=int(state.get("market_data_history_limit", 500)))
@@ -203,6 +263,9 @@ def run_ibkr_decision_cycle(
     latest_account = ledger.get("latest_account_snapshot") or {}
     daily_pnl = latest_account.get("daily_pnl")
     daily_loss_limit = state.get("daily_loss_limit")
+    open_bracket_order_count = int(gateway.bracket_order_report().get("open_bracket_order_count", 0))
+    open_position_quantity = sum(abs(int(position.get("quantity", 0))) for position in ledger.get("positions", []))
+    max_concurrent_positions = max(int(strategy.get("max_concurrent_positions", 1) or 1), 1)
     risk_context = {
         "data_stale": market_data.get("status") != "ready",
         "daily_loss_limit_hit": (
@@ -211,7 +274,9 @@ def run_ibkr_decision_cycle(
             and float(daily_pnl) <= -abs(float(daily_loss_limit))
         ),
         "safe_mode": gateway.safe_mode,
-        "open_bracket_order_count": gateway.bracket_order_report().get("open_bracket_order_count", 0),
+        "open_bracket_order_count": open_bracket_order_count,
+        "open_position_quantity": open_position_quantity,
+        "max_concurrent_positions": max_concurrent_positions,
     }
 
     last_review_at = _parse_state_time(state.get("last_review_at"))
@@ -240,6 +305,10 @@ def run_ibkr_decision_cycle(
             "max_holding_minutes": signal.get("risk_context", {}).get(
                 "max_holding_minutes",
                 strategy.get("max_holding_minutes", 20),
+            ),
+            "max_concurrent_positions": signal.get("risk_context", {}).get(
+                "max_concurrent_positions",
+                max_concurrent_positions,
             ),
         },
         previous_reviews=review_history,
@@ -272,8 +341,7 @@ def run_ibkr_decision_cycle(
         and plan
         and signal_hash
         and signal_hash != state.get("last_planned_signal_hash")
-        and gateway.bracket_order_report().get("open_bracket_order_count", 0) == 0
-        and sum(int(position.get("quantity", 0)) for position in ledger.get("positions", [])) == 0
+        and open_bracket_order_count + open_position_quantity < max_concurrent_positions
     ):
         bracket_event = gateway.build_bracket_order(plan)
         if bracket_event.get("event_type") == "bracket_order_built":
@@ -1011,22 +1079,24 @@ def create_app():
     ibkr_gateway = IbkrPaperGateway(adapter=build_ibkr_gateway_adapter())
     ibkr_review_history: list[dict] = []
     ibkr_optimizer_history: list[dict] = []
+    poll_symbol = os.environ.get("TLM_IBKR_POLL_SYMBOL", "MNQ")
+    poll_strategy = _ibkr_default_strategy(poll_symbol)
     ibkr_poller_state: dict[str, object] = {
         "enabled": _env_bool("TLM_IBKR_POLLER_ENABLED", True),
         "interval_seconds": float(os.environ.get("TLM_IBKR_POLL_INTERVAL_SECONDS", "2.0")),
         "review_interval_seconds": float(os.environ.get("TLM_IBKR_REVIEW_INTERVAL_SECONDS", "300.0")),
-        "symbol": os.environ.get("TLM_IBKR_POLL_SYMBOL", "MNQ"),
+        "symbol": poll_symbol,
         "auto_submit": _env_bool("TLM_IBKR_AUTO_SUBMIT", False),
-        "market_data_history_limit": int(os.environ.get("TLM_IBKR_MARKET_DATA_HISTORY_LIMIT", "500")),
+        "market_data_history_limit": int(os.environ.get("TLM_IBKR_MARKET_DATA_HISTORY_LIMIT", "3000")),
         "max_review_history": int(os.environ.get("TLM_IBKR_MAX_REVIEW_HISTORY", "200")),
         "max_optimizer_history": int(os.environ.get("TLM_IBKR_MAX_OPTIMIZER_HISTORY", "200")),
         "readiness_max_stale_seconds": int(os.environ.get("TLM_IBKR_READINESS_MAX_STALE_SECONDS", "5")),
-        "strategy": _ibkr_default_strategy(os.environ.get("TLM_IBKR_POLL_SYMBOL", "MNQ")),
-        "control_state": _ibkr_default_control_state(),
+        "strategy": poll_strategy,
+        "control_state": _ibkr_default_control_state(poll_strategy),
         "warm_start_root": os.environ.get("TLM_IBKR_WARM_START_ROOT", "experiments/ibkr_paper"),
-        "warm_start_bar_limit": int(os.environ.get("TLM_IBKR_WARM_START_BAR_LIMIT", "240")),
-        "warm_start_min_bars": int(os.environ.get("TLM_IBKR_WARM_START_MIN_BARS", "50")),
-        "warm_start_backfill_duration": os.environ.get("TLM_IBKR_WARM_START_BACKFILL_DURATION", "14400 S"),
+        "warm_start_bar_limit": int(os.environ.get("TLM_IBKR_WARM_START_BAR_LIMIT", "3000")),
+        "warm_start_min_bars": int(os.environ.get("TLM_IBKR_WARM_START_MIN_BARS", "220")),
+        "warm_start_backfill_duration": os.environ.get("TLM_IBKR_WARM_START_BACKFILL_DURATION", "3 D"),
         "warm_start_backfill_timeout_seconds": int(os.environ.get("TLM_IBKR_WARM_START_BACKFILL_TIMEOUT_SECONDS", "20")),
         "warm_start_backfill_use_rth": _env_bool("TLM_IBKR_WARM_START_BACKFILL_USE_RTH", False),
         "warm_start_backfill_what_to_show": os.environ.get("TLM_IBKR_WARM_START_BACKFILL_WHAT_TO_SHOW", "TRADES"),
@@ -1691,13 +1761,34 @@ def create_app():
     @app.post("/api/gateways/ibkr/poller")
     def ibkr_poller_update(payload: dict = Body(default={})) -> dict:
         desired_auto_submit = payload.get("auto_submit")
+        desired_max_spread_ticks = payload.get("max_spread_ticks")
         reason = str(payload.get("reason", "manual"))
         force = bool(payload.get("force", False))
+        updates = []
+        if desired_max_spread_ticks is not None:
+            control_state = ibkr_poller_state.setdefault(
+                "control_state",
+                _ibkr_default_control_state(ibkr_poller_state.get("strategy")),
+            )
+            if not isinstance(control_state, dict):
+                control_state = _ibkr_default_control_state(ibkr_poller_state.get("strategy"))
+                ibkr_poller_state["control_state"] = control_state
+            before = float(control_state.get("max_spread_ticks", 0.0))
+            try:
+                after = _ibkr_parse_max_spread_ticks(
+                    desired_max_spread_ticks,
+                    default=_ibkr_strategy_default_max_spread_ticks(ibkr_poller_state.get("strategy")),
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            control_state["max_spread_ticks"] = after
+            updates.append({"field": "max_spread_ticks", "before": before, "after": after})
         if desired_auto_submit is None:
             return {
-                "status": "no_change",
+                "status": "updated" if updates else "no_change",
                 "reason": reason,
                 "force": force,
+                "updates": updates,
                 "auto_submit": bool(ibkr_poller_state.get("auto_submit", False)),
                 "poller": _compact_ibkr_poller_state(ibkr_poller_state),
             }
@@ -1711,6 +1802,7 @@ def create_app():
                 "force": force,
                 "requested_auto_submit": desired,
                 "auto_submit": bool(ibkr_poller_state.get("auto_submit", False)),
+                "updates": updates,
                 "blockers": blockers,
                 "acceptance_evidence": report.get("acceptance_evidence"),
                 "readiness": report.get("readiness"),
@@ -1723,6 +1815,7 @@ def create_app():
             "force": force,
             "requested_auto_submit": desired,
             "auto_submit": desired,
+            "updates": updates,
             "blockers": blockers,
             "acceptance_evidence": report.get("acceptance_evidence") if isinstance(report, dict) else None,
             "readiness": report.get("readiness") if isinstance(report, dict) else None,

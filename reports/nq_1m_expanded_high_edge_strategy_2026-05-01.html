@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NQ 1m 扩展高边际 Top 3 策略报告</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e0ea;
+      --accent: #1769aa;
+      --good: #117a4c;
+      --bad: #b42318;
+      --warn: #a15c00;
+      --soft: #eaf2fb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); line-height: 1.5; }
+    header { background: #102033; color: white; padding: 28px 32px; }
+    main { max-width: 1320px; margin: 0 auto; padding: 24px; }
+    h1, h2, h3 { margin: 0; letter-spacing: 0; }
+    h1 { font-size: 30px; }
+    h2 { font-size: 22px; margin-bottom: 14px; }
+    h3 { font-size: 17px; margin: 18px 0 10px; }
+    p { margin: 8px 0; }
+    .meta { color: #c9d6e6; margin-top: 10px; }
+    .section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .metric { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fbfcfe; }
+    .metric span { display: block; color: var(--muted); font-size: 12px; }
+    .metric strong { display: block; margin-top: 4px; font-size: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: right; vertical-align: top; }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: var(--muted); font-weight: 600; background: #f8fafc; }
+    .pill { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; margin: 2px; background: var(--soft); font-size: 12px; }
+    .good { color: var(--good); }
+    .bad { color: var(--bad); }
+    .warn { color: var(--warn); }
+    .note { color: var(--muted); font-size: 13px; }
+    details { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; background: #fbfcfe; }
+    summary { cursor: pointer; font-weight: 600; }
+    @media (max-width: 760px) {
+      header { padding: 22px 18px; }
+      main { padding: 14px; }
+      h1 { font-size: 24px; }
+      table { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>NQ 1m 扩展高边际 Top 3 策略报告</h1>
+    <div class="meta">数据: NQ 1m OHLCV, 2019-01-01 至 2026-04-30; 合约口径: 1 NQ 合约; 来源: reports/nq_1m_expanded_high_edge_strategy_2026-05-01.md 与 experiments/profit_mining/expanded_high_edge_strategy_search_2019_2026.json</div>
+  </header>
+  <main>
+    <section class="section">
+      <h2>总览</h2>
+      <p>本报告把 Markdown 结论中的 3 个候选策略整理成同一份 HTML：最强全年度为正、风险调整默认候选、最高净利候选。所有结果均为历史 bar 级回测，不代表真实 bid/ask、滑点、限价成交率或 IBKR paper/live 排队结果。</p>
+      <p class="note">筛选约束: 完整年度 2019-2025 每年实际交易数大于 1000; 2026 为未完成年度，仅参考 YTD 和年化交易频率; 不使用低边际信号凑交易数。</p>
+      <table>
+        <thead>
+          <tr><th>策略</th><th>定位</th><th>净利润</th><th>交易数</th><th>PF</th><th>最大回撤</th><th>净利/回撤</th><th>平均持仓</th><th>并发</th><th>2026 YTD</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>S1 · positive_expanded_edge_top_32</td><td>最强全年度为正</td><td>$5,804,050.00</td><td>46,851</td><td>1.270</td><td>$480,126.25</td><td>12.09</td><td>81.35 分钟</td><td>99</td><td class="good">$17,623.75</td></tr>
+          <tr><td>S2 · robust_expanded_positive_edge_top_32</td><td>更稳默认候选</td><td>$5,371,751.25</td><td>33,238</td><td>1.292</td><td>$397,986.25</td><td>13.50</td><td>131.67 分钟</td><td>24</td><td class="good">$72,637.50</td></tr>
+          <tr><td>S3 · positive_expanded_edge_top_32</td><td>最高净利上限</td><td>$8,947,040.00</td><td>50,004</td><td>1.328</td><td>$1,021,192.50</td><td>8.76</td><td>181.44 分钟</td><td>99</td><td class="bad">-$375,277.50</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>S1 · 最强全年度为正</h2>
+      <p class="note">策略标签: positive_expanded_edge_top_32 | 定义: 2019-2026 每年净利为正 + 净利润最大 | edge 数: 32</p>
+      <div class="grid">
+        <div class="metric"><span>净收益</span><strong>$5,804,050</strong></div>
+        <div class="metric"><span>Profit Factor</span><strong>1.270</strong></div>
+        <div class="metric"><span>Sharpe</span><strong>1.560</strong></div>
+        <div class="metric"><span>胜率</span><strong>52.34%</strong></div>
+        <div class="metric"><span>平均单笔</span><strong>$123.88</strong></div>
+        <div class="metric"><span>年化交易</span><strong>7,500.3</strong></div>
+        <div class="metric"><span>最大回撤</span><strong>$480,126</strong></div>
+        <div class="metric"><span>最大连续亏损</span><strong>184</strong></div>
+      </div>
+      <h3>关键参数</h3>
+      <p><span class="pill">max_concurrent_positions: 99</span><span class="pill">max_hold_minutes: 120</span><span class="pill">stop_range_multiple: 6.0</span><span class="pill">min_stop_points: 8.0</span><span class="pill">max_stop_points: 90.0</span><span class="pill">flatten_on_date_change: true</span></p>
+      <h3>年度结果</h3>
+      <table>
+        <thead><tr><th>年份</th><th>交易数</th><th>净利润</th><th>PF</th><th>Sharpe</th><th>胜率</th><th>最大回撤</th><th>净利/回撤</th></tr></thead>
+        <tbody>
+          <tr><td>2019</td><td>5,498</td><td>$89,935.00</td><td>1.088</td><td>0.538</td><td>47.27%</td><td>$172,061.25</td><td>0.52</td></tr>
+          <tr><td>2020</td><td>6,134</td><td>$718,960.00</td><td>1.289</td><td>1.622</td><td>52.12%</td><td>$315,828.75</td><td>2.28</td></tr>
+          <tr><td>2021</td><td>6,150</td><td>$825,376.25</td><td>1.352</td><td>1.930</td><td>54.47%</td><td>$185,562.50</td><td>4.45</td></tr>
+          <tr><td>2022</td><td>7,210</td><td>$1,570,143.75</td><td>1.414</td><td>2.395</td><td>56.32%</td><td>$290,920.00</td><td>5.40</td></tr>
+          <tr><td>2023</td><td>6,410</td><td>$730,503.75</td><td>1.276</td><td>1.651</td><td>52.46%</td><td>$310,460.00</td><td>2.35</td></tr>
+          <tr><td>2024</td><td>6,563</td><td>$882,780.00</td><td>1.271</td><td>1.627</td><td>52.81%</td><td>$259,670.00</td><td>3.40</td></tr>
+          <tr><td>2025</td><td>6,693</td><td>$968,727.50</td><td>1.221</td><td>1.408</td><td>51.01%</td><td>$339,425.00</td><td>2.85</td></tr>
+          <tr><td>2026 YTD</td><td>2,193</td><td>$17,623.75</td><td>1.011</td><td>0.080</td><td>48.88%</td><td>$475,640.00</td><td>0.04</td></tr>
+        </tbody>
+      </table>
+      <h3>策略构成</h3>
+      <p><span class="pill">opening_range_breakout: 13</span><span class="pill">prior_day_breakout: 12</span><span class="pill">vwap_pullback_bounce: 2</span><span class="pill">其余 1 条类型: 5</span><span class="pill">NY 09:30-11:59: 17</span><span class="pill">NY 12:00-15:59: 15</span></p>
+      <table>
+        <thead><tr><th>退出原因</th><th>次数</th></tr></thead>
+        <tbody><tr><td>time_exit</td><td>20,330</td></tr><tr><td>stop_loss</td><td>14,360</td></tr><tr><td>take_profit</td><td>11,932</td></tr><tr><td>date_change_flatten</td><td>229</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>S2 · 更稳默认候选</h2>
+      <p class="note">策略标签: robust_expanded_positive_edge_top_32 | 定义: 24 并发限制下保持更低回撤、更厚最差年度利润和更高净利/回撤 | edge 数: 32</p>
+      <div class="grid">
+        <div class="metric"><span>净收益</span><strong>$5,371,751</strong></div>
+        <div class="metric"><span>Profit Factor</span><strong>1.292</strong></div>
+        <div class="metric"><span>Sharpe</span><strong>1.756</strong></div>
+        <div class="metric"><span>胜率</span><strong>51.19%</strong></div>
+        <div class="metric"><span>平均单笔</span><strong>$161.61</strong></div>
+        <div class="metric"><span>年化交易</span><strong>5,321.0</strong></div>
+        <div class="metric"><span>最大回撤</span><strong>$397,986</strong></div>
+        <div class="metric"><span>最大连续亏损</span><strong>94</strong></div>
+      </div>
+      <h3>关键参数</h3>
+      <p><span class="pill">max_concurrent_positions: 24</span><span class="pill">max_hold_minutes: 300</span><span class="pill">stop_range_multiple: 6.0</span><span class="pill">min_stop_points: 8.0</span><span class="pill">max_stop_points: 90.0</span><span class="pill">flatten_on_date_change: true</span></p>
+      <h3>年度结果</h3>
+      <table>
+        <thead><tr><th>年份</th><th>交易数</th><th>净利润</th><th>PF</th><th>Sharpe</th><th>胜率</th><th>最大回撤</th><th>净利/回撤</th></tr></thead>
+        <tbody>
+          <tr><td>2019</td><td>3,741</td><td>$148,962.50</td><td>1.176</td><td>1.061</td><td>48.12%</td><td>$97,133.75</td><td>1.53</td></tr>
+          <tr><td>2020</td><td>4,505</td><td>$919,658.75</td><td>1.417</td><td>2.395</td><td>51.56%</td><td>$269,410.00</td><td>3.41</td></tr>
+          <tr><td>2021</td><td>4,212</td><td>$1,040,317.50</td><td>1.559</td><td>3.000</td><td>57.53%</td><td>$141,905.00</td><td>7.33</td></tr>
+          <tr><td>2022</td><td>4,729</td><td>$1,045,131.25</td><td>1.328</td><td>2.065</td><td>52.93%</td><td>$227,368.75</td><td>4.60</td></tr>
+          <tr><td>2023</td><td>4,314</td><td>$776,675.00</td><td>1.359</td><td>2.155</td><td>51.83%</td><td>$151,831.25</td><td>5.12</td></tr>
+          <tr><td>2024</td><td>4,651</td><td>$725,038.75</td><td>1.263</td><td>1.646</td><td>51.97%</td><td>$224,962.50</td><td>3.22</td></tr>
+          <tr><td>2025</td><td>5,277</td><td>$643,330.00</td><td>1.165</td><td>1.102</td><td>47.51%</td><td>$269,020.00</td><td>2.39</td></tr>
+          <tr><td>2026 YTD</td><td>1,809</td><td>$72,637.50</td><td>1.049</td><td>0.349</td><td>44.50%</td><td>$272,130.00</td><td>0.27</td></tr>
+        </tbody>
+      </table>
+      <h3>策略构成</h3>
+      <p><span class="pill">prior_day_breakout: 14</span><span class="pill">opening_range_breakout: 11</span><span class="pill">trend_pullback_reclaim: 2</span><span class="pill">vwap_pullback_bounce: 2</span><span class="pill">NY 09:30-11:59: 17</span><span class="pill">NY 12:00-15:59: 15</span></p>
+      <table>
+        <thead><tr><th>退出原因</th><th>次数</th></tr></thead>
+        <tbody><tr><td>stop_loss</td><td>13,151</td></tr><tr><td>take_profit</td><td>11,271</td></tr><tr><td>time_exit</td><td>5,209</td></tr><tr><td>date_change_flatten</td><td>3,605</td></tr><tr><td>stop_loss_conservative</td><td>2</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>S3 · 最高净利候选</h2>
+      <p class="note">策略标签: positive_expanded_edge_top_32 | 定义: 只要求完整年度 2019-2025 为正，不强制 2026 YTD 为正 | edge 数: 32</p>
+      <div class="grid">
+        <div class="metric"><span>净收益</span><strong>$8,947,040</strong></div>
+        <div class="metric"><span>Profit Factor</span><strong>1.328</strong></div>
+        <div class="metric"><span>Sharpe</span><strong>1.910</strong></div>
+        <div class="metric"><span>胜率</span><strong>53.66%</strong></div>
+        <div class="metric"><span>平均单笔</span><strong>$178.93</strong></div>
+        <div class="metric"><span>年化交易</span><strong>8,005.0</strong></div>
+        <div class="metric"><span>最大回撤</span><strong>$1,021,193</strong></div>
+        <div class="metric"><span>最大连续亏损</span><strong>168</strong></div>
+      </div>
+      <h3>关键参数</h3>
+      <p><span class="pill">max_concurrent_positions: 99</span><span class="pill">max_hold_minutes: 300</span><span class="pill">stop_range_multiple: 10.0</span><span class="pill">min_stop_points: 8.0</span><span class="pill">max_stop_points: 90.0</span><span class="pill">flatten_on_date_change: true</span></p>
+      <h3>年度结果</h3>
+      <table>
+        <thead><tr><th>年份</th><th>交易数</th><th>净利润</th><th>PF</th><th>Sharpe</th><th>胜率</th><th>最大回撤</th><th>净利/回撤</th></tr></thead>
+        <tbody>
+          <tr><td>2019</td><td>5,790</td><td>$115,667.50</td><td>1.082</td><td>0.488</td><td>52.07%</td><td>$190,511.25</td><td>0.61</td></tr>
+          <tr><td>2020</td><td>7,305</td><td>$1,936,731.25</td><td>1.556</td><td>2.985</td><td>55.99%</td><td>$677,135.00</td><td>2.86</td></tr>
+          <tr><td>2021</td><td>6,349</td><td>$2,119,011.25</td><td>1.843</td><td>4.026</td><td>64.06%</td><td>$249,317.50</td><td>8.50</td></tr>
+          <tr><td>2022</td><td>6,915</td><td>$2,003,852.50</td><td>1.430</td><td>2.595</td><td>56.14%</td><td>$630,531.25</td><td>3.18</td></tr>
+          <tr><td>2023</td><td>6,938</td><td>$1,177,697.50</td><td>1.322</td><td>1.896</td><td>53.13%</td><td>$264,655.00</td><td>4.45</td></tr>
+          <tr><td>2024</td><td>6,784</td><td>$935,106.25</td><td>1.225</td><td>1.403</td><td>50.60%</td><td>$413,080.00</td><td>2.26</td></tr>
+          <tr><td>2025</td><td>7,277</td><td>$1,034,251.25</td><td>1.210</td><td>1.330</td><td>49.46%</td><td>$430,390.00</td><td>2.40</td></tr>
+          <tr><td>2026 YTD</td><td>2,646</td><td class="bad">-$375,277.50</td><td>0.844</td><td>-1.242</td><td>39.98%</td><td>$953,212.50</td><td>-0.39</td></tr>
+        </tbody>
+      </table>
+      <h3>策略构成</h3>
+      <p><span class="pill">prior_day_breakout: 17</span><span class="pill">opening_range_breakout: 9</span><span class="pill">trend_pullback_reclaim: 2</span><span class="pill">vwap_pullback_bounce: 2</span><span class="pill">NY 09:30-11:59: 15</span><span class="pill">NY 12:00-15:59: 17</span></p>
+      <table>
+        <thead><tr><th>退出原因</th><th>次数</th></tr></thead>
+        <tbody><tr><td>stop_loss</td><td>14,972</td></tr><tr><td>time_exit</td><td>14,440</td></tr><tr><td>take_profit</td><td>11,730</td></tr><tr><td>date_change_flatten</td><td>8,862</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>结论</h2>
+      <p>S3 是历史净利润上限，但 2026 YTD 亏损和百万级最大回撤说明它不适合作为默认稳定版。S1 在 2019-2026 每年净利为正且持仓更短，但 99 并发带来更高操作复杂度。S2 少赚约 7.45%，但最大回撤比 S1 低约 17.1%，净利/回撤更高，并发降到 24，因此更适合作为当前默认 IBKR paper 候选。</p>
+      <p class="note">后续优化重点: 做 2026 edge-level attribution，剔除当前 regime 失效的 ORB/prior-day 子组; 对 24 并发版本做 walk-forward 和分年度参数冻结，确认不是后验过拟合。</p>
+    </section>
+  </main>
+</body>
+</html>
