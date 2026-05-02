@@ -1,0 +1,4376 @@
+{
+  "artifact": "low_r_15r_subset_walk_forward_55wr",
+  "schema_version": 1,
+  "baseline": "experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json",
+  "date_from": "2019-01-01",
+  "date_to": "2026-04-27",
+  "target": {
+    "min_win_rate": 0.55,
+    "min_train_win_rate": 0.55,
+    "min_year_trades": 1000,
+    "min_positive_year_ratio": 1.0,
+    "forced_take_profit_r": 1.5
+  },
+  "method": {
+    "folds": [
+      {
+        "train_years": [
+          2019,
+          2020
+        ],
+        "test_year": 2021
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021
+        ],
+        "test_year": 2022
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "test_year": 2023
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "test_year": 2024
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "test_year": 2025
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "test_year": 2026
+      }
+    ],
+    "selection": "Each fold evaluates and selects low-R edge subsets only on train years, then exact-replays the selected subset on the next unseen test year.",
+    "edge_count": 19,
+    "max_subset_size": 6,
+    "top_approx": 20,
+    "approximation_note": "Train-only subset prefilter sums independently replayed single-edge train stats; selected candidates are exact-replayed with original concurrency rules before the next-year test replay."
+  },
+  "summary": {
+    "oos_total_trades": 4736,
+    "oos_winning_trades": 2328,
+    "oos_win_rate": 0.49155405405405406,
+    "oos_total_net_pnl": 271807.5,
+    "oos_min_year_win_rate": 0.4134529147982063,
+    "oos_min_year_pnl": -73437.5,
+    "ok_fold_count": 6,
+    "positive_test_years": 4,
+    "win_rate_gate_years": 2,
+    "trade_floor_years": 5,
+    "decision": {
+      "passed": false,
+      "reason": "No train-only selected forced-1.5R low-R subset passed every next-year 55% win-rate, trade-floor, and positive-PnL gate.",
+      "failed_test_years": [
+        2023,
+        2024,
+        2025,
+        2026
+      ]
+    }
+  },
+  "folds": [
+    {
+      "train_years": [
+        2019,
+        2020
+      ],
+      "test_year": 2021,
+      "status": "ok",
+      "train_signal_count": 12225,
+      "test_signal_count": 6162,
+      "single_edge_count": 19,
+      "approximate_candidate_count": 20,
+      "exact_train_candidate_count": 20,
+      "selected_edge_indexes": [
+        3,
+        6,
+        15
+      ],
+      "selected_edge_turnover": {
+        "added": [
+          3,
+          6,
+          15
+        ],
+        "removed": [],
+        "retained": []
+      },
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 4,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1200_1659",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": -1,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        }
+      ],
+      "train_metrics": {
+        "trade_count": 2074,
+        "winning_trade_count": 1276,
+        "win_rate": 0.6152362584378014,
+        "net_pnl": 483317.5,
+        "gross_profit": 983367.5,
+        "gross_loss": -500050.0,
+        "profit_factor": 1.9665383461653834,
+        "max_drawdown": 53930.0
+      },
+      "train_gate_report": {
+        "passed": true,
+        "missing_trade_years": [],
+        "win_rate": 0.6152362584378014,
+        "net_pnl": 483317.5,
+        "positive_year_ratio": 1.0,
+        "constraints": {
+          "min_year_trades": 922,
+          "min_annualized_year_trades": 1078.621794871795,
+          "full_or_annualized_years_gt_min_trades": true,
+          "positive_years": 2,
+          "worst_year_pnl": 15057.5
+        }
+      },
+      "test_metrics": {
+        "trade_count": 1109,
+        "winning_trade_count": 618,
+        "win_rate": 0.5572587917042381,
+        "net_pnl": 111582.5,
+        "gross_profit": 431972.5,
+        "gross_loss": -320390.0,
+        "profit_factor": 1.3482708573925528,
+        "max_drawdown": 40175.0
+      },
+      "test_yearly_result": {
+        "year": 2021,
+        "trade_count": 1109,
+        "winning_trade_count": 618,
+        "win_rate": 0.5572587917042381,
+        "net_pnl": 111582.5,
+        "profit_factor": 1.3482708573925528,
+        "max_drawdown": 40175.0
+      },
+      "test_gate_report": {
+        "passed": true,
+        "test_year": 2021,
+        "trade_count": 1109,
+        "annualized_trade_count": 1301.5594855305467,
+        "win_rate": 0.5572587917042381,
+        "net_pnl": 111582.5,
+        "min_win_rate": 0.55,
+        "min_year_trades": 1000
+      },
+      "top_train_exact": [
+        {
+          "edge_indexes": [
+            3,
+            6,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 2074,
+            "winning_trade_count": 1276,
+            "win_rate": 0.6152362584378014,
+            "net_pnl": 483317.5,
+            "gross_profit": 983367.5,
+            "gross_loss": -500050.0,
+            "profit_factor": 1.9665383461653834,
+            "max_drawdown": 53930.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6152362584378014,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 922,
+            "min_annualized_year_trades": 1078.621794871795,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 2,
+            "worst_year_pnl": 15057.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            6,
+            15,
+            18
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 2468,
+            "winning_trade_count": 1488,
+            "win_rate": 0.6029173419773096,
+            "net_pnl": 517812.5,
+            "gross_profit": 1122837.5,
+            "gross_loss": -605025.0,
+            "profit_factor": 1.8558530639229784,
+            "max_drawdown": 63570.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6029173419773096,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1121,
+            "min_annualized_year_trades": 1311.426282051282,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 2,
+            "worst_year_pnl": 7567.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            6,
+            7,
+            15,
+            18
+          ],
+          "edge_count": 5,
+          "metrics": {
+            "trade_count": 2813,
+            "winning_trade_count": 1689,
+            "win_rate": 0.6004265908282972,
+            "net_pnl": 611407.5,
+            "gross_profit": 1353402.5,
+            "gross_loss": -741995.0,
+            "profit_factor": 1.824004878739075,
+            "max_drawdown": 71705.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6004265908282972,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1230,
+            "min_annualized_year_trades": 1438.9423076923076,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 2,
+            "worst_year_pnl": 11205.0
+          }
+        },
+        {
+          "edge_indexes": [
+            6,
+            15,
+            18
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 2030,
+            "winning_trade_count": 1217,
+            "win_rate": 0.5995073891625615,
+            "net_pnl": 423972.5,
+            "gross_profit": 886322.5,
+            "gross_loss": -462350.0,
+            "profit_factor": 1.9169947009841029,
+            "max_drawdown": 42100.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5995073891625615,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 966,
+            "min_annualized_year_trades": 1130.0961538461538,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 2,
+            "worst_year_pnl": 7385.0
+          }
+        },
+        {
+          "edge_indexes": [
+            6,
+            7,
+            15,
+            18
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 2375,
+            "winning_trade_count": 1418,
+            "win_rate": 0.5970526315789474,
+            "net_pnl": 517567.5,
+            "gross_profit": 1116887.5,
+            "gross_loss": -599320.0,
+            "profit_factor": 1.8635912367349663,
+            "max_drawdown": 54025.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5970526315789474,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1075,
+            "min_annualized_year_trades": 1257.6121794871794,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 2,
+            "worst_year_pnl": 11022.5
+          }
+        },
+        {
+          "edge_indexes": [
+            6,
+            10,
+            15,
+            18
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 2329,
+            "winning_trade_count": 1384,
+            "win_rate": 0.5942464577071704,
+            "net_pnl": 486042.5,
+            "gross_profit": 1034837.5,
+            "gross_loss": -548795.0,
+            "profit_factor": 1.8856540238158146,
+            "max_drawdown": 46725.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5942464577071704,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1121,
+            "min_annualized_year_trades": 1311.426282051282,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 2,
+            "worst_year_pnl": 20020.0
+          }
+        },
+        {
+          "edge_indexes": [
+            6,
+            15
+          ],
+          "edge_count": 2,
+          "metrics": {
+            "trade_count": 1636,
+            "winning_trade_count": 1005,
+            "win_rate": 0.6143031784841075,
+            "net_pnl": 389477.5,
+            "gross_profit": 746852.5,
+            "gross_loss": -357375.0,
+            "profit_factor": 2.0898286114025884,
+            "max_drawdown": 35650.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6143031784841075,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 767,
+            "min_annualized_year_trades": 897.2916666666666,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 14875.0
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            6
+          ],
+          "edge_count": 2,
+          "metrics": {
+            "trade_count": 928,
+            "winning_trade_count": 564,
+            "win_rate": 0.6077586206896551,
+            "net_pnl": 233232.5,
+            "gross_profit": 540232.5,
+            "gross_loss": -307000.0,
+            "profit_factor": 1.759714983713355,
+            "max_drawdown": 61930.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6077586206896551,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 344,
+            "min_annualized_year_trades": 402.43589743589746,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 6072.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            6,
+            7
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 1273,
+            "winning_trade_count": 765,
+            "win_rate": 0.600942655145326,
+            "net_pnl": 326827.5,
+            "gross_profit": 770797.5,
+            "gross_loss": -443970.0,
+            "profit_factor": 1.7361477126832894,
+            "max_drawdown": 85460.0
+          },
+          "objective_gate": {
+            "win_rate": 0.600942655145326,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 453,
+            "min_annualized_year_trades": 529.9519230769231,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 9710.0
+          }
+        },
+        {
+          "edge_indexes": [
+            15,
+            18
+          ],
+          "edge_count": 2,
+          "metrics": {
+            "trade_count": 1540,
+            "winning_trade_count": 924,
+            "win_rate": 0.6,
+            "net_pnl": 284580.0,
+            "gross_profit": 582605.0,
+            "gross_loss": -298025.0,
+            "profit_factor": 1.9548863350390069,
+            "max_drawdown": 22885.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 763,
+            "min_annualized_year_trades": 892.6121794871794,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 1495.0
+          }
+        }
+      ],
+      "top_train_single_edges": [
+        {
+          "edge_indexes": [
+            6
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 76,
+            "winning_trade_count": 48,
+            "win_rate": 0.631578947368421,
+            "net_pnl": 16472.5,
+            "gross_profit": 43852.5,
+            "gross_loss": -27380.0,
+            "profit_factor": 1.6016252739225711,
+            "max_drawdown": 6450.0
+          },
+          "objective_gate": {
+            "win_rate": 0.631578947368421,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 31,
+            "min_annualized_year_trades": 36.26602564102564,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 3612.5
+          },
+          "source_edge_index": 6
+        },
+        {
+          "edge_indexes": [
+            18
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 125,
+            "winning_trade_count": 76,
+            "win_rate": 0.608,
+            "net_pnl": 15942.5,
+            "gross_profit": 54662.5,
+            "gross_loss": -38720.0,
+            "profit_factor": 1.4117381198347108,
+            "max_drawdown": 6900.0
+          },
+          "objective_gate": {
+            "win_rate": 0.608,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.5
+          },
+          "constraints": {
+            "min_year_trades": 61,
+            "min_annualized_year_trades": 71.36217948717949,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 1,
+            "worst_year_pnl": -1505.0
+          },
+          "source_edge_index": 18
+        },
+        {
+          "edge_indexes": [
+            3
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 67,
+            "winning_trade_count": 40,
+            "win_rate": 0.5970149253731343,
+            "net_pnl": 11175.0,
+            "gross_profit": 34150.0,
+            "gross_loss": -22975.0,
+            "profit_factor": 1.4863982589771492,
+            "max_drawdown": 6345.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5970149253731343,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 25,
+            "min_annualized_year_trades": 29.246794871794872,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 1027.5
+          },
+          "source_edge_index": 3
+        },
+        {
+          "edge_indexes": [
+            15
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 128,
+            "winning_trade_count": 76,
+            "win_rate": 0.59375,
+            "net_pnl": 25962.5,
+            "gross_profit": 61502.5,
+            "gross_loss": -35540.0,
+            "profit_factor": 1.7305149127743387,
+            "max_drawdown": 7830.0
+          },
+          "objective_gate": {
+            "win_rate": 0.59375,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.5
+          },
+          "constraints": {
+            "min_year_trades": 59,
+            "min_annualized_year_trades": 69.0224358974359,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 1,
+            "worst_year_pnl": -567.5
+          },
+          "source_edge_index": 15
+        },
+        {
+          "edge_indexes": [
+            10
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 126,
+            "winning_trade_count": 73,
+            "win_rate": 0.5793650793650794,
+            "net_pnl": 33715.0,
+            "gross_profit": 70565.0,
+            "gross_loss": -36850.0,
+            "profit_factor": 1.9149253731343283,
+            "max_drawdown": 4570.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5793650793650794,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 63,
+            "min_annualized_year_trades": 73.70192307692308,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 5840.0
+          },
+          "source_edge_index": 10
+        },
+        {
+          "edge_indexes": [
+            17
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 193,
+            "winning_trade_count": 111,
+            "win_rate": 0.5751295336787565,
+            "net_pnl": 35645.0,
+            "gross_profit": 103115.0,
+            "gross_loss": -67470.0,
+            "profit_factor": 1.5283088780198606,
+            "max_drawdown": 9660.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5751295336787565,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 93,
+            "min_annualized_year_trades": 108.79807692307692,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 2097.5
+          },
+          "source_edge_index": 17
+        },
+        {
+          "edge_indexes": [
+            7
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 75,
+            "winning_trade_count": 43,
+            "win_rate": 0.5733333333333334,
+            "net_pnl": 8247.5,
+            "gross_profit": 38772.5,
+            "gross_loss": -30525.0,
+            "profit_factor": 1.2701883701883703,
+            "max_drawdown": 8275.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5733333333333334,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 29,
+            "min_annualized_year_trades": 33.92628205128205,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 2452.5
+          },
+          "source_edge_index": 7
+        },
+        {
+          "edge_indexes": [
+            9
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 135,
+            "winning_trade_count": 76,
+            "win_rate": 0.562962962962963,
+            "net_pnl": 28377.5,
+            "gross_profit": 63072.5,
+            "gross_loss": -34695.0,
+            "profit_factor": 1.8179132439832828,
+            "max_drawdown": 4337.5
+          },
+          "objective_gate": {
+            "win_rate": 0.562962962962963,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 63,
+            "min_annualized_year_trades": 73.70192307692308,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 1507.5
+          },
+          "source_edge_index": 9
+        },
+        {
+          "edge_indexes": [
+            14
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 197,
+            "winning_trade_count": 110,
+            "win_rate": 0.5583756345177665,
+            "net_pnl": 34205.0,
+            "gross_profit": 104260.0,
+            "gross_loss": -70055.0,
+            "profit_factor": 1.4882592248947255,
+            "max_drawdown": 11935.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5583756345177665,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 92,
+            "min_annualized_year_trades": 107.62820512820512,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": 1480.0
+          },
+          "source_edge_index": 14
+        },
+        {
+          "edge_indexes": [
+            5
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 81,
+            "winning_trade_count": 45,
+            "win_rate": 0.5555555555555556,
+            "net_pnl": 14925.0,
+            "gross_profit": 39945.0,
+            "gross_loss": -25020.0,
+            "profit_factor": 1.5965227817745804,
+            "max_drawdown": 7595.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5555555555555556,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.5
+          },
+          "constraints": {
+            "min_year_trades": 32,
+            "min_annualized_year_trades": 37.43589743589744,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 1,
+            "worst_year_pnl": -1900.0
+          },
+          "source_edge_index": 5
+        }
+      ]
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021
+      ],
+      "test_year": 2022,
+      "status": "ok",
+      "train_signal_count": 18387,
+      "test_signal_count": 5521,
+      "single_edge_count": 19,
+      "approximate_candidate_count": 20,
+      "exact_train_candidate_count": 20,
+      "selected_edge_indexes": [
+        5,
+        6,
+        15
+      ],
+      "selected_edge_turnover": {
+        "added": [
+          5
+        ],
+        "removed": [
+          3
+        ],
+        "retained": [
+          6,
+          15
+        ]
+      },
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1200_1659",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": -1,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        }
+      ],
+      "train_metrics": {
+        "trade_count": 3255,
+        "winning_trade_count": 1971,
+        "win_rate": 0.6055299539170507,
+        "net_pnl": 648237.5,
+        "gross_profit": 1434782.5,
+        "gross_loss": -786545.0,
+        "profit_factor": 1.8241581854820768,
+        "max_drawdown": 39850.0
+      },
+      "train_gate_report": {
+        "passed": true,
+        "missing_trade_years": [],
+        "win_rate": 0.6055299539170507,
+        "net_pnl": 648237.5,
+        "positive_year_ratio": 1.0,
+        "constraints": {
+          "min_year_trades": 953,
+          "min_annualized_year_trades": 1114.8878205128206,
+          "full_or_annualized_years_gt_min_trades": true,
+          "positive_years": 3,
+          "worst_year_pnl": 14307.5
+        }
+      },
+      "test_metrics": {
+        "trade_count": 901,
+        "winning_trade_count": 522,
+        "win_rate": 0.5793562708102109,
+        "net_pnl": 191862.5,
+        "gross_profit": 588407.5,
+        "gross_loss": -396545.0,
+        "profit_factor": 1.48383537807815,
+        "max_drawdown": 91545.0
+      },
+      "test_yearly_result": {
+        "year": 2022,
+        "trade_count": 901,
+        "winning_trade_count": 522,
+        "win_rate": 0.5793562708102109,
+        "net_pnl": 191862.5,
+        "profit_factor": 1.48383537807815,
+        "max_drawdown": 91545.0
+      },
+      "test_gate_report": {
+        "passed": true,
+        "test_year": 2022,
+        "trade_count": 901,
+        "annualized_trade_count": 1060.8548387096773,
+        "win_rate": 0.5793562708102109,
+        "net_pnl": 191862.5,
+        "min_win_rate": 0.55,
+        "min_year_trades": 1000
+      },
+      "top_train_exact": [
+        {
+          "edge_indexes": [
+            5,
+            6,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 3255,
+            "winning_trade_count": 1971,
+            "win_rate": 0.6055299539170507,
+            "net_pnl": 648237.5,
+            "gross_profit": 1434782.5,
+            "gross_loss": -786545.0,
+            "profit_factor": 1.8241581854820768,
+            "max_drawdown": 39850.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6055299539170507,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 953,
+            "min_annualized_year_trades": 1114.8878205128206,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 14307.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            7,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 3756,
+            "winning_trade_count": 2266,
+            "win_rate": 0.6033013844515442,
+            "net_pnl": 785177.5,
+            "gross_profit": 1780752.5,
+            "gross_loss": -995575.0,
+            "profit_factor": 1.7886673530371895,
+            "max_drawdown": 49400.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6033013844515442,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1062,
+            "min_annualized_year_trades": 1242.4038461538462,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 17945.0
+          }
+        },
+        {
+          "edge_indexes": [
+            6,
+            7,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 2990,
+            "winning_trade_count": 1803,
+            "win_rate": 0.6030100334448161,
+            "net_pnl": 653332.5,
+            "gross_profit": 1456277.5,
+            "gross_loss": -802945.0,
+            "profit_factor": 1.8136703012036939,
+            "max_drawdown": 47575.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6030100334448161,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 876,
+            "min_annualized_year_trades": 1024.8076923076924,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 18512.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            10,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 3709,
+            "winning_trade_count": 2227,
+            "win_rate": 0.6004313831221354,
+            "net_pnl": 747622.5,
+            "gross_profit": 1688122.5,
+            "gross_loss": -940500.0,
+            "profit_factor": 1.7949202551834131,
+            "max_drawdown": 44637.5
+          },
+          "objective_gate": {
+            "win_rate": 0.6004313831221354,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1108,
+            "min_annualized_year_trades": 1296.2179487179487,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 26942.5
+          }
+        },
+        {
+          "edge_indexes": [
+            6,
+            10,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 2943,
+            "winning_trade_count": 1764,
+            "win_rate": 0.599388379204893,
+            "net_pnl": 615777.5,
+            "gross_profit": 1363647.5,
+            "gross_loss": -747870.0,
+            "profit_factor": 1.8233750518138179,
+            "max_drawdown": 40275.0
+          },
+          "objective_gate": {
+            "win_rate": 0.599388379204893,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 922,
+            "min_annualized_year_trades": 1078.621794871795,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 27510.0
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            7,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 3071,
+            "winning_trade_count": 1840,
+            "win_rate": 0.5991533702377075,
+            "net_pnl": 572672.5,
+            "gross_profit": 1337792.5,
+            "gross_loss": -765120.0,
+            "profit_factor": 1.7484740955667084,
+            "max_drawdown": 39340.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5991533702377075,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 873,
+            "min_annualized_year_trades": 1021.2980769230769,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 12055.0
+          }
+        },
+        {
+          "edge_indexes": [
+            6,
+            7,
+            10,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 3444,
+            "winning_trade_count": 2059,
+            "win_rate": 0.5978513356562137,
+            "net_pnl": 752717.5,
+            "gross_profit": 1709617.5,
+            "gross_loss": -956900.0,
+            "profit_factor": 1.7866208590239314,
+            "max_drawdown": 52200.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5978513356562137,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1031,
+            "min_annualized_year_trades": 1206.1378205128206,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 31147.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            5,
+            6,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 3949,
+            "winning_trade_count": 2357,
+            "win_rate": 0.5968599645479868,
+            "net_pnl": 726745.0,
+            "gross_profit": 1739815.0,
+            "gross_loss": -1013070.0,
+            "profit_factor": 1.7173689873355247,
+            "max_drawdown": 53175.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5968599645479868,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1108,
+            "min_annualized_year_trades": 1296.2179487179487,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 14490.0
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            5,
+            6,
+            7,
+            15
+          ],
+          "edge_count": 5,
+          "metrics": {
+            "trade_count": 4450,
+            "winning_trade_count": 2652,
+            "win_rate": 0.5959550561797753,
+            "net_pnl": 863685.0,
+            "gross_profit": 2085785.0,
+            "gross_loss": -1222100.0,
+            "profit_factor": 1.7067220358399475,
+            "max_drawdown": 64125.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5959550561797753,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1217,
+            "min_annualized_year_trades": 1423.7339743589744,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 18127.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            6,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 3183,
+            "winning_trade_count": 1894,
+            "win_rate": 0.5950361294376374,
+            "net_pnl": 594900.0,
+            "gross_profit": 1415340.0,
+            "gross_loss": -820440.0,
+            "profit_factor": 1.7250987275120666,
+            "max_drawdown": 53930.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5950361294376374,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 922,
+            "min_annualized_year_trades": 1078.621794871795,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 3,
+            "worst_year_pnl": 15057.5
+          }
+        }
+      ],
+      "top_train_single_edges": [
+        {
+          "edge_indexes": [
+            6
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 110,
+            "winning_trade_count": 67,
+            "win_rate": 0.6090909090909091,
+            "net_pnl": 28532.5,
+            "gross_profit": 74272.5,
+            "gross_loss": -45740.0,
+            "profit_factor": 1.6237975513773502,
+            "max_drawdown": 7210.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6090909090909091,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 31,
+            "min_annualized_year_trades": 36.26602564102564,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": 3612.5
+          },
+          "source_edge_index": 6
+        },
+        {
+          "edge_indexes": [
+            15
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 189,
+            "winning_trade_count": 113,
+            "win_rate": 0.5978835978835979,
+            "net_pnl": 36195.0,
+            "gross_profit": 97265.0,
+            "gross_loss": -61070.0,
+            "profit_factor": 1.5926805305387262,
+            "max_drawdown": 7830.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5978835978835979,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 59,
+            "min_annualized_year_trades": 69.0224358974359,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": -567.5
+          },
+          "source_edge_index": 15
+        },
+        {
+          "edge_indexes": [
+            5
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 114,
+            "winning_trade_count": 66,
+            "win_rate": 0.5789473684210527,
+            "net_pnl": 21040.0,
+            "gross_profit": 55190.0,
+            "gross_loss": -34150.0,
+            "profit_factor": 1.6161054172767204,
+            "max_drawdown": 7595.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5789473684210527,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 32,
+            "min_annualized_year_trades": 37.43589743589744,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": -1900.0
+          },
+          "source_edge_index": 5
+        },
+        {
+          "edge_indexes": [
+            7
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 111,
+            "winning_trade_count": 63,
+            "win_rate": 0.5675675675675675,
+            "net_pnl": 14885.0,
+            "gross_profit": 69080.0,
+            "gross_loss": -54195.0,
+            "profit_factor": 1.2746563336101115,
+            "max_drawdown": 9330.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5675675675675675,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 29,
+            "min_annualized_year_trades": 33.92628205128205,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": 2452.5
+          },
+          "source_edge_index": 7
+        },
+        {
+          "edge_indexes": [
+            10
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 198,
+            "winning_trade_count": 112,
+            "win_rate": 0.5656565656565656,
+            "net_pnl": 47597.5,
+            "gross_profit": 120977.5,
+            "gross_loss": -73380.0,
+            "profit_factor": 1.648644044698828,
+            "max_drawdown": 6610.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5656565656565656,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 63,
+            "min_annualized_year_trades": 73.70192307692308,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": 5840.0
+          },
+          "source_edge_index": 10
+        },
+        {
+          "edge_indexes": [
+            3
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 99,
+            "winning_trade_count": 55,
+            "win_rate": 0.5555555555555556,
+            "net_pnl": 11250.0,
+            "gross_profit": 45650.0,
+            "gross_loss": -34400.0,
+            "profit_factor": 1.3270348837209303,
+            "max_drawdown": 6345.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5555555555555556,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 25,
+            "min_annualized_year_trades": 29.246794871794872,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": 75.0
+          },
+          "source_edge_index": 3
+        },
+        {
+          "edge_indexes": [
+            17
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 290,
+            "winning_trade_count": 160,
+            "win_rate": 0.5517241379310345,
+            "net_pnl": 43240.0,
+            "gross_profit": 165120.0,
+            "gross_loss": -121880.0,
+            "profit_factor": 1.3547751887102069,
+            "max_drawdown": 12125.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5517241379310345,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 93,
+            "min_annualized_year_trades": 108.79807692307692,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": 2097.5
+          },
+          "source_edge_index": 17
+        },
+        {
+          "edge_indexes": [
+            18
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 182,
+            "winning_trade_count": 99,
+            "win_rate": 0.5439560439560439,
+            "net_pnl": -632.5,
+            "gross_profit": 68627.5,
+            "gross_loss": -69260.0,
+            "profit_factor": 0.9908677447300029,
+            "max_drawdown": 19470.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5439560439560439,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.3333333333333333
+          },
+          "constraints": {
+            "min_year_trades": 57,
+            "min_annualized_year_trades": 66.89710610932475,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 1,
+            "worst_year_pnl": -16575.0
+          },
+          "source_edge_index": 18
+        },
+        {
+          "edge_indexes": [
+            9
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 201,
+            "winning_trade_count": 109,
+            "win_rate": 0.5422885572139303,
+            "net_pnl": 29807.5,
+            "gross_profit": 95532.5,
+            "gross_loss": -65725.0,
+            "profit_factor": 1.4535184480791175,
+            "max_drawdown": 6137.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5422885572139303,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 63,
+            "min_annualized_year_trades": 73.70192307692308,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": 1430.0
+          },
+          "source_edge_index": 9
+        },
+        {
+          "edge_indexes": [
+            14
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 299,
+            "winning_trade_count": 162,
+            "win_rate": 0.5418060200668896,
+            "net_pnl": 43895.0,
+            "gross_profit": 171080.0,
+            "gross_loss": -127185.0,
+            "profit_factor": 1.345127176946967,
+            "max_drawdown": 12185.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5418060200668896,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 92,
+            "min_annualized_year_trades": 107.62820512820512,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": 1480.0
+          },
+          "source_edge_index": 14
+        }
+      ]
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022
+      ],
+      "test_year": 2023,
+      "status": "ok",
+      "train_signal_count": 23908,
+      "test_signal_count": 6120,
+      "single_edge_count": 19,
+      "approximate_candidate_count": 20,
+      "exact_train_candidate_count": 20,
+      "selected_edge_indexes": [
+        5,
+        6,
+        15
+      ],
+      "selected_edge_turnover": {
+        "added": [],
+        "removed": [],
+        "retained": [
+          5,
+          6,
+          15
+        ]
+      },
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1200_1659",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": -1,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        }
+      ],
+      "train_metrics": {
+        "trade_count": 4156,
+        "winning_trade_count": 2493,
+        "win_rate": 0.5998556304138595,
+        "net_pnl": 840100.0,
+        "gross_profit": 2023190.0,
+        "gross_loss": -1183090.0,
+        "profit_factor": 1.7100896804131553,
+        "max_drawdown": 91545.0
+      },
+      "train_gate_report": {
+        "passed": true,
+        "missing_trade_years": [],
+        "win_rate": 0.5998556304138595,
+        "net_pnl": 840100.0,
+        "positive_year_ratio": 1.0,
+        "constraints": {
+          "min_year_trades": 901,
+          "min_annualized_year_trades": 1060.8548387096773,
+          "full_or_annualized_years_gt_min_trades": true,
+          "positive_years": 4,
+          "worst_year_pnl": 14307.5
+        }
+      },
+      "test_metrics": {
+        "trade_count": 1040,
+        "winning_trade_count": 463,
+        "win_rate": 0.44519230769230766,
+        "net_pnl": -18097.5,
+        "gross_profit": 363617.5,
+        "gross_loss": -381715.0,
+        "profit_factor": 0.9525889734487772,
+        "max_drawdown": 123232.5
+      },
+      "test_yearly_result": {
+        "year": 2023,
+        "trade_count": 1040,
+        "winning_trade_count": 463,
+        "win_rate": 0.44519230769230766,
+        "net_pnl": -18097.5,
+        "profit_factor": 0.9525889734487772,
+        "max_drawdown": 123232.5
+      },
+      "test_gate_report": {
+        "passed": false,
+        "test_year": 2023,
+        "trade_count": 1040,
+        "annualized_trade_count": 1224.516129032258,
+        "win_rate": 0.44519230769230766,
+        "net_pnl": -18097.5,
+        "min_win_rate": 0.55,
+        "min_year_trades": 1000
+      },
+      "top_train_exact": [
+        {
+          "edge_indexes": [
+            5,
+            6,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 4156,
+            "winning_trade_count": 2493,
+            "win_rate": 0.5998556304138595,
+            "net_pnl": 840100.0,
+            "gross_profit": 2023190.0,
+            "gross_loss": -1183090.0,
+            "profit_factor": 1.7100896804131553,
+            "max_drawdown": 91545.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5998556304138595,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 901,
+            "min_annualized_year_trades": 1060.8548387096773,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 14307.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            10,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 4712,
+            "winning_trade_count": 2797,
+            "win_rate": 0.5935908319185059,
+            "net_pnl": 939867.5,
+            "gross_profit": 2353862.5,
+            "gross_loss": -1413995.0,
+            "profit_factor": 1.664689408378389,
+            "max_drawdown": 106157.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5935908319185059,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1003,
+            "min_annualized_year_trades": 1180.9516129032259,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 26942.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            7,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 4770,
+            "winning_trade_count": 2830,
+            "win_rate": 0.5932914046121593,
+            "net_pnl": 937067.5,
+            "gross_profit": 2444237.5,
+            "gross_loss": -1507170.0,
+            "profit_factor": 1.621739750658519,
+            "max_drawdown": 142247.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5932914046121593,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1014,
+            "min_annualized_year_trades": 1193.9032258064517,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 17945.0
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            10,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 3887,
+            "winning_trade_count": 2303,
+            "win_rate": 0.5924877797787497,
+            "net_pnl": 747037.5,
+            "gross_profit": 1811072.5,
+            "gross_loss": -1064035.0,
+            "profit_factor": 1.702079818802953,
+            "max_drawdown": 82920.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5924877797787497,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 863,
+            "min_annualized_year_trades": 1016.1129032258065,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 21052.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            7,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 3945,
+            "winning_trade_count": 2336,
+            "win_rate": 0.5921419518377693,
+            "net_pnl": 744237.5,
+            "gross_profit": 1901447.5,
+            "gross_loss": -1157210.0,
+            "profit_factor": 1.6431308924050085,
+            "max_drawdown": 86057.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5921419518377693,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 873,
+            "min_annualized_year_trades": 1021.2980769230769,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 12055.0
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            5,
+            6,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 5125,
+            "winning_trade_count": 3019,
+            "win_rate": 0.5890731707317073,
+            "net_pnl": 1018952.5,
+            "gross_profit": 2568932.5,
+            "gross_loss": -1549980.0,
+            "profit_factor": 1.6573971922218351,
+            "max_drawdown": 90515.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5890731707317073,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1108,
+            "min_annualized_year_trades": 1296.2179487179487,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 14490.0
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            5,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 4300,
+            "winning_trade_count": 2525,
+            "win_rate": 0.5872093023255814,
+            "net_pnl": 826122.5,
+            "gross_profit": 2026142.5,
+            "gross_loss": -1200020.0,
+            "profit_factor": 1.6884239429342844,
+            "max_drawdown": 80785.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5872093023255814,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 919,
+            "min_annualized_year_trades": 1075.1121794871794,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 8600.0
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            15,
+            18
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 4923,
+            "winning_trade_count": 2879,
+            "win_rate": 0.5848060125939468,
+            "net_pnl": 866072.5,
+            "gross_profit": 2307507.5,
+            "gross_loss": -1441435.0,
+            "profit_factor": 1.6008404818809034,
+            "max_drawdown": 69060.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5848060125939468,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1087,
+            "min_annualized_year_trades": 1279.8548387096773,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 6817.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            15,
+            18
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 4098,
+            "winning_trade_count": 2385,
+            "win_rate": 0.58199121522694,
+            "net_pnl": 673242.5,
+            "gross_profit": 1764717.5,
+            "gross_loss": -1091475.0,
+            "profit_factor": 1.6168189834856501,
+            "max_drawdown": 60785.0
+          },
+          "objective_gate": {
+            "win_rate": 0.58199121522694,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 947,
+            "min_annualized_year_trades": 1115.016129032258,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 927.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            6,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 4151,
+            "winning_trade_count": 2406,
+            "win_rate": 0.5796193688267888,
+            "net_pnl": 754355.0,
+            "gross_profit": 2054075.0,
+            "gross_loss": -1299720.0,
+            "profit_factor": 1.5803980857415443,
+            "max_drawdown": 93410.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5796193688267888,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 922,
+            "min_annualized_year_trades": 1078.621794871795,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": 15057.5
+          }
+        }
+      ],
+      "top_train_single_edges": [
+        {
+          "edge_indexes": [
+            5
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 140,
+            "winning_trade_count": 86,
+            "win_rate": 0.6142857142857143,
+            "net_pnl": 42307.5,
+            "gross_profit": 86427.5,
+            "gross_loss": -44120.0,
+            "profit_factor": 1.9589188576609247,
+            "max_drawdown": 7595.0
+          },
+          "objective_gate": {
+            "win_rate": 0.6142857142857143,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.75
+          },
+          "constraints": {
+            "min_year_trades": 26,
+            "min_annualized_year_trades": 30.612903225806452,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -1900.0
+          },
+          "source_edge_index": 5
+        },
+        {
+          "edge_indexes": [
+            15
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 257,
+            "winning_trade_count": 153,
+            "win_rate": 0.5953307392996109,
+            "net_pnl": 67257.5,
+            "gross_profit": 160597.5,
+            "gross_loss": -93340.0,
+            "profit_factor": 1.7205646025283907,
+            "max_drawdown": 10000.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5953307392996109,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.75
+          },
+          "constraints": {
+            "min_year_trades": 59,
+            "min_annualized_year_trades": 69.0224358974359,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -567.5
+          },
+          "source_edge_index": 15
+        },
+        {
+          "edge_indexes": [
+            6
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 145,
+            "winning_trade_count": 82,
+            "win_rate": 0.5655172413793104,
+            "net_pnl": 17457.5,
+            "gross_profit": 97772.5,
+            "gross_loss": -80315.0,
+            "profit_factor": 1.2173628836456454,
+            "max_drawdown": 16425.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5655172413793104,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.75
+          },
+          "constraints": {
+            "min_year_trades": 31,
+            "min_annualized_year_trades": 36.26602564102564,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -11075.0
+          },
+          "source_edge_index": 6
+        },
+        {
+          "edge_indexes": [
+            3
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 140,
+            "winning_trade_count": 76,
+            "win_rate": 0.5428571428571428,
+            "net_pnl": 22917.5,
+            "gross_profit": 83347.5,
+            "gross_loss": -60430.0,
+            "profit_factor": 1.3792404434883336,
+            "max_drawdown": 8740.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5428571428571428,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 25,
+            "min_annualized_year_trades": 29.246794871794872,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": 75.0
+          },
+          "source_edge_index": 3
+        },
+        {
+          "edge_indexes": [
+            10
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 251,
+            "winning_trade_count": 134,
+            "win_rate": 0.5338645418326693,
+            "net_pnl": 44420.0,
+            "gross_profit": 160980.0,
+            "gross_loss": -116560.0,
+            "profit_factor": 1.3810912834591627,
+            "max_drawdown": 13257.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5338645418326693,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.75
+          },
+          "constraints": {
+            "min_year_trades": 53,
+            "min_annualized_year_trades": 62.403225806451616,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -3177.5
+          },
+          "source_edge_index": 10
+        },
+        {
+          "edge_indexes": [
+            18
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 237,
+            "winning_trade_count": 125,
+            "win_rate": 0.5274261603375527,
+            "net_pnl": 7037.5,
+            "gross_profit": 109167.5,
+            "gross_loss": -102130.0,
+            "profit_factor": 1.0689072750416135,
+            "max_drawdown": 30270.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5274261603375527,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.5
+          },
+          "constraints": {
+            "min_year_trades": 55,
+            "min_annualized_year_trades": 64.75806451612904,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 2,
+            "worst_year_pnl": -16575.0
+          },
+          "source_edge_index": 18
+        },
+        {
+          "edge_indexes": [
+            4
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 243,
+            "winning_trade_count": 128,
+            "win_rate": 0.5267489711934157,
+            "net_pnl": 28100.0,
+            "gross_profit": 124530.0,
+            "gross_loss": -96430.0,
+            "profit_factor": 1.2914030903245879,
+            "max_drawdown": 11872.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5267489711934157,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.75
+          },
+          "constraints": {
+            "min_year_trades": 57,
+            "min_annualized_year_trades": 66.6826923076923,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -1512.5
+          },
+          "source_edge_index": 4
+        },
+        {
+          "edge_indexes": [
+            17
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 391,
+            "winning_trade_count": 204,
+            "win_rate": 0.5217391304347826,
+            "net_pnl": 46217.5,
+            "gross_profit": 247987.5,
+            "gross_loss": -201770.0,
+            "profit_factor": 1.2290603162016156,
+            "max_drawdown": 15570.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5217391304347826,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 93,
+            "min_annualized_year_trades": 108.79807692307692,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": 2097.5
+          },
+          "source_edge_index": 17
+        },
+        {
+          "edge_indexes": [
+            9
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 255,
+            "winning_trade_count": 132,
+            "win_rate": 0.5176470588235295,
+            "net_pnl": 22647.5,
+            "gross_profit": 134847.5,
+            "gross_loss": -112200.0,
+            "profit_factor": 1.201849376114082,
+            "max_drawdown": 11425.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5176470588235295,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.75
+          },
+          "constraints": {
+            "min_year_trades": 54,
+            "min_annualized_year_trades": 63.58064516129032,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -7160.0
+          },
+          "source_edge_index": 9
+        },
+        {
+          "edge_indexes": [
+            7
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 142,
+            "winning_trade_count": 73,
+            "win_rate": 0.5140845070422535,
+            "net_pnl": -2575.0,
+            "gross_profit": 85190.0,
+            "gross_loss": -87765.0,
+            "profit_factor": 0.9706602859909987,
+            "max_drawdown": 20985.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5140845070422535,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.75
+          },
+          "constraints": {
+            "min_year_trades": 29,
+            "min_annualized_year_trades": 33.92628205128205,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -17460.0
+          },
+          "source_edge_index": 7
+        }
+      ]
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023
+      ],
+      "test_year": 2024,
+      "status": "ok",
+      "train_signal_count": 30028,
+      "test_signal_count": 6171,
+      "single_edge_count": 19,
+      "approximate_candidate_count": 20,
+      "exact_train_candidate_count": 20,
+      "selected_edge_indexes": [
+        5,
+        6,
+        10,
+        15
+      ],
+      "selected_edge_turnover": {
+        "added": [
+          10
+        ],
+        "removed": [],
+        "retained": [
+          5,
+          6,
+          15
+        ]
+      },
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1200_1659",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "trend_pullback_reclaim",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1200_1659",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": -1,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": -1,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        }
+      ],
+      "train_metrics": {
+        "trade_count": 5858,
+        "winning_trade_count": 3323,
+        "win_rate": 0.5672584499829293,
+        "net_pnl": 957292.5,
+        "gross_profit": 2793762.5,
+        "gross_loss": -1836470.0,
+        "profit_factor": 1.5212677038013145,
+        "max_drawdown": 166832.5
+      },
+      "train_gate_report": {
+        "passed": true,
+        "missing_trade_years": [],
+        "win_rate": 0.5672584499829293,
+        "net_pnl": 957292.5,
+        "positive_year_ratio": 1.0,
+        "constraints": {
+          "min_year_trades": 1003,
+          "min_annualized_year_trades": 1180.9516129032259,
+          "full_or_annualized_years_gt_min_trades": true,
+          "positive_years": 5,
+          "worst_year_pnl": 17425.0
+        }
+      },
+      "test_metrics": {
+        "trade_count": 1115,
+        "winning_trade_count": 461,
+        "win_rate": 0.4134529147982063,
+        "net_pnl": -73437.5,
+        "gross_profit": 553397.5,
+        "gross_loss": -626835.0,
+        "profit_factor": 0.8828439701037754,
+        "max_drawdown": 177897.5
+      },
+      "test_yearly_result": {
+        "year": 2024,
+        "trade_count": 1115,
+        "winning_trade_count": 461,
+        "win_rate": 0.4134529147982063,
+        "net_pnl": -73437.5,
+        "profit_factor": 0.8828439701037754,
+        "max_drawdown": 177897.5
+      },
+      "test_gate_report": {
+        "passed": false,
+        "test_year": 2024,
+        "trade_count": 1115,
+        "annualized_trade_count": 1300.2396166134185,
+        "win_rate": 0.4134529147982063,
+        "net_pnl": -73437.5,
+        "min_win_rate": 0.55,
+        "min_year_trades": 1000
+      },
+      "top_train_exact": [
+        {
+          "edge_indexes": [
+            5,
+            6,
+            10,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 5858,
+            "winning_trade_count": 3323,
+            "win_rate": 0.5672584499829293,
+            "net_pnl": 957292.5,
+            "gross_profit": 2793762.5,
+            "gross_loss": -1836470.0,
+            "profit_factor": 1.5212677038013145,
+            "max_drawdown": 166832.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5672584499829293,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1003,
+            "min_annualized_year_trades": 1180.9516129032259,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": 17425.0
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            7,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 5987,
+            "winning_trade_count": 3391,
+            "win_rate": 0.5663938533489227,
+            "net_pnl": 950125.0,
+            "gross_profit": 2940570.0,
+            "gross_loss": -1990445.0,
+            "profit_factor": 1.4773430062121786,
+            "max_drawdown": 219535.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5663938533489227,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1014,
+            "min_annualized_year_trades": 1193.9032258064517,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": 13057.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            10,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 4816,
+            "winning_trade_count": 2721,
+            "win_rate": 0.5649916943521595,
+            "net_pnl": 763760.0,
+            "gross_profit": 2115445.0,
+            "gross_loss": -1351685.0,
+            "profit_factor": 1.5650428909102343,
+            "max_drawdown": 117205.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5649916943521595,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 863,
+            "min_annualized_year_trades": 1016.1129032258065,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": 16722.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            7,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 4945,
+            "winning_trade_count": 2789,
+            "win_rate": 0.5640040444893832,
+            "net_pnl": 756592.5,
+            "gross_profit": 2262252.5,
+            "gross_loss": -1505660.0,
+            "profit_factor": 1.5024989041350636,
+            "max_drawdown": 167077.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5640040444893832,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 873,
+            "min_annualized_year_trades": 1021.2980769230769,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": 12055.0
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            15,
+            18
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 6164,
+            "winning_trade_count": 3442,
+            "win_rate": 0.5584036340038936,
+            "net_pnl": 880495.0,
+            "gross_profit": 2758885.0,
+            "gross_loss": -1878390.0,
+            "profit_factor": 1.468749833634123,
+            "max_drawdown": 141220.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5584036340038936,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 1087,
+            "min_annualized_year_trades": 1279.8548387096773,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": 6817.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            15,
+            18
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 5122,
+            "winning_trade_count": 2840,
+            "win_rate": 0.554470909800859,
+            "net_pnl": 686962.5,
+            "gross_profit": 2080567.5,
+            "gross_loss": -1393605.0,
+            "profit_factor": 1.4929391757348747,
+            "max_drawdown": 99897.5
+          },
+          "objective_gate": {
+            "win_rate": 0.554470909800859,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 947,
+            "min_annualized_year_trades": 1115.016129032258,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": 927.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 1234,
+            "winning_trade_count": 727,
+            "win_rate": 0.5891410048622366,
+            "net_pnl": 243475.0,
+            "gross_profit": 601250.0,
+            "gross_loss": -357775.0,
+            "profit_factor": 1.6805254699182448,
+            "max_drawdown": 51550.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5891410048622366,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6
+          },
+          "constraints": {
+            "min_year_trades": 186,
+            "min_annualized_year_trades": 217.59615384615384,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -21122.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6
+          ],
+          "edge_count": 2,
+          "metrics": {
+            "trade_count": 2276,
+            "winning_trade_count": 1329,
+            "win_rate": 0.5839191564147628,
+            "net_pnl": 437007.5,
+            "gross_profit": 1279567.5,
+            "gross_loss": -842560.0,
+            "profit_factor": 1.5186663264337257,
+            "max_drawdown": 107790.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5839191564147628,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 348,
+            "min_annualized_year_trades": 409.741935483871,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -20420.0
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 5196,
+            "winning_trade_count": 2956,
+            "win_rate": 0.5688991531947653,
+            "net_pnl": 822002.5,
+            "gross_profit": 2386807.5,
+            "gross_loss": -1564805.0,
+            "profit_factor": 1.5253066676039506,
+            "max_drawdown": 171855.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5688991531947653,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 901,
+            "min_annualized_year_trades": 1060.8548387096773,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": -18097.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            15
+          ],
+          "edge_count": 2,
+          "metrics": {
+            "trade_count": 4154,
+            "winning_trade_count": 2354,
+            "win_rate": 0.5666827154549832,
+            "net_pnl": 628470.0,
+            "gross_profit": 1708490.0,
+            "gross_loss": -1080020.0,
+            "profit_factor": 1.581905890631655,
+            "max_drawdown": 125062.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5666827154549832,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 761,
+            "min_annualized_year_trades": 893.7820512820513,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -18800.0
+          }
+        }
+      ],
+      "top_train_single_edges": [
+        {
+          "edge_indexes": [
+            15
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 316,
+            "winning_trade_count": 186,
+            "win_rate": 0.5886075949367089,
+            "net_pnl": 71622.5,
+            "gross_profit": 186627.5,
+            "gross_loss": -115005.0,
+            "profit_factor": 1.6227772705534542,
+            "max_drawdown": 10000.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5886075949367089,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 59,
+            "min_annualized_year_trades": 69.0224358974359,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -567.5
+          },
+          "source_edge_index": 15
+        },
+        {
+          "edge_indexes": [
+            5
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 175,
+            "winning_trade_count": 103,
+            "win_rate": 0.5885714285714285,
+            "net_pnl": 42977.5,
+            "gross_profit": 101287.5,
+            "gross_loss": -58310.0,
+            "profit_factor": 1.7370519636425998,
+            "max_drawdown": 7595.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5885714285714285,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 26,
+            "min_annualized_year_trades": 30.612903225806452,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -1900.0
+          },
+          "source_edge_index": 5
+        },
+        {
+          "edge_indexes": [
+            6
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 181,
+            "winning_trade_count": 101,
+            "win_rate": 0.5580110497237569,
+            "net_pnl": 29610.0,
+            "gross_profit": 129610.0,
+            "gross_loss": -100000.0,
+            "profit_factor": 1.2961,
+            "max_drawdown": 20880.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5580110497237569,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 31,
+            "min_annualized_year_trades": 36.26602564102564,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -11075.0
+          },
+          "source_edge_index": 6
+        },
+        {
+          "edge_indexes": [
+            10
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 304,
+            "winning_trade_count": 165,
+            "win_rate": 0.5427631578947368,
+            "net_pnl": 71040.0,
+            "gross_profit": 205545.0,
+            "gross_loss": -134505.0,
+            "profit_factor": 1.5281588045054086,
+            "max_drawdown": 13257.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5427631578947368,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 53,
+            "min_annualized_year_trades": 62.403225806451616,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -3177.5
+          },
+          "source_edge_index": 10
+        },
+        {
+          "edge_indexes": [
+            4
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 302,
+            "winning_trade_count": 160,
+            "win_rate": 0.5298013245033113,
+            "net_pnl": 39430.0,
+            "gross_profit": 160620.0,
+            "gross_loss": -121190.0,
+            "profit_factor": 1.3253568776301674,
+            "max_drawdown": 11872.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5298013245033113,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 57,
+            "min_annualized_year_trades": 66.6826923076923,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -1512.5
+          },
+          "source_edge_index": 4
+        },
+        {
+          "edge_indexes": [
+            18
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 291,
+            "winning_trade_count": 154,
+            "win_rate": 0.5292096219931272,
+            "net_pnl": 12680.0,
+            "gross_profit": 134980.0,
+            "gross_loss": -122300.0,
+            "profit_factor": 1.1036794766966476,
+            "max_drawdown": 30270.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5292096219931272,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6
+          },
+          "constraints": {
+            "min_year_trades": 54,
+            "min_annualized_year_trades": 63.58064516129032,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -16575.0
+          },
+          "source_edge_index": 18
+        },
+        {
+          "edge_indexes": [
+            7
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 176,
+            "winning_trade_count": 93,
+            "win_rate": 0.5284090909090909,
+            "net_pnl": 7932.5,
+            "gross_profit": 113767.5,
+            "gross_loss": -105835.0,
+            "profit_factor": 1.074951575565739,
+            "max_drawdown": 23545.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5284090909090909,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 29,
+            "min_annualized_year_trades": 33.92628205128205,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -17460.0
+          },
+          "source_edge_index": 7
+        },
+        {
+          "edge_indexes": [
+            3
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 180,
+            "winning_trade_count": 95,
+            "win_rate": 0.5277777777777778,
+            "net_pnl": 23960.0,
+            "gross_profit": 103305.0,
+            "gross_loss": -79345.0,
+            "profit_factor": 1.3019723990169514,
+            "max_drawdown": 8740.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5277777777777778,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 25,
+            "min_annualized_year_trades": 29.246794871794872,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 5,
+            "worst_year_pnl": 75.0
+          },
+          "source_edge_index": 3
+        },
+        {
+          "edge_indexes": [
+            17
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 485,
+            "winning_trade_count": 255,
+            "win_rate": 0.5257731958762887,
+            "net_pnl": 79677.5,
+            "gross_profit": 321562.5,
+            "gross_loss": -241885.0,
+            "profit_factor": 1.3294024019678774,
+            "max_drawdown": 15570.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5257731958762887,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 93,
+            "min_annualized_year_trades": 108.79807692307692,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 5,
+            "worst_year_pnl": 2097.5
+          },
+          "source_edge_index": 17
+        },
+        {
+          "edge_indexes": [
+            9
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 314,
+            "winning_trade_count": 161,
+            "win_rate": 0.5127388535031847,
+            "net_pnl": 30945.0,
+            "gross_profit": 173750.0,
+            "gross_loss": -142805.0,
+            "profit_factor": 1.2166940933440706,
+            "max_drawdown": 11425.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5127388535031847,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8
+          },
+          "constraints": {
+            "min_year_trades": 54,
+            "min_annualized_year_trades": 63.58064516129032,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -7160.0
+          },
+          "source_edge_index": 9
+        }
+      ]
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "test_year": 2025,
+      "status": "ok",
+      "train_signal_count": 36199,
+      "test_signal_count": 6148,
+      "single_edge_count": 19,
+      "approximate_candidate_count": 20,
+      "exact_train_candidate_count": 20,
+      "selected_edge_indexes": [
+        5
+      ],
+      "selected_edge_turnover": {
+        "added": [],
+        "removed": [
+          6,
+          10,
+          15
+        ],
+        "retained": [
+          5
+        ]
+      },
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        }
+      ],
+      "train_metrics": {
+        "trade_count": 1436,
+        "winning_trade_count": 808,
+        "win_rate": 0.5626740947075209,
+        "net_pnl": 227875.0,
+        "gross_profit": 700350.0,
+        "gross_loss": -472475.0,
+        "profit_factor": 1.482300650828086,
+        "max_drawdown": 51550.0
+      },
+      "train_gate_report": {
+        "passed": false,
+        "missing_trade_years": [],
+        "win_rate": 0.5626740947075209,
+        "net_pnl": 227875.0,
+        "positive_year_ratio": 0.5,
+        "constraints": {
+          "min_year_trades": 186,
+          "min_annualized_year_trades": 217.59615384615384,
+          "full_or_annualized_years_gt_min_trades": false,
+          "positive_years": 3,
+          "worst_year_pnl": -21122.5
+        }
+      },
+      "test_metrics": {
+        "trade_count": 232,
+        "winning_trade_count": 110,
+        "win_rate": 0.47413793103448276,
+        "net_pnl": 51260.0,
+        "gross_profit": 171155.0,
+        "gross_loss": -119895.0,
+        "profit_factor": 1.427540764835898,
+        "max_drawdown": 28465.0
+      },
+      "test_yearly_result": {
+        "year": 2025,
+        "trade_count": 232,
+        "winning_trade_count": 110,
+        "win_rate": 0.47413793103448276,
+        "net_pnl": 51260.0,
+        "profit_factor": 1.427540764835898,
+        "max_drawdown": 28465.0
+      },
+      "test_gate_report": {
+        "passed": false,
+        "test_year": 2025,
+        "trade_count": 232,
+        "annualized_trade_count": 271.4102564102564,
+        "win_rate": 0.47413793103448276,
+        "net_pnl": 51260.0,
+        "min_win_rate": 0.55,
+        "min_year_trades": 1000
+      },
+      "top_train_exact": [
+        {
+          "edge_indexes": [
+            5
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 1436,
+            "winning_trade_count": 808,
+            "win_rate": 0.5626740947075209,
+            "net_pnl": 227875.0,
+            "gross_profit": 700350.0,
+            "gross_loss": -472475.0,
+            "profit_factor": 1.482300650828086,
+            "max_drawdown": 51550.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5626740947075209,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.5
+          },
+          "constraints": {
+            "min_year_trades": 186,
+            "min_annualized_year_trades": 217.59615384615384,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -21122.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 6183,
+            "winning_trade_count": 3364,
+            "win_rate": 0.5440724567362122,
+            "net_pnl": 760085.0,
+            "gross_profit": 2849555.0,
+            "gross_loss": -2089470.0,
+            "profit_factor": 1.3637692812052817,
+            "max_drawdown": 171855.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5440724567362122,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 901,
+            "min_annualized_year_trades": 1060.8548387096773,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": -61917.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            15
+          ],
+          "edge_count": 2,
+          "metrics": {
+            "trade_count": 4944,
+            "winning_trade_count": 2677,
+            "win_rate": 0.5414644012944984,
+            "net_pnl": 578972.5,
+            "gross_profit": 2040357.5,
+            "gross_loss": -1461385.0,
+            "profit_factor": 1.39618067791855,
+            "max_drawdown": 134015.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5414644012944984,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 761,
+            "min_annualized_year_trades": 893.7820512820513,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -49497.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            7,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 5873,
+            "winning_trade_count": 3177,
+            "win_rate": 0.5409501106759748,
+            "net_pnl": 742837.5,
+            "gross_profit": 2715147.5,
+            "gross_loss": -1972310.0,
+            "profit_factor": 1.3766332371685992,
+            "max_drawdown": 167077.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5409501106759748,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.8333333333333334
+          },
+          "constraints": {
+            "min_year_trades": 873,
+            "min_annualized_year_trades": 1021.2980769230769,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": -13755.0
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            10,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 5734,
+            "winning_trade_count": 3097,
+            "win_rate": 0.5401116149284967,
+            "net_pnl": 702742.5,
+            "gross_profit": 2537962.5,
+            "gross_loss": -1835220.0,
+            "profit_factor": 1.382920031385883,
+            "max_drawdown": 164047.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5401116149284967,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.8333333333333334
+          },
+          "constraints": {
+            "min_year_trades": 863,
+            "min_annualized_year_trades": 1016.1129032258065,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": -61017.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            5,
+            6,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 7628,
+            "winning_trade_count": 4114,
+            "win_rate": 0.5393287886733089,
+            "net_pnl": 977457.5,
+            "gross_profit": 3642887.5,
+            "gross_loss": -2665430.0,
+            "profit_factor": 1.366716627335927,
+            "max_drawdown": 182355.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5393287886733089,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 1108,
+            "min_annualized_year_trades": 1296.2179487179487,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": -30990.0
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            6,
+            15,
+            18
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 7307,
+            "winning_trade_count": 3939,
+            "win_rate": 0.5390721226221431,
+            "net_pnl": 824227.5,
+            "gross_profit": 3293197.5,
+            "gross_loss": -2468970.0,
+            "profit_factor": 1.333834554490334,
+            "max_drawdown": 165017.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5390721226221431,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.8333333333333334
+          },
+          "constraints": {
+            "min_year_trades": 1087,
+            "min_annualized_year_trades": 1279.8548387096773,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": -56267.5
+          }
+        },
+        {
+          "edge_indexes": [
+            6,
+            15
+          ],
+          "edge_count": 2,
+          "metrics": {
+            "trade_count": 4747,
+            "winning_trade_count": 2556,
+            "win_rate": 0.5384453338950916,
+            "net_pnl": 532210.0,
+            "gross_profit": 2149205.0,
+            "gross_loss": -1616995.0,
+            "profit_factor": 1.3291352168683268,
+            "max_drawdown": 120592.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5384453338950916,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8333333333333334
+          },
+          "constraints": {
+            "min_year_trades": 693,
+            "min_annualized_year_trades": 815.9516129032259,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 5,
+            "worst_year_pnl": -46317.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            5,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 6389,
+            "winning_trade_count": 3427,
+            "win_rate": 0.5363906714665831,
+            "net_pnl": 796345.0,
+            "gross_profit": 2833690.0,
+            "gross_loss": -2037345.0,
+            "profit_factor": 1.3908739069720641,
+            "max_drawdown": 168505.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5363906714665831,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 919,
+            "min_annualized_year_trades": 1075.1121794871794,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 4,
+            "worst_year_pnl": -18570.0
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            15,
+            18
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 6068,
+            "winning_trade_count": 3252,
+            "win_rate": 0.5359261700725115,
+            "net_pnl": 643115.0,
+            "gross_profit": 2484000.0,
+            "gross_loss": -1840885.0,
+            "profit_factor": 1.3493509915068025,
+            "max_drawdown": 151167.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5359261700725115,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.8333333333333334
+          },
+          "constraints": {
+            "min_year_trades": 946,
+            "min_annualized_year_trades": 1103.1629392971247,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": -43847.5
+          }
+        }
+      ],
+      "top_train_single_edges": [
+        {
+          "edge_indexes": [
+            15
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 382,
+            "winning_trade_count": 220,
+            "win_rate": 0.5759162303664922,
+            "net_pnl": 70985.0,
+            "gross_profit": 221300.0,
+            "gross_loss": -150315.0,
+            "profit_factor": 1.4722416259189037,
+            "max_drawdown": 10000.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5759162303664922,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 59,
+            "min_annualized_year_trades": 69.0224358974359,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -637.5
+          },
+          "source_edge_index": 15
+        },
+        {
+          "edge_indexes": [
+            5
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 209,
+            "winning_trade_count": 117,
+            "win_rate": 0.5598086124401914,
+            "net_pnl": 41242.5,
+            "gross_profit": 119497.5,
+            "gross_loss": -78255.0,
+            "profit_factor": 1.527027027027027,
+            "max_drawdown": 7595.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5598086124401914,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 26,
+            "min_annualized_year_trades": 30.612903225806452,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -1900.0
+          },
+          "source_edge_index": 5
+        },
+        {
+          "edge_indexes": [
+            18
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 345,
+            "winning_trade_count": 184,
+            "win_rate": 0.5333333333333333,
+            "net_pnl": 13880.0,
+            "gross_profit": 161880.0,
+            "gross_loss": -148000.0,
+            "profit_factor": 1.0937837837837838,
+            "max_drawdown": 30270.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5333333333333333,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 54,
+            "min_annualized_year_trades": 62.97124600638978,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -16575.0
+          },
+          "source_edge_index": 18
+        },
+        {
+          "edge_indexes": [
+            3
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 207,
+            "winning_trade_count": 110,
+            "win_rate": 0.5314009661835749,
+            "net_pnl": 29135.0,
+            "gross_profit": 124335.0,
+            "gross_loss": -95200.0,
+            "profit_factor": 1.3060399159663865,
+            "max_drawdown": 8740.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5314009661835749,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 25,
+            "min_annualized_year_trades": 29.246794871794872,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 6,
+            "worst_year_pnl": 75.0
+          },
+          "source_edge_index": 3
+        },
+        {
+          "edge_indexes": [
+            4
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 359,
+            "winning_trade_count": 190,
+            "win_rate": 0.5292479108635098,
+            "net_pnl": 50630.0,
+            "gross_profit": 201330.0,
+            "gross_loss": -150700.0,
+            "profit_factor": 1.3359654943596548,
+            "max_drawdown": 11872.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5292479108635098,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8333333333333334
+          },
+          "constraints": {
+            "min_year_trades": 57,
+            "min_annualized_year_trades": 66.46964856230032,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 5,
+            "worst_year_pnl": -1512.5
+          },
+          "source_edge_index": 4
+        },
+        {
+          "edge_indexes": [
+            6
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 225,
+            "winning_trade_count": 118,
+            "win_rate": 0.5244444444444445,
+            "net_pnl": 15992.5,
+            "gross_profit": 156852.5,
+            "gross_loss": -140860.0,
+            "profit_factor": 1.113534715320176,
+            "max_drawdown": 23397.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5244444444444445,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 31,
+            "min_annualized_year_trades": 36.26602564102564,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -13617.5
+          },
+          "source_edge_index": 6
+        },
+        {
+          "edge_indexes": [
+            10
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 371,
+            "winning_trade_count": 194,
+            "win_rate": 0.522911051212938,
+            "net_pnl": 67550.0,
+            "gross_profit": 252670.0,
+            "gross_loss": -185120.0,
+            "profit_factor": 1.3648984442523768,
+            "max_drawdown": 18750.0
+          },
+          "objective_gate": {
+            "win_rate": 0.522911051212938,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 53,
+            "min_annualized_year_trades": 62.403225806451616,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -3490.0
+          },
+          "source_edge_index": 10
+        },
+        {
+          "edge_indexes": [
+            17
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 595,
+            "winning_trade_count": 305,
+            "win_rate": 0.5126050420168067,
+            "net_pnl": 83752.5,
+            "gross_profit": 401852.5,
+            "gross_loss": -318100.0,
+            "profit_factor": 1.2632898459603898,
+            "max_drawdown": 15570.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5126050420168067,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 93,
+            "min_annualized_year_trades": 108.79807692307692,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 6,
+            "worst_year_pnl": 2097.5
+          },
+          "source_edge_index": 17
+        },
+        {
+          "edge_indexes": [
+            7
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 212,
+            "winning_trade_count": 108,
+            "win_rate": 0.5094339622641509,
+            "net_pnl": 7277.5,
+            "gross_profit": 141807.5,
+            "gross_loss": -134530.0,
+            "profit_factor": 1.0540957407269753,
+            "max_drawdown": 23545.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5094339622641509,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.6666666666666666
+          },
+          "constraints": {
+            "min_year_trades": 29,
+            "min_annualized_year_trades": 33.92628205128205,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -17460.0
+          },
+          "source_edge_index": 7
+        },
+        {
+          "edge_indexes": [
+            0
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 220,
+            "winning_trade_count": 111,
+            "win_rate": 0.5045454545454545,
+            "net_pnl": 22922.5,
+            "gross_profit": 138907.5,
+            "gross_loss": -115985.0,
+            "profit_factor": 1.197633314652757,
+            "max_drawdown": 19285.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5045454545454545,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.5
+          },
+          "constraints": {
+            "min_year_trades": 31,
+            "min_annualized_year_trades": 36.38263665594855,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 3,
+            "worst_year_pnl": -3060.0
+          },
+          "source_edge_index": 0
+        }
+      ]
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "test_year": 2026,
+      "status": "ok",
+      "train_signal_count": 42347,
+      "test_signal_count": 1981,
+      "single_edge_count": 19,
+      "approximate_candidate_count": 20,
+      "exact_train_candidate_count": 20,
+      "selected_edge_indexes": [
+        5,
+        6,
+        15
+      ],
+      "selected_edge_turnover": {
+        "added": [
+          6,
+          15
+        ],
+        "removed": [],
+        "retained": [
+          5
+        ]
+      },
+      "selected_edges": [
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 0,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "opening_range_breakout",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1200_1659",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": 1,
+          "range_bin": 1,
+          "take_profit_r": 1.5
+        },
+        {
+          "scan_type": "low_volume_drift",
+          "direction_label": "long",
+          "horizon_minutes": 120,
+          "session_bucket": "utc_1700_2059",
+          "dow": 1,
+          "trend_bin": 1,
+          "volume_bin": -1,
+          "range_bin": -1,
+          "take_profit_r": 1.5
+        }
+      ],
+      "train_metrics": {
+        "trade_count": 7203,
+        "winning_trade_count": 3883,
+        "win_rate": 0.5390809384978481,
+        "net_pnl": 879410.0,
+        "gross_profit": 3511720.0,
+        "gross_loss": -2632310.0,
+        "profit_factor": 1.3340829917448933,
+        "max_drawdown": 174230.0
+      },
+      "train_gate_report": {
+        "passed": false,
+        "missing_trade_years": [],
+        "win_rate": 0.5390809384978481,
+        "net_pnl": 879410.0,
+        "positive_year_ratio": 0.7142857142857143,
+        "constraints": {
+          "min_year_trades": 901,
+          "min_annualized_year_trades": 1060.8548387096773,
+          "full_or_annualized_years_gt_min_trades": true,
+          "positive_years": 5,
+          "worst_year_pnl": -61917.5
+        }
+      },
+      "test_metrics": {
+        "trade_count": 339,
+        "winning_trade_count": 154,
+        "win_rate": 0.45427728613569324,
+        "net_pnl": 8637.5,
+        "gross_profit": 240557.5,
+        "gross_loss": -231920.0,
+        "profit_factor": 1.0372434460158675,
+        "max_drawdown": 97460.0
+      },
+      "test_yearly_result": {
+        "year": 2026,
+        "trade_count": 339,
+        "winning_trade_count": 154,
+        "win_rate": 0.45427728613569324,
+        "net_pnl": 8637.5,
+        "profit_factor": 1.0372434460158675,
+        "max_drawdown": 97460.0
+      },
+      "test_gate_report": {
+        "passed": false,
+        "test_year": 2026,
+        "trade_count": 339,
+        "annualized_trade_count": 1237.35,
+        "win_rate": 0.45427728613569324,
+        "net_pnl": 8637.5,
+        "min_win_rate": 0.55,
+        "min_year_trades": 1000
+      },
+      "top_train_exact": [
+        {
+          "edge_indexes": [
+            5,
+            6,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 7203,
+            "winning_trade_count": 3883,
+            "win_rate": 0.5390809384978481,
+            "net_pnl": 879410.0,
+            "gross_profit": 3511720.0,
+            "gross_loss": -2632310.0,
+            "profit_factor": 1.3340829917448933,
+            "max_drawdown": 174230.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5390809384978481,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.7142857142857143
+          },
+          "constraints": {
+            "min_year_trades": 901,
+            "min_annualized_year_trades": 1060.8548387096773,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": -61917.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            15
+          ],
+          "edge_count": 2,
+          "metrics": {
+            "trade_count": 5717,
+            "winning_trade_count": 3077,
+            "win_rate": 0.5382193458107399,
+            "net_pnl": 724555.0,
+            "gross_profit": 2560265.0,
+            "gross_loss": -1835710.0,
+            "profit_factor": 1.3947001432688169,
+            "max_drawdown": 134015.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5382193458107399,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.7142857142857143
+          },
+          "constraints": {
+            "min_year_trades": 761,
+            "min_annualized_year_trades": 893.7820512820513,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 5,
+            "worst_year_pnl": -49497.5
+          }
+        },
+        {
+          "edge_indexes": [
+            6,
+            15
+          ],
+          "edge_count": 2,
+          "metrics": {
+            "trade_count": 5535,
+            "winning_trade_count": 2965,
+            "win_rate": 0.5356820234869015,
+            "net_pnl": 600275.0,
+            "gross_profit": 2640215.0,
+            "gross_loss": -2039940.0,
+            "profit_factor": 1.2942611057187956,
+            "max_drawdown": 160550.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5356820234869015,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8571428571428571
+          },
+          "constraints": {
+            "min_year_trades": 693,
+            "min_annualized_year_trades": 815.9516129032259,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 6,
+            "worst_year_pnl": -46317.5
+          }
+        },
+        {
+          "edge_indexes": [
+            5,
+            15,
+            18
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 7012,
+            "winning_trade_count": 3745,
+            "win_rate": 0.5340844266970907,
+            "net_pnl": 770862.5,
+            "gross_profit": 3082327.5,
+            "gross_loss": -2311465.0,
+            "profit_factor": 1.3334952075848001,
+            "max_drawdown": 151167.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5340844266970907,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.8571428571428571
+          },
+          "constraints": {
+            "min_year_trades": 944,
+            "min_annualized_year_trades": 1103.1629392971247,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 6,
+            "worst_year_pnl": -43847.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            5,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 7308,
+            "winning_trade_count": 3902,
+            "win_rate": 0.5339354132457581,
+            "net_pnl": 922905.0,
+            "gross_profit": 3421800.0,
+            "gross_loss": -2498895.0,
+            "profit_factor": 1.3693252417568564,
+            "max_drawdown": 168505.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5339354132457581,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.7142857142857143
+          },
+          "constraints": {
+            "min_year_trades": 919,
+            "min_annualized_year_trades": 1075.1121794871794,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": -18570.0
+          }
+        },
+        {
+          "edge_indexes": [
+            4,
+            5,
+            6,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 8530,
+            "winning_trade_count": 4552,
+            "win_rate": 0.5336459554513482,
+            "net_pnl": 950310.0,
+            "gross_profit": 4090370.0,
+            "gross_loss": -3140060.0,
+            "profit_factor": 1.3026407138717095,
+            "max_drawdown": 176602.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5336459554513482,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.7142857142857143
+          },
+          "constraints": {
+            "min_year_trades": 1103,
+            "min_annualized_year_trades": 1298.6935483870968,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": -44552.5
+          }
+        },
+        {
+          "edge_indexes": [
+            15
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 4049,
+            "winning_trade_count": 2159,
+            "win_rate": 0.5332180785379106,
+            "net_pnl": 445420.0,
+            "gross_profit": 1688760.0,
+            "gross_loss": -1243340.0,
+            "profit_factor": 1.358244727910306,
+            "max_drawdown": 102465.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5332180785379106,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8571428571428571
+          },
+          "constraints": {
+            "min_year_trades": 541,
+            "min_annualized_year_trades": 632.900641025641,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 6,
+            "worst_year_pnl": -33897.5
+          }
+        },
+        {
+          "edge_indexes": [
+            4,
+            5,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 7044,
+            "winning_trade_count": 3746,
+            "win_rate": 0.5318001135718342,
+            "net_pnl": 795455.0,
+            "gross_profit": 3138915.0,
+            "gross_loss": -2343460.0,
+            "profit_factor": 1.3394361328975106,
+            "max_drawdown": 135377.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5318001135718342,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.7142857142857143
+          },
+          "constraints": {
+            "min_year_trades": 945,
+            "min_annualized_year_trades": 1105.5288461538462,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": -32132.5
+          }
+        },
+        {
+          "edge_indexes": [
+            4,
+            6,
+            15
+          ],
+          "edge_count": 3,
+          "metrics": {
+            "trade_count": 6862,
+            "winning_trade_count": 3634,
+            "win_rate": 0.5295832118915768,
+            "net_pnl": 671175.0,
+            "gross_profit": 3218865.0,
+            "gross_loss": -2547690.0,
+            "profit_factor": 1.2634445321055545,
+            "max_drawdown": 148657.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5295832118915768,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.8571428571428571
+          },
+          "constraints": {
+            "min_year_trades": 895,
+            "min_annualized_year_trades": 1053.7903225806451,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 6,
+            "worst_year_pnl": -28952.5
+          }
+        },
+        {
+          "edge_indexes": [
+            3,
+            4,
+            5,
+            15
+          ],
+          "edge_count": 4,
+          "metrics": {
+            "trade_count": 8635,
+            "winning_trade_count": 4571,
+            "win_rate": 0.5293572669368848,
+            "net_pnl": 993805.0,
+            "gross_profit": 4000450.0,
+            "gross_loss": -3006645.0,
+            "profit_factor": 1.3305361956599466,
+            "max_drawdown": 169867.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5293572669368848,
+            "trade_floor_passed": true,
+            "positive_year_ratio": 0.7142857142857143
+          },
+          "constraints": {
+            "min_year_trades": 1100,
+            "min_annualized_year_trades": 1286.8589743589744,
+            "full_or_annualized_years_gt_min_trades": true,
+            "positive_years": 5,
+            "worst_year_pnl": -5942.5
+          }
+        }
+      ],
+      "top_train_single_edges": [
+        {
+          "edge_indexes": [
+            15
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 450,
+            "winning_trade_count": 258,
+            "win_rate": 0.5733333333333334,
+            "net_pnl": 83722.5,
+            "gross_profit": 273727.5,
+            "gross_loss": -190005.0,
+            "profit_factor": 1.4406331412331255,
+            "max_drawdown": 10000.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5733333333333334,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.7142857142857143
+          },
+          "constraints": {
+            "min_year_trades": 59,
+            "min_annualized_year_trades": 69.0224358974359,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 5,
+            "worst_year_pnl": -637.5
+          },
+          "source_edge_index": 15
+        },
+        {
+          "edge_indexes": [
+            4
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 420,
+            "winning_trade_count": 227,
+            "win_rate": 0.5404761904761904,
+            "net_pnl": 75317.5,
+            "gross_profit": 255327.5,
+            "gross_loss": -180010.0,
+            "profit_factor": 1.4184073107049608,
+            "max_drawdown": 11872.5
+          },
+          "objective_gate": {
+            "win_rate": 0.5404761904761904,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8571428571428571
+          },
+          "constraints": {
+            "min_year_trades": 57,
+            "min_annualized_year_trades": 66.46964856230032,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 6,
+            "worst_year_pnl": -1512.5
+          },
+          "source_edge_index": 4
+        },
+        {
+          "edge_indexes": [
+            5
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 248,
+            "winning_trade_count": 134,
+            "win_rate": 0.5403225806451613,
+            "net_pnl": 52682.5,
+            "gross_profit": 152877.5,
+            "gross_loss": -100195.0,
+            "profit_factor": 1.5257996906033235,
+            "max_drawdown": 7595.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5403225806451613,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.7142857142857143
+          },
+          "constraints": {
+            "min_year_trades": 26,
+            "min_annualized_year_trades": 30.612903225806452,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 5,
+            "worst_year_pnl": -1900.0
+          },
+          "source_edge_index": 5
+        },
+        {
+          "edge_indexes": [
+            18
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 404,
+            "winning_trade_count": 208,
+            "win_rate": 0.5148514851485149,
+            "net_pnl": -7695.0,
+            "gross_profit": 189740.0,
+            "gross_loss": -197435.0,
+            "profit_factor": 0.9610251475169043,
+            "max_drawdown": 32095.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5148514851485149,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.5714285714285714
+          },
+          "constraints": {
+            "min_year_trades": 54,
+            "min_annualized_year_trades": 62.97124600638978,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -21575.0
+          },
+          "source_edge_index": 18
+        },
+        {
+          "edge_indexes": [
+            3
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 235,
+            "winning_trade_count": 120,
+            "win_rate": 0.5106382978723404,
+            "net_pnl": 22675.0,
+            "gross_profit": 139875.0,
+            "gross_loss": -117200.0,
+            "profit_factor": 1.1934726962457338,
+            "max_drawdown": 13295.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5106382978723404,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8571428571428571
+          },
+          "constraints": {
+            "min_year_trades": 25,
+            "min_annualized_year_trades": 29.246794871794872,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 6,
+            "worst_year_pnl": -6460.0
+          },
+          "source_edge_index": 3
+        },
+        {
+          "edge_indexes": [
+            17
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 707,
+            "winning_trade_count": 361,
+            "win_rate": 0.5106082036775106,
+            "net_pnl": 90910.0,
+            "gross_profit": 496295.0,
+            "gross_loss": -405385.0,
+            "profit_factor": 1.2242559542163622,
+            "max_drawdown": 29890.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5106082036775106,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 1.0
+          },
+          "constraints": {
+            "min_year_trades": 93,
+            "min_annualized_year_trades": 108.79807692307692,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 7,
+            "worst_year_pnl": 2097.5
+          },
+          "source_edge_index": 17
+        },
+        {
+          "edge_indexes": [
+            6
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 267,
+            "winning_trade_count": 136,
+            "win_rate": 0.5093632958801498,
+            "net_pnl": 6715.0,
+            "gross_profit": 181770.0,
+            "gross_loss": -175055.0,
+            "profit_factor": 1.0383593727685585,
+            "max_drawdown": 29815.0
+          },
+          "objective_gate": {
+            "win_rate": 0.5093632958801498,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.5714285714285714
+          },
+          "constraints": {
+            "min_year_trades": 31,
+            "min_annualized_year_trades": 36.26602564102564,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -13617.5
+          },
+          "source_edge_index": 6
+        },
+        {
+          "edge_indexes": [
+            10
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 441,
+            "winning_trade_count": 220,
+            "win_rate": 0.4988662131519274,
+            "net_pnl": 56940.0,
+            "gross_profit": 298635.0,
+            "gross_loss": -241695.0,
+            "profit_factor": 1.2355861726556197,
+            "max_drawdown": 27882.5
+          },
+          "objective_gate": {
+            "win_rate": 0.4988662131519274,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.5714285714285714
+          },
+          "constraints": {
+            "min_year_trades": 53,
+            "min_annualized_year_trades": 62.403225806451616,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 4,
+            "worst_year_pnl": -10610.0
+          },
+          "source_edge_index": 10
+        },
+        {
+          "edge_indexes": [
+            9
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 443,
+            "winning_trade_count": 219,
+            "win_rate": 0.49435665914221216,
+            "net_pnl": 42930.0,
+            "gross_profit": 269365.0,
+            "gross_loss": -226435.0,
+            "profit_factor": 1.189590831806037,
+            "max_drawdown": 15480.0
+          },
+          "objective_gate": {
+            "win_rate": 0.49435665914221216,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.7142857142857143
+          },
+          "constraints": {
+            "min_year_trades": 54,
+            "min_annualized_year_trades": 63.58064516129032,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 5,
+            "worst_year_pnl": -7160.0
+          },
+          "source_edge_index": 9
+        },
+        {
+          "edge_indexes": [
+            8
+          ],
+          "edge_count": 1,
+          "metrics": {
+            "trade_count": 430,
+            "winning_trade_count": 212,
+            "win_rate": 0.4930232558139535,
+            "net_pnl": 47312.5,
+            "gross_profit": 223472.5,
+            "gross_loss": -176160.0,
+            "profit_factor": 1.2685768619436875,
+            "max_drawdown": 12165.0
+          },
+          "objective_gate": {
+            "win_rate": 0.4930232558139535,
+            "trade_floor_passed": false,
+            "positive_year_ratio": 0.8571428571428571
+          },
+          "constraints": {
+            "min_year_trades": 50,
+            "min_annualized_year_trades": 58.68167202572347,
+            "full_or_annualized_years_gt_min_trades": false,
+            "positive_years": 6,
+            "worst_year_pnl": -4360.0
+          },
+          "source_edge_index": 8
+        }
+      ]
+    }
+  ]
+}

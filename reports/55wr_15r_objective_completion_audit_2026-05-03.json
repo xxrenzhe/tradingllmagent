@@ -443,8 +443,94 @@
     "passed": false,
     "reward_gate_passed": true
   },
+  "low_r_subset_walk_forward_report": {
+    "artifact": "reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json",
+    "decision": {
+      "failed_test_years": [
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "ok_fold_count": 6,
+      "oos_min_year_win_rate": 0.4134529147982063,
+      "oos_win_rate": 0.49155405405405406,
+      "passed": false,
+      "positive_test_years": 4,
+      "reason": "No train-only selected forced-1.5R low-R subset passed every next-year 55% win-rate, trade-floor, and positive-PnL gate."
+    },
+    "family": "low_r_15r_subset_walk_forward",
+    "forced_take_profit_r": 1.5,
+    "method": {
+      "folds": [
+        {
+          "test_year": 2021,
+          "train_years": [
+            2019,
+            2020
+          ]
+        },
+        {
+          "test_year": 2022,
+          "train_years": [
+            2019,
+            2020,
+            2021
+          ]
+        },
+        {
+          "test_year": 2023,
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022
+          ]
+        },
+        {
+          "test_year": 2024,
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022,
+            2023
+          ]
+        },
+        {
+          "test_year": 2025,
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022,
+            2023,
+            2024
+          ]
+        },
+        {
+          "test_year": 2026,
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022,
+            2023,
+            2024,
+            2025
+          ]
+        }
+      ],
+      "selection": "Train-only low-R subset selection per fold, exact-replayed on the next unseen test year."
+    },
+    "oos_min_year_win_rate": 0.4134529147982063,
+    "oos_total_net_pnl": 271807.5,
+    "oos_total_trades": 4736,
+    "passed": false,
+    "reward_gate_passed": true
+  },
   "objective": "Fallback objective: find a 55%+ win-rate, 1.5R+, non-overfit, long-term profitable, live-ready strategy if the 70%/2R target cannot be found.",
-  "report_hash": "908d23736cd3053b951a71f3f7537486418e83f9e6a48a876da2354fe73d33ae",
+  "report_hash": "995178e292cc98d618f8202f811621ef673665ecdb82b2ba09864dd2c7f8bb41",
   "requirements": [
     {
       "evidence": [
@@ -860,6 +946,10 @@
         {
           "artifact": "reports/low_r_15r_subset_search_55wr_wide_2026-05-03.json",
           "forced_take_profit_r": 1.5
+        },
+        {
+          "artifact": "reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json",
+          "forced_take_profit_r": 1.5
         }
       ],
       "gap": "Expanded searches forced 1.5R, but no full strategy family passes 55%/1.5R gates.",
@@ -991,6 +1081,25 @@
           },
           "family": "low_r_15r_subset_search",
           "oos_min_year_win_rate": 0.5352691593741713
+        },
+        {
+          "artifact": "reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json",
+          "decision": {
+            "failed_test_years": [
+              2023,
+              2024,
+              2025,
+              2026
+            ],
+            "ok_fold_count": 6,
+            "oos_min_year_win_rate": 0.4134529147982063,
+            "oos_win_rate": 0.49155405405405406,
+            "passed": false,
+            "positive_test_years": 4,
+            "reason": "No train-only selected forced-1.5R low-R subset passed every next-year 55% win-rate, trade-floor, and positive-PnL gate."
+          },
+          "family": "low_r_15r_subset_walk_forward",
+          "oos_min_year_win_rate": 0.4134529147982063
         }
       ],
       "gap": "No relaxed strategy family passes the 55% win-rate gate.",
@@ -1316,6 +1425,86 @@
           "method": {
             "selection": "Approximate low-R subset prefilter plus exact replay of top subsets; not walk-forward-selected."
           }
+        },
+        {
+          "artifact": "reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json",
+          "decision": {
+            "failed_test_years": [
+              2023,
+              2024,
+              2025,
+              2026
+            ],
+            "ok_fold_count": 6,
+            "oos_min_year_win_rate": 0.4134529147982063,
+            "oos_win_rate": 0.49155405405405406,
+            "passed": false,
+            "positive_test_years": 4,
+            "reason": "No train-only selected forced-1.5R low-R subset passed every next-year 55% win-rate, trade-floor, and positive-PnL gate."
+          },
+          "family": "low_r_15r_subset_walk_forward",
+          "method": {
+            "folds": [
+              {
+                "test_year": 2021,
+                "train_years": [
+                  2019,
+                  2020
+                ]
+              },
+              {
+                "test_year": 2022,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021
+                ]
+              },
+              {
+                "test_year": 2023,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022
+                ]
+              },
+              {
+                "test_year": 2024,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023
+                ]
+              },
+              {
+                "test_year": 2025,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023,
+                  2024
+                ]
+              },
+              {
+                "test_year": 2026,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023,
+                  2024,
+                  2025
+                ]
+              }
+            ],
+            "selection": "Train-only low-R subset selection per fold, exact-replayed on the next unseen test year."
+          }
         }
       ],
       "gap": "The protocol is walk-forward, but no candidate survives all gates.",
@@ -1371,6 +1560,12 @@
           "failed_positive_years": [],
           "family": "low_r_15r_subset_search",
           "oos_total_net_pnl": 888047.5
+        },
+        {
+          "artifact": "reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json",
+          "failed_positive_years": [],
+          "family": "low_r_15r_subset_walk_forward",
+          "oos_total_net_pnl": 271807.5
         }
       ],
       "gap": "Relaxed runs still have negative OOS years, no qualifying rows, or negative full-history PnL.",
@@ -1493,6 +1688,24 @@
             "passed": false,
             "passing_count": 0,
             "reason": "No exact-replayed forced-1.5R low-R subset reached all 55% win-rate, trade-floor, and positive-year gates."
+          },
+          "passed": false
+        },
+        {
+          "artifact": "reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json",
+          "decision": {
+            "failed_test_years": [
+              2023,
+              2024,
+              2025,
+              2026
+            ],
+            "ok_fold_count": 6,
+            "oos_min_year_win_rate": 0.4134529147982063,
+            "oos_win_rate": 0.49155405405405406,
+            "passed": false,
+            "positive_test_years": 4,
+            "reason": "No train-only selected forced-1.5R low-R subset passed every next-year 55% win-rate, trade-floor, and positive-PnL gate."
           },
           "passed": false
         }
@@ -2358,6 +2571,92 @@
       "oos_min_year_win_rate": 0.5352691593741713,
       "oos_total_net_pnl": 888047.5,
       "oos_total_trades": 7542,
+      "passed": false,
+      "reward_gate_passed": true
+    },
+    {
+      "artifact": "reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json",
+      "decision": {
+        "failed_test_years": [
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "ok_fold_count": 6,
+        "oos_min_year_win_rate": 0.4134529147982063,
+        "oos_win_rate": 0.49155405405405406,
+        "passed": false,
+        "positive_test_years": 4,
+        "reason": "No train-only selected forced-1.5R low-R subset passed every next-year 55% win-rate, trade-floor, and positive-PnL gate."
+      },
+      "family": "low_r_15r_subset_walk_forward",
+      "forced_take_profit_r": 1.5,
+      "method": {
+        "folds": [
+          {
+            "test_year": 2021,
+            "train_years": [
+              2019,
+              2020
+            ]
+          },
+          {
+            "test_year": 2022,
+            "train_years": [
+              2019,
+              2020,
+              2021
+            ]
+          },
+          {
+            "test_year": 2023,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022
+            ]
+          },
+          {
+            "test_year": 2024,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023
+            ]
+          },
+          {
+            "test_year": 2025,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024
+            ]
+          },
+          {
+            "test_year": 2026,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ]
+          }
+        ],
+        "selection": "Train-only low-R subset selection per fold, exact-replayed on the next unseen test year."
+      },
+      "oos_min_year_win_rate": 0.4134529147982063,
+      "oos_total_net_pnl": 271807.5,
+      "oos_total_trades": 4736,
       "passed": false,
       "reward_gate_passed": true
     }

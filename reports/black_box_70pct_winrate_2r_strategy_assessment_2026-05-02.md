@@ -101,7 +101,7 @@ This is stricter than the prior locked 2R report. It shows the current expanded-
 
 ### Relaxed 55% Win-Rate / 1.5R Fallback Gate
 
-Source: `reports/55wr_15r_objective_completion_audit_2026-05-02.json`
+Source: `reports/55wr_15r_objective_completion_audit_2026-05-03.json`
 
 After the user allowed relaxing the objective to 55%+ win rate and 1.5R+, the expanded-high-edge walk-forward runner was rerun with `--take-profit-r-grid 1.5`, `--min-train-win-rate 0.55`, and `--min-test-win-rate 0.55`.
 
@@ -125,6 +125,15 @@ Low-R subset search: `reports/low_r_15r_subset_search_55wr_wide_2026-05-03.json`
 - Best exact subset: edge indexes `[5, 6, 15]`, net PnL $888,047.50, profit factor 1.310, 7,542 trades.
 - Best exact subset win rate: 53.53%, still below 55%.
 - Best exact subset positive years: 6 of 8, so it also fails long-term stability.
+
+Low-R subset walk-forward search: `reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json`.
+
+- Forced 1.5R and selected subsets only on train years before exact-replaying the next unseen test year.
+- OOS total: 4,736 trades, net PnL $271,807.50, aggregate win rate 49.16%.
+- Passing test years: 2021 and 2022 only.
+- Failed test years: 2023, 2024, 2025, and 2026.
+- Minimum test-year win rate: 41.35%, below the 55% fallback threshold.
+- 2025 also failed the trade-floor gate with 232 trades and 271 annualized trades.
 
 The fallback remains below the acceptance threshold. It produces no candidate eligible for quote replay, paper shadow, or live promotion.
 

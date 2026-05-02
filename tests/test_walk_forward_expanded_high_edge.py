@@ -23,6 +23,7 @@ from scripts.search_expanded_high_edge_cooldown import (
     replay_with_regime_cooldown,
     signal_regime_key,
 )
+from scripts.walk_forward_low_r_15r_subsets import summarize_walk_forward as summarize_low_r_subset_walk_forward
 from scripts.audit_70wr_2r_objective_completion import build_completion_audit
 from scripts.audit_relaxed_55wr_15r_objective import build_relaxed_audit
 from tlm.low_r_regime_basket import LowRRegimeBasketConfig, RegimeEdge
@@ -321,6 +322,79 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         subset = next(row for row in audit["strategy_family_reports"] if row["family"] == "low_r_15r_subset_search")
         self.assertFalse(subset["passed"])
         self.assertEqual(subset["decision"]["best_win_rate"], 0.535)
+
+    def test_relaxed_audit_includes_low_r_15r_walk_forward_failure(self) -> None:
+        audit = build_relaxed_audit(
+            [
+                (
+                    Path("expanded.json"),
+                    {
+                        "method": {"take_profit_r_grid": [1.5]},
+                        "summary": {
+                            "decision": {"passed": False},
+                            "oos_total_net_pnl": -100.0,
+                            "oos_total_trades": 10,
+                            "oos_min_year_win_rate": 0.4,
+                        },
+                    },
+                )
+            ],
+            low_r_subset_walk_forward_report=(
+                Path("walk_forward.json"),
+                {
+                    "target": {"forced_take_profit_r": 1.5},
+                    "method": {"folds": [{"train_years": [2019, 2020], "test_year": 2021}]},
+                    "summary": {
+                        "oos_total_net_pnl": 250.0,
+                        "oos_total_trades": 100,
+                        "oos_win_rate": 0.54,
+                        "oos_min_year_win_rate": 0.54,
+                        "positive_test_years": 1,
+                        "ok_fold_count": 1,
+                        "decision": {"passed": False, "failed_test_years": [2021]},
+                    },
+                },
+            ),
+        )
+
+        subset = next(row for row in audit["strategy_family_reports"] if row["family"] == "low_r_15r_subset_walk_forward")
+        self.assertFalse(subset["passed"])
+        self.assertEqual(subset["decision"]["oos_min_year_win_rate"], 0.54)
+        self.assertEqual(subset["method"]["selection"], "Train-only low-R subset selection per fold, exact-replayed on the next unseen test year.")
+
+    def test_low_r_subset_walk_forward_summary_requires_all_test_gates(self) -> None:
+        summary = summarize_low_r_subset_walk_forward(
+            [
+                {
+                    "status": "ok",
+                    "test_metrics": {"trade_count": 100, "winning_trade_count": 56, "net_pnl": 1000.0},
+                    "test_gate_report": {
+                        "passed": True,
+                        "test_year": 2021,
+                        "win_rate": 0.56,
+                        "net_pnl": 1000.0,
+                        "annualized_trade_count": 1200.0,
+                    },
+                },
+                {
+                    "status": "ok",
+                    "test_metrics": {"trade_count": 100, "winning_trade_count": 54, "net_pnl": 500.0},
+                    "test_gate_report": {
+                        "passed": False,
+                        "test_year": 2022,
+                        "win_rate": 0.54,
+                        "net_pnl": 500.0,
+                        "annualized_trade_count": 1200.0,
+                    },
+                },
+            ],
+            min_win_rate=0.55,
+            min_year_trades=1000,
+        )
+
+        self.assertFalse(summary["decision"]["passed"])
+        self.assertEqual(summary["decision"]["failed_test_years"], [2022])
+        self.assertAlmostEqual(summary["oos_win_rate"], 0.55)
 
     def test_cooldown_replay_suppresses_same_regime_entries(self) -> None:
         edge = RegimeEdge(

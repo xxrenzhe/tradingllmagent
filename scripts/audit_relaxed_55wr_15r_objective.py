@@ -24,6 +24,7 @@ DEFAULT_VOL_REPORT = Path("reports/nq_vol_execution_55wr_15r_objective_audit_202
 DEFAULT_SMC_REPORT = Path("reports/nq_smc_lqem_ce_v1_55wr_15r_objective_gates_2026-05-02.json")
 DEFAULT_LOW_R_REPORT = Path("experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json")
 DEFAULT_LOW_R_SUBSET_REPORT = Path("reports/low_r_15r_subset_search_55wr_wide_2026-05-03.json")
+DEFAULT_LOW_R_SUBSET_WALK_FORWARD_REPORT = Path("reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -34,6 +35,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--smc-report", type=Path, default=DEFAULT_SMC_REPORT)
     parser.add_argument("--low-r-report", type=Path, default=DEFAULT_LOW_R_REPORT)
     parser.add_argument("--low-r-subset-report", type=Path, default=DEFAULT_LOW_R_SUBSET_REPORT)
+    parser.add_argument("--low-r-subset-walk-forward-report", type=Path, default=DEFAULT_LOW_R_SUBSET_WALK_FORWARD_REPORT)
     parser.add_argument("--output", type=Path, default=Path("reports/55wr_15r_objective_completion_audit_2026-05-02.json"))
     parser.add_argument("--markdown-output", type=Path, default=Path("reports/55wr_15r_objective_completion_audit_2026-05-02.md"))
     args = parser.parse_args(argv)
@@ -48,12 +50,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.low_r_subset_report.exists()
         else None
     )
+    low_r_subset_walk_forward_report = (
+        (args.low_r_subset_walk_forward_report, load_json(args.low_r_subset_walk_forward_report))
+        if args.low_r_subset_walk_forward_report.exists()
+        else None
+    )
     payload = build_relaxed_audit(
         expanded_reports,
         vol_report=vol_report,
         smc_report=smc_report,
         low_r_report=low_r_report,
         low_r_subset_report=low_r_subset_report,
+        low_r_subset_walk_forward_report=low_r_subset_walk_forward_report,
     )
     write_json(args.output, payload)
     args.markdown_output.write_text(render_markdown(payload), encoding="utf-8")
@@ -68,13 +76,23 @@ def build_relaxed_audit(
     smc_report: tuple[Path, dict[str, Any]] | None = None,
     low_r_report: tuple[Path, dict[str, Any]] | None = None,
     low_r_subset_report: tuple[Path, dict[str, Any]] | None = None,
+    low_r_subset_walk_forward_report: tuple[Path, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     expanded_rows = [summarize_expanded_report(path, payload) for path, payload in reports]
     vol_row = summarize_vol_report(*vol_report) if vol_report else None
     smc_row = summarize_smc_report(*smc_report) if smc_report else None
     low_r_row = summarize_low_r_report(*low_r_report) if low_r_report else None
     low_r_subset_row = summarize_low_r_subset_report(*low_r_subset_report) if low_r_subset_report else None
-    strategy_family_rows = expanded_rows + [row for row in (vol_row, smc_row, low_r_row, low_r_subset_row) if row is not None]
+    low_r_subset_walk_forward_row = (
+        summarize_low_r_subset_walk_forward_report(*low_r_subset_walk_forward_report)
+        if low_r_subset_walk_forward_report
+        else None
+    )
+    strategy_family_rows = expanded_rows + [
+        row
+        for row in (vol_row, smc_row, low_r_row, low_r_subset_row, low_r_subset_walk_forward_row)
+        if row is not None
+    ]
     passing = [row for row in strategy_family_rows if row["passed"]]
     best = max(expanded_rows, key=best_sort_key) if expanded_rows else None
     reward_evidence = [
@@ -89,6 +107,8 @@ def build_relaxed_audit(
         reward_evidence.append({"artifact": low_r_row["artifact"], "take_profit_scale": low_r_row["take_profit_scale"]})
     if low_r_subset_row:
         reward_evidence.append({"artifact": low_r_subset_row["artifact"], "forced_take_profit_r": low_r_subset_row["forced_take_profit_r"]})
+    if low_r_subset_walk_forward_row:
+        reward_evidence.append({"artifact": low_r_subset_walk_forward_row["artifact"], "forced_take_profit_r": low_r_subset_walk_forward_row["forced_take_profit_r"]})
     requirements = [
         requirement(
             "reward_1_5r",
@@ -137,6 +157,7 @@ def build_relaxed_audit(
         "smc_report": smc_row,
         "low_r_report": low_r_row,
         "low_r_subset_report": low_r_subset_row,
+        "low_r_subset_walk_forward_report": low_r_subset_walk_forward_row,
         "best_expanded_report": best,
         "strategy_family_reports": strategy_family_rows,
         "requirements": requirements,
@@ -289,6 +310,33 @@ def summarize_low_r_subset_report(path: Path, payload: dict[str, Any]) -> dict[s
         "oos_total_net_pnl": metrics.get("net_pnl"),
         "oos_total_trades": metrics.get("trade_count"),
         "oos_min_year_win_rate": metrics.get("win_rate"),
+    }
+
+
+def summarize_low_r_subset_walk_forward_report(path: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    summary = payload.get("summary", {})
+    decision = summary.get("decision", {})
+    target = payload.get("target") or {}
+    return {
+        "family": "low_r_15r_subset_walk_forward",
+        "artifact": str(path),
+        "passed": bool(decision.get("passed")),
+        "decision": {
+            **decision,
+            "oos_win_rate": summary.get("oos_win_rate"),
+            "oos_min_year_win_rate": summary.get("oos_min_year_win_rate"),
+            "positive_test_years": summary.get("positive_test_years"),
+            "ok_fold_count": summary.get("ok_fold_count"),
+        },
+        "reward_gate_passed": float(target.get("forced_take_profit_r") or 0.0) >= 1.5,
+        "forced_take_profit_r": target.get("forced_take_profit_r"),
+        "method": {
+            "selection": "Train-only low-R subset selection per fold, exact-replayed on the next unseen test year.",
+            "folds": (payload.get("method") or {}).get("folds"),
+        },
+        "oos_total_net_pnl": summary.get("oos_total_net_pnl"),
+        "oos_total_trades": summary.get("oos_total_trades"),
+        "oos_min_year_win_rate": summary.get("oos_min_year_win_rate"),
     }
 
 
