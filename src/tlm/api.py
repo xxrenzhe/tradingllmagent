@@ -20,6 +20,7 @@ from .events import (
 from .experiments import load_experiment_audit_logs, load_experiment_summary
 from .feature_catalog import FEATURE_CATALOG, feature_readiness_report
 from .expanded_high_edge import (
+    EXPANDED_HIGH_EDGE_CAP24_BALANCED_RISK_PRESET,
     EXPANDED_HIGH_EDGE_CAP24_PRESET,
     EXPANDED_HIGH_EDGE_PRESET_SPECS,
 )
@@ -112,12 +113,12 @@ def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
         }
     if family == "expanded_high_edge":
         preset = (
-            os.environ.get("TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET", EXPANDED_HIGH_EDGE_CAP24_PRESET).strip()
-            or EXPANDED_HIGH_EDGE_CAP24_PRESET
+            os.environ.get("TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET", EXPANDED_HIGH_EDGE_CAP24_BALANCED_RISK_PRESET).strip()
+            or EXPANDED_HIGH_EDGE_CAP24_BALANCED_RISK_PRESET
         )
         preset_spec = EXPANDED_HIGH_EDGE_PRESET_SPECS.get(
             preset,
-            EXPANDED_HIGH_EDGE_PRESET_SPECS[EXPANDED_HIGH_EDGE_CAP24_PRESET],
+            EXPANDED_HIGH_EDGE_PRESET_SPECS[EXPANDED_HIGH_EDGE_CAP24_BALANCED_RISK_PRESET],
         )
         return {
             "strategy_id": f"{symbol.lower()}_1m_{preset}",

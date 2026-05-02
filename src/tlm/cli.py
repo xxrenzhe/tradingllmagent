@@ -34,7 +34,10 @@ from .feature_catalog import feature_readiness_report
 from .firstrate import import_firstrate_bars
 from .ibkr_adapter import build_ibkr_gateway_adapter
 from .ibkr_gateway import IbkrPaperGateway
-from .expanded_high_edge import EXPANDED_HIGH_EDGE_PRESETS, EXPANDED_HIGH_EDGE_CAP24_PRESET
+from .expanded_high_edge import (
+    EXPANDED_HIGH_EDGE_CAP24_BALANCED_RISK_PRESET,
+    EXPANDED_HIGH_EDGE_PRESETS,
+)
 from .low_r_regime_basket import PRESETS as LOW_R_PRESETS
 from .ibkr_paper import build_ibkr_paper_report, create_ibkr_paper_run_artifacts, load_ibkr_paper_report
 from .ibkr_soak import run_ibkr_soak_monitor
@@ -1832,7 +1835,7 @@ def build_parser() -> argparse.ArgumentParser:
     ibkr_loop.add_argument(
         "--expanded-high-edge-preset",
         choices=sorted(EXPANDED_HIGH_EDGE_PRESETS),
-        default=EXPANDED_HIGH_EDGE_CAP24_PRESET,
+        default=EXPANDED_HIGH_EDGE_CAP24_BALANCED_RISK_PRESET,
     )
     ibkr_loop.add_argument("--poll-interval-seconds", type=float, default=2.0)
     ibkr_loop.add_argument("--review-interval-seconds", type=float, default=300.0)

@@ -21,7 +21,7 @@ class IbkrCliTests(unittest.TestCase):
         self.assertEqual(args.ibkr_port, 7497)
         self.assertEqual(args.strategy_family, "expanded_high_edge")
         self.assertEqual(args.low_r_preset, "simple_robust_low_r")
-        self.assertEqual(args.expanded_high_edge_preset, "expanded_high_edge_cap24")
+        self.assertEqual(args.expanded_high_edge_preset, "expanded_high_edge_cap24_balanced_risk")
         self.assertIsNone(args.max_spread_ticks)
 
     def test_parser_exposes_ibkr_soak_monitor(self) -> None:
@@ -101,7 +101,10 @@ class IbkrCliTests(unittest.TestCase):
                 self.assertEqual(os.environ["TLM_IBKR_POLL_SYMBOL"], "MNQ")
                 self.assertEqual(os.environ["TLM_IBKR_STRATEGY_FAMILY"], "expanded_high_edge")
                 self.assertEqual(os.environ["TLM_IBKR_LOW_R_PRESET"], "simple_robust_low_r")
-                self.assertEqual(os.environ["TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET"], "expanded_high_edge_cap24")
+                self.assertEqual(
+                    os.environ["TLM_IBKR_EXPANDED_HIGH_EDGE_PRESET"],
+                    "expanded_high_edge_cap24_balanced_risk",
+                )
                 self.assertEqual(os.environ["TLM_IBKR_POLL_INTERVAL_SECONDS"], "3.0")
                 self.assertEqual(os.environ["TLM_IBKR_REVIEW_INTERVAL_SECONDS"], "120.0")
                 self.assertEqual(os.environ["TLM_IBKR_READINESS_MAX_STALE_SECONDS"], "9")

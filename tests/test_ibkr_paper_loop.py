@@ -47,13 +47,13 @@ class FakeIbkrAdapter:
 
 
 class IbkrPaperLoopTests(unittest.TestCase):
-    def test_default_ibkr_strategy_uses_expanded_high_edge_cap24(self) -> None:
+    def test_default_ibkr_strategy_uses_expanded_high_edge_cap24_balanced_risk(self) -> None:
         strategy = _ibkr_default_strategy("MNQ")
 
         self.assertEqual(strategy["family"], "expanded_high_edge")
-        self.assertEqual(strategy["preset"], "expanded_high_edge_cap24")
+        self.assertEqual(strategy["preset"], "expanded_high_edge_cap24_balanced_risk")
         self.assertEqual(strategy["module_id"], "expanded_high_edge")
-        self.assertEqual(strategy["max_concurrent_positions"], 24)
+        self.assertEqual(strategy["max_concurrent_positions"], 18)
         self.assertEqual(strategy["max_holding_minutes"], 300)
 
     def test_default_expanded_high_edge_control_uses_four_tick_spread_cap(self) -> None:
@@ -75,8 +75,8 @@ class IbkrPaperLoopTests(unittest.TestCase):
         self.assertEqual(signal["family"], "expanded_high_edge")
         self.assertEqual(signal["side"], "BUY")
         self.assertIn("expanded_high_edge:prior_day_breakout", signal["trigger_reasons"])
-        self.assertEqual(signal["risk_context"]["preset"], "expanded_high_edge_cap24")
-        self.assertEqual(signal["risk_context"]["max_concurrent_positions"], 24)
+        self.assertEqual(signal["risk_context"]["preset"], "expanded_high_edge_cap24_balanced_risk")
+        self.assertEqual(signal["risk_context"]["max_concurrent_positions"], 18)
         self.assertEqual(signal["risk_context"]["session_bucket"], "ny_0930_1159")
         self.assertEqual(signal["risk_context"]["dow"], 1)
 

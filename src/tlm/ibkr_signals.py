@@ -9,7 +9,11 @@ from statistics import pstdev
 from typing import Any, Sequence
 from zoneinfo import ZoneInfo
 
-from .expanded_high_edge import EXPANDED_HIGH_EDGE_PRESETS, ExpandedHighEdge
+from .expanded_high_edge import (
+    EXPANDED_HIGH_EDGE_CAP24_BALANCED_RISK_PRESET,
+    EXPANDED_HIGH_EDGE_PRESETS,
+    ExpandedHighEdge,
+)
 from .low_r_regime_basket import LowRRegimeBasketConfig, PRESETS, RegimeEdge, _stop_points
 
 
@@ -302,7 +306,7 @@ def _build_expanded_high_edge_signal(
     max_spread_ticks: float,
     spread_ticks: float,
 ) -> dict[str, Any]:
-    preset = str(strategy.get("preset", "expanded_high_edge_cap24"))
+    preset = str(strategy.get("preset", EXPANDED_HIGH_EDGE_CAP24_BALANCED_RISK_PRESET))
     edges = EXPANDED_HIGH_EDGE_PRESETS.get(preset)
     if not edges:
         return _no_signal(strategy, "unknown_expanded_high_edge_preset", current)
