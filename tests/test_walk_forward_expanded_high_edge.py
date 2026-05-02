@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from pathlib import Path
 import unittest
 
 from scripts.walk_forward_expanded_high_edge import (
@@ -23,6 +24,7 @@ from scripts.search_expanded_high_edge_cooldown import (
     signal_regime_key,
 )
 from scripts.audit_70wr_2r_objective_completion import build_completion_audit
+from scripts.audit_relaxed_55wr_15r_objective import build_relaxed_audit
 from tlm.low_r_regime_basket import LowRRegimeBasketConfig, RegimeEdge
 
 
@@ -264,6 +266,46 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         self.assertFalse(audit["decision"]["achieved"])
         self.assertIn("black_box_tick_test", [row["id"] for row in audit["requirements"] if row["passed"]])
         self.assertIn("win_rate_70pct", audit["decision"]["failed_requirements"])
+
+    def test_relaxed_audit_rejects_low_r_probe_below_55pct(self) -> None:
+        audit = build_relaxed_audit(
+            [
+                (
+                    Path("expanded.json"),
+                    {
+                        "method": {
+                            "take_profit_r_grid": [1.5],
+                            "selection_profile": "stable",
+                            "selection": "train-only",
+                            "folds": [],
+                            "min_test_win_rate": 0.55,
+                        },
+                        "summary": {
+                            "decision": {"passed": False, "win_rate_gate_years": 0},
+                            "oos_total_net_pnl": -1.0,
+                            "oos_min_year_win_rate": 0.50,
+                        },
+                    },
+                )
+            ],
+            low_r_report=(
+                Path("low_r.json"),
+                {
+                    "best_full_or_annualized_years": {
+                        "params": {"take_profit_scale": 2.0},
+                        "metrics": {"win_rate": 0.548, "net_pnl": 1000.0, "trade_count": 100},
+                        "constraints": {"full_or_annualized_years_gt_min_trades": True, "positive_years": 2},
+                        "yearly_results": [{"year": 2024}, {"year": 2025}],
+                    }
+                },
+            ),
+        )
+
+        self.assertFalse(audit["decision"]["achieved"])
+        self.assertIn("win_rate_55pct", audit["decision"]["failed_requirements"])
+        low_r = next(row for row in audit["strategy_family_reports"] if row["family"] == "low_r_high_frequency_probe")
+        self.assertFalse(low_r["passed"])
+        self.assertEqual(low_r["decision"]["win_rate"], 0.548)
 
     def test_cooldown_replay_suppresses_same_regime_entries(self) -> None:
         edge = RegimeEdge(

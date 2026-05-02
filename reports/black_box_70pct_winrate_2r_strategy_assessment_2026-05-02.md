@@ -99,6 +99,27 @@ The walk-forward runner now supports explicit train/test win-rate gates, so the 
 
 This is stricter than the prior locked 2R report. It shows the current expanded-high-edge candidate universe cannot even produce a train-selected 70% win-rate / 2R candidate under the rolling protocol, so there is no out-of-sample candidate to promote.
 
+### Relaxed 55% Win-Rate / 1.5R Fallback Gate
+
+Source: `reports/55wr_15r_objective_completion_audit_2026-05-02.json`
+
+After the user allowed relaxing the objective to 55%+ win rate and 1.5R+, the expanded-high-edge walk-forward runner was rerun with `--take-profit-r-grid 1.5`, `--min-train-win-rate 0.55`, and `--min-test-win-rate 0.55`.
+
+- Stable profile: failed; 3 test folds had candidates, OOS net PnL -186,572.50, minimum test-year win rate 47.15%, and no test year passed the 55% win-rate gate.
+- Net profile: failed; 2 test folds had candidates, OOS net PnL -267,310.00, minimum test-year win rate 44.46%, and no test year passed the 55% win-rate gate.
+- Floor profile: failed; 0 test folds had candidates because every fold returned `no_train_combo`.
+- VOL fallback audit: failed; best VOL prescreen win probability was 40.67%, and no VOL strategy met the combined 55% win-rate / 1.5R / quote-paper readiness gates.
+- SMC fallback audit: failed; full-history win rate was 0.00%, p75 net-R was negative, and walk-forward/final-holdout relaxed gates failed.
+
+Related low-R high-frequency probe: `experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json`.
+
+- This forced the known profitable low-R high-frequency basket to a 1.5R cap and kept its prior baseline parameters.
+- Full-sample result: net PnL $3,418,345.00, profit factor 1.191, 44,328 trades, 7 of 8 positive years.
+- Full-sample win rate: 50.85%, below the relaxed 55% threshold.
+- It is not walk-forward-selected and uses `max_concurrent_positions=99`, so it is not live-ready even aside from the win-rate miss.
+
+The fallback remains below the acceptance threshold. It produces no candidate eligible for quote replay, paper shadow, or live promotion.
+
 ### Independent Signal Family Expansion
 
 Source files:

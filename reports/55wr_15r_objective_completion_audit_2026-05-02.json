@@ -1,0 +1,2649 @@
+{
+  "artifact": "55wr_15r_objective_completion_audit",
+  "best_expanded_report": {
+    "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_hard_gate_2026-05-02.json",
+    "decision": {
+      "failed_positive_years": [
+        2022,
+        2025
+      ],
+      "failed_reasons": [],
+      "failed_trade_floor_years": [],
+      "failed_win_rate_years": [
+        2022,
+        2023,
+        2025
+      ],
+      "passed": false,
+      "positive_test_years": 1,
+      "test_year_count": 3,
+      "trade_floor_years": 3,
+      "win_rate_gate_years": 0
+    },
+    "family": "expanded_high_edge",
+    "method": {
+      "folds": [
+        {
+          "test_year": 2021,
+          "train_years": [
+            2019,
+            2020
+          ]
+        },
+        {
+          "test_year": 2022,
+          "train_years": [
+            2019,
+            2020,
+            2021
+          ]
+        },
+        {
+          "test_year": 2023,
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022
+          ]
+        },
+        {
+          "test_year": 2024,
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022,
+            2023
+          ]
+        },
+        {
+          "test_year": 2025,
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022,
+            2023,
+            2024
+          ]
+        },
+        {
+          "test_year": 2026,
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022,
+            2023,
+            2024,
+            2025
+          ]
+        }
+      ],
+      "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+      "selection_profile": "stable"
+    },
+    "min_test_win_rate": 0.55,
+    "min_train_win_rate": 0.55,
+    "oos_min_year_pnl": -284315.0,
+    "oos_min_year_win_rate": 0.4714983713355049,
+    "oos_total_net_pnl": -186572.5,
+    "oos_total_trades": 5654,
+    "passed": false,
+    "reward_gate_passed": true,
+    "selection_profile": "stable",
+    "take_profit_r_grid": [
+      1.5
+    ],
+    "uses_1_5r_only": true
+  },
+  "decision": {
+    "achieved": false,
+    "failed_requirements": [
+      "reward_1_5r",
+      "win_rate_55pct",
+      "non_overfit_walk_forward",
+      "long_term_profitability",
+      "live_ready"
+    ],
+    "reason": "No relaxed 55% win-rate / 1.5R walk-forward candidate passes all required gates."
+  },
+  "expanded_reports": [
+    {
+      "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_hard_gate_2026-05-02.json",
+      "decision": {
+        "failed_positive_years": [
+          2022,
+          2025
+        ],
+        "failed_reasons": [],
+        "failed_trade_floor_years": [],
+        "failed_win_rate_years": [
+          2022,
+          2023,
+          2025
+        ],
+        "passed": false,
+        "positive_test_years": 1,
+        "test_year_count": 3,
+        "trade_floor_years": 3,
+        "win_rate_gate_years": 0
+      },
+      "family": "expanded_high_edge",
+      "method": {
+        "folds": [
+          {
+            "test_year": 2021,
+            "train_years": [
+              2019,
+              2020
+            ]
+          },
+          {
+            "test_year": 2022,
+            "train_years": [
+              2019,
+              2020,
+              2021
+            ]
+          },
+          {
+            "test_year": 2023,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022
+            ]
+          },
+          {
+            "test_year": 2024,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023
+            ]
+          },
+          {
+            "test_year": 2025,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024
+            ]
+          },
+          {
+            "test_year": 2026,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ]
+          }
+        ],
+        "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+        "selection_profile": "stable"
+      },
+      "min_test_win_rate": 0.55,
+      "min_train_win_rate": 0.55,
+      "oos_min_year_pnl": -284315.0,
+      "oos_min_year_win_rate": 0.4714983713355049,
+      "oos_total_net_pnl": -186572.5,
+      "oos_total_trades": 5654,
+      "passed": false,
+      "reward_gate_passed": true,
+      "selection_profile": "stable",
+      "take_profit_r_grid": [
+        1.5
+      ],
+      "uses_1_5r_only": true
+    },
+    {
+      "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_net_2026-05-02.json",
+      "decision": {
+        "failed_positive_years": [
+          2022
+        ],
+        "failed_reasons": [],
+        "failed_trade_floor_years": [],
+        "failed_win_rate_years": [
+          2022,
+          2023
+        ],
+        "passed": false,
+        "positive_test_years": 1,
+        "test_year_count": 2,
+        "trade_floor_years": 2,
+        "win_rate_gate_years": 0
+      },
+      "family": "expanded_high_edge",
+      "method": {
+        "folds": [
+          {
+            "test_year": 2021,
+            "train_years": [
+              2019,
+              2020
+            ]
+          },
+          {
+            "test_year": 2022,
+            "train_years": [
+              2019,
+              2020,
+              2021
+            ]
+          },
+          {
+            "test_year": 2023,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022
+            ]
+          },
+          {
+            "test_year": 2024,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023
+            ]
+          },
+          {
+            "test_year": 2025,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024
+            ]
+          },
+          {
+            "test_year": 2026,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ]
+          }
+        ],
+        "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+        "selection_profile": "net"
+      },
+      "min_test_win_rate": 0.55,
+      "min_train_win_rate": 0.55,
+      "oos_min_year_pnl": -405680.0,
+      "oos_min_year_win_rate": 0.44460712542703756,
+      "oos_total_net_pnl": -267310.0,
+      "oos_total_trades": 4359,
+      "passed": false,
+      "reward_gate_passed": true,
+      "selection_profile": "net",
+      "take_profit_r_grid": [
+        1.5
+      ],
+      "uses_1_5r_only": true
+    },
+    {
+      "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_floor_2026-05-02.json",
+      "decision": {
+        "failed_positive_years": [],
+        "failed_reasons": [
+          "no_ok_test_folds"
+        ],
+        "failed_trade_floor_years": [],
+        "failed_win_rate_years": [],
+        "passed": false,
+        "positive_test_years": 0,
+        "test_year_count": 0,
+        "trade_floor_years": 0,
+        "win_rate_gate_years": 0
+      },
+      "family": "expanded_high_edge",
+      "method": {
+        "folds": [
+          {
+            "test_year": 2021,
+            "train_years": [
+              2019,
+              2020
+            ]
+          },
+          {
+            "test_year": 2022,
+            "train_years": [
+              2019,
+              2020,
+              2021
+            ]
+          },
+          {
+            "test_year": 2023,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022
+            ]
+          },
+          {
+            "test_year": 2024,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023
+            ]
+          },
+          {
+            "test_year": 2025,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024
+            ]
+          },
+          {
+            "test_year": 2026,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ]
+          }
+        ],
+        "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+        "selection_profile": "floor"
+      },
+      "min_test_win_rate": 0.55,
+      "min_train_win_rate": 0.55,
+      "oos_min_year_pnl": null,
+      "oos_min_year_win_rate": null,
+      "oos_total_net_pnl": 0,
+      "oos_total_trades": 0,
+      "passed": false,
+      "reward_gate_passed": true,
+      "selection_profile": "floor",
+      "take_profit_r_grid": [
+        1.5
+      ],
+      "uses_1_5r_only": true
+    }
+  ],
+  "low_r_report": {
+    "artifact": "experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json",
+    "decision": {
+      "passed": false,
+      "positive_years": 7,
+      "reason": "Full-sample low-R probe is below 55% win rate or lacks all-year profitability.",
+      "win_rate": 0.5084822234253745,
+      "year_count": 8
+    },
+    "family": "low_r_high_frequency_probe",
+    "method": {
+      "selection": "Full-sample low-R high-frequency parameter probe; not walk-forward-selected."
+    },
+    "oos_min_year_win_rate": 0.5084822234253745,
+    "oos_total_net_pnl": 3418345.0,
+    "oos_total_trades": 44328,
+    "passed": false,
+    "reward_gate_passed": true,
+    "take_profit_scale": 2.0
+  },
+  "objective": "Fallback objective: find a 55%+ win-rate, 1.5R+, non-overfit, long-term profitable, live-ready strategy if the 70%/2R target cannot be found.",
+  "report_hash": "ccfc443619fe9e383cbccb5a647965587097a817666df28d6afa4bb98c686c07",
+  "requirements": [
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_hard_gate_2026-05-02.json",
+          "take_profit_r_grid": [
+            1.5
+          ]
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_net_2026-05-02.json",
+          "take_profit_r_grid": [
+            1.5
+          ]
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_floor_2026-05-02.json",
+          "take_profit_r_grid": [
+            1.5
+          ]
+        },
+        {
+          "artifact": "reports/nq_vol_execution_55wr_15r_objective_audit_2026-05-02.json",
+          "reward_gate": {
+            "evidence": {
+              "min_required_reward_r": 1.5,
+              "min_reward_r_by_strategy": [
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_01.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_01"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_02.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_02"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_03.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_03"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_04.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_04"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_05.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_05"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_06.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_06"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_07.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_07"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_08.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_08"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_09.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_09"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_absorb_10.yaml",
+                  "strategy_name": "nq_vol_execution_vol_absorb_10"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_01.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_01"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_02.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_02"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_03.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_03"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_04.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_04"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_05.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_05"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_06.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_06"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_07.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_07"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_08.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_08"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_09.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_09"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_breakout_10.yaml",
+                  "strategy_name": "nq_vol_execution_vol_breakout_10"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_01.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_01"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_02.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_02"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_03.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_03"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_04.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_04"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_05.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_05"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_06.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_06"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_07.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_07"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_08.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_08"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_09.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_09"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_macd_10.yaml",
+                  "strategy_name": "nq_vol_execution_vol_macd_10"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_01.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_01"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_02.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_02"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_03.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_03"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_04.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_04"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_05.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_05"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_06.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_06"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_07.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_07"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_08.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_08"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_09.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_09"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_pullback_10.yaml",
+                  "strategy_name": "nq_vol_execution_vol_pullback_10"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_01.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_01"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_02.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_02"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_03.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_03"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_04.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_04"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_05.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_05"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_06.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_06"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_07.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_07"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_08.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_08"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_09.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_09"
+                },
+                {
+                  "fixed_exit_r": 1.6,
+                  "grammar_exit_r": 1.4545454545454546,
+                  "min_reward_r": 1.4545454545454546,
+                  "path": "strategies/nq_vol_execution_vol_revert_10.yaml",
+                  "strategy_name": "nq_vol_execution_vol_revert_10"
+                }
+              ],
+              "strategy_file_count": 50,
+              "two_r_strategy_count": 0
+            },
+            "name": "vol_strategy_reward_profile_ge_2r",
+            "passed": false
+          }
+        },
+        {
+          "artifact": "reports/nq_smc_lqem_ce_v1_55wr_15r_objective_gates_2026-05-02.json",
+          "reward_gates": [
+            {
+              "actual": -1.0949675324675325,
+              "name": "full_history_net_r_p75_ge_target",
+              "passed": false,
+              "threshold": ">= 1.5"
+            },
+            {
+              "actual": -1.0535714285714286,
+              "name": "walk_forward_test_net_r_p75_ge_target",
+              "passed": false,
+              "threshold": ">= 1.5 on every test fold"
+            },
+            {
+              "actual": null,
+              "name": "final_holdout_net_r_p75_ge_target",
+              "passed": false,
+              "threshold": ">= 1.5"
+            }
+          ]
+        },
+        {
+          "artifact": "experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json",
+          "take_profit_scale": 2.0
+        }
+      ],
+      "gap": "Expanded searches forced 1.5R, but no full strategy family passes 55%/1.5R gates.",
+      "id": "reward_1_5r",
+      "passed": false,
+      "requirement": "Strategy search must force a 1.5R or higher take-profit profile."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_hard_gate_2026-05-02.json",
+          "decision": {
+            "failed_positive_years": [
+              2022,
+              2025
+            ],
+            "failed_reasons": [],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [
+              2022,
+              2023,
+              2025
+            ],
+            "passed": false,
+            "positive_test_years": 1,
+            "test_year_count": 3,
+            "trade_floor_years": 3,
+            "win_rate_gate_years": 0
+          },
+          "family": "expanded_high_edge",
+          "oos_min_year_win_rate": 0.4714983713355049
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_net_2026-05-02.json",
+          "decision": {
+            "failed_positive_years": [
+              2022
+            ],
+            "failed_reasons": [],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [
+              2022,
+              2023
+            ],
+            "passed": false,
+            "positive_test_years": 1,
+            "test_year_count": 2,
+            "trade_floor_years": 2,
+            "win_rate_gate_years": 0
+          },
+          "family": "expanded_high_edge",
+          "oos_min_year_win_rate": 0.44460712542703756
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_floor_2026-05-02.json",
+          "decision": {
+            "failed_positive_years": [],
+            "failed_reasons": [
+              "no_ok_test_folds"
+            ],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [],
+            "passed": false,
+            "positive_test_years": 0,
+            "test_year_count": 0,
+            "trade_floor_years": 0,
+            "win_rate_gate_years": 0
+          },
+          "family": "expanded_high_edge",
+          "oos_min_year_win_rate": null
+        },
+        {
+          "artifact": "reports/nq_vol_execution_55wr_15r_objective_audit_2026-05-02.json",
+          "decision": {
+            "failed_gates": [
+              "vol_prescreen_has_70pct_win_rate",
+              "vol_strategy_reward_profile_ge_2r",
+              "vol_final_target_rows_exist",
+              "vol_quote_replay_ready",
+              "vol_paper_shadow_ready"
+            ],
+            "passed": false,
+            "reason": "VOL family does not satisfy every 70% win-rate, 2R, execution-evidence gate."
+          },
+          "family": "vol_execution",
+          "oos_min_year_win_rate": null
+        },
+        {
+          "artifact": "reports/nq_smc_lqem_ce_v1_55wr_15r_objective_gates_2026-05-02.json",
+          "decision": {
+            "failed_gates": [
+              "full_history_win_rate_ge_target",
+              "full_history_net_r_p75_ge_target",
+              "walk_forward_test_win_rate_ge_target",
+              "walk_forward_test_net_r_p75_ge_target",
+              "final_holdout_win_rate_ge_target",
+              "final_holdout_net_r_p75_ge_target"
+            ],
+            "passed": false
+          },
+          "family": "smc_lqem_ce",
+          "oos_min_year_win_rate": null
+        },
+        {
+          "artifact": "experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json",
+          "decision": {
+            "passed": false,
+            "positive_years": 7,
+            "reason": "Full-sample low-R probe is below 55% win rate or lacks all-year profitability.",
+            "win_rate": 0.5084822234253745,
+            "year_count": 8
+          },
+          "family": "low_r_high_frequency_probe",
+          "oos_min_year_win_rate": 0.5084822234253745
+        }
+      ],
+      "gap": "No relaxed strategy family passes the 55% win-rate gate.",
+      "id": "win_rate_55pct",
+      "passed": false,
+      "requirement": "Out-of-sample walk-forward test years must each reach at least 55% win rate."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_hard_gate_2026-05-02.json",
+          "decision": {
+            "failed_positive_years": [
+              2022,
+              2025
+            ],
+            "failed_reasons": [],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [
+              2022,
+              2023,
+              2025
+            ],
+            "passed": false,
+            "positive_test_years": 1,
+            "test_year_count": 3,
+            "trade_floor_years": 3,
+            "win_rate_gate_years": 0
+          },
+          "family": "expanded_high_edge",
+          "method": {
+            "folds": [
+              {
+                "test_year": 2021,
+                "train_years": [
+                  2019,
+                  2020
+                ]
+              },
+              {
+                "test_year": 2022,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021
+                ]
+              },
+              {
+                "test_year": 2023,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022
+                ]
+              },
+              {
+                "test_year": 2024,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023
+                ]
+              },
+              {
+                "test_year": 2025,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023,
+                  2024
+                ]
+              },
+              {
+                "test_year": 2026,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023,
+                  2024,
+                  2025
+                ]
+              }
+            ],
+            "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+            "selection_profile": "stable"
+          }
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_net_2026-05-02.json",
+          "decision": {
+            "failed_positive_years": [
+              2022
+            ],
+            "failed_reasons": [],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [
+              2022,
+              2023
+            ],
+            "passed": false,
+            "positive_test_years": 1,
+            "test_year_count": 2,
+            "trade_floor_years": 2,
+            "win_rate_gate_years": 0
+          },
+          "family": "expanded_high_edge",
+          "method": {
+            "folds": [
+              {
+                "test_year": 2021,
+                "train_years": [
+                  2019,
+                  2020
+                ]
+              },
+              {
+                "test_year": 2022,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021
+                ]
+              },
+              {
+                "test_year": 2023,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022
+                ]
+              },
+              {
+                "test_year": 2024,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023
+                ]
+              },
+              {
+                "test_year": 2025,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023,
+                  2024
+                ]
+              },
+              {
+                "test_year": 2026,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023,
+                  2024,
+                  2025
+                ]
+              }
+            ],
+            "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+            "selection_profile": "net"
+          }
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_floor_2026-05-02.json",
+          "decision": {
+            "failed_positive_years": [],
+            "failed_reasons": [
+              "no_ok_test_folds"
+            ],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [],
+            "passed": false,
+            "positive_test_years": 0,
+            "test_year_count": 0,
+            "trade_floor_years": 0,
+            "win_rate_gate_years": 0
+          },
+          "family": "expanded_high_edge",
+          "method": {
+            "folds": [
+              {
+                "test_year": 2021,
+                "train_years": [
+                  2019,
+                  2020
+                ]
+              },
+              {
+                "test_year": 2022,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021
+                ]
+              },
+              {
+                "test_year": 2023,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022
+                ]
+              },
+              {
+                "test_year": 2024,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023
+                ]
+              },
+              {
+                "test_year": 2025,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023,
+                  2024
+                ]
+              },
+              {
+                "test_year": 2026,
+                "train_years": [
+                  2019,
+                  2020,
+                  2021,
+                  2022,
+                  2023,
+                  2024,
+                  2025
+                ]
+              }
+            ],
+            "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+            "selection_profile": "floor"
+          }
+        },
+        {
+          "artifact": "reports/nq_vol_execution_55wr_15r_objective_audit_2026-05-02.json",
+          "decision": {
+            "failed_gates": [
+              "vol_prescreen_has_70pct_win_rate",
+              "vol_strategy_reward_profile_ge_2r",
+              "vol_final_target_rows_exist",
+              "vol_quote_replay_ready",
+              "vol_paper_shadow_ready"
+            ],
+            "passed": false,
+            "reason": "VOL family does not satisfy every 70% win-rate, 2R, execution-evidence gate."
+          },
+          "family": "vol_execution",
+          "method": {
+            "selection": "VOL prescreen plus reward-profile audit."
+          }
+        },
+        {
+          "artifact": "reports/nq_smc_lqem_ce_v1_55wr_15r_objective_gates_2026-05-02.json",
+          "decision": {
+            "failed_gates": [
+              "full_history_win_rate_ge_target",
+              "full_history_net_r_p75_ge_target",
+              "walk_forward_test_win_rate_ge_target",
+              "walk_forward_test_net_r_p75_ge_target",
+              "final_holdout_win_rate_ge_target",
+              "final_holdout_net_r_p75_ge_target"
+            ],
+            "passed": false
+          },
+          "family": "smc_lqem_ce",
+          "method": {
+            "selection": "SMC validation objective gates with relaxed target thresholds."
+          }
+        },
+        {
+          "artifact": "experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json",
+          "decision": {
+            "passed": false,
+            "positive_years": 7,
+            "reason": "Full-sample low-R probe is below 55% win rate or lacks all-year profitability.",
+            "win_rate": 0.5084822234253745,
+            "year_count": 8
+          },
+          "family": "low_r_high_frequency_probe",
+          "method": {
+            "selection": "Full-sample low-R high-frequency parameter probe; not walk-forward-selected."
+          }
+        }
+      ],
+      "gap": "The protocol is walk-forward, but no candidate survives all gates.",
+      "id": "non_overfit_walk_forward",
+      "passed": false,
+      "requirement": "Selection must be train-only and replayed on next unseen test year."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_hard_gate_2026-05-02.json",
+          "failed_positive_years": [
+            2022,
+            2025
+          ],
+          "family": "expanded_high_edge",
+          "oos_total_net_pnl": -186572.5
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_net_2026-05-02.json",
+          "failed_positive_years": [
+            2022
+          ],
+          "family": "expanded_high_edge",
+          "oos_total_net_pnl": -267310.0
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_floor_2026-05-02.json",
+          "failed_positive_years": [],
+          "family": "expanded_high_edge",
+          "oos_total_net_pnl": 0
+        },
+        {
+          "artifact": "reports/nq_vol_execution_55wr_15r_objective_audit_2026-05-02.json",
+          "failed_positive_years": [],
+          "family": "vol_execution",
+          "oos_total_net_pnl": null
+        },
+        {
+          "artifact": "reports/nq_smc_lqem_ce_v1_55wr_15r_objective_gates_2026-05-02.json",
+          "failed_positive_years": [],
+          "family": "smc_lqem_ce",
+          "oos_total_net_pnl": -525.0
+        },
+        {
+          "artifact": "experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json",
+          "failed_positive_years": [],
+          "family": "low_r_high_frequency_probe",
+          "oos_total_net_pnl": 3418345.0
+        }
+      ],
+      "gap": "Relaxed runs still have negative OOS years, no qualifying rows, or negative full-history PnL.",
+      "id": "long_term_profitability",
+      "passed": false,
+      "requirement": "Relaxed strategy must be profitable across all available out-of-sample years."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_hard_gate_2026-05-02.json",
+          "decision": {
+            "failed_positive_years": [
+              2022,
+              2025
+            ],
+            "failed_reasons": [],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [
+              2022,
+              2023,
+              2025
+            ],
+            "passed": false,
+            "positive_test_years": 1,
+            "test_year_count": 3,
+            "trade_floor_years": 3,
+            "win_rate_gate_years": 0
+          },
+          "passed": false
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_net_2026-05-02.json",
+          "decision": {
+            "failed_positive_years": [
+              2022
+            ],
+            "failed_reasons": [],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [
+              2022,
+              2023
+            ],
+            "passed": false,
+            "positive_test_years": 1,
+            "test_year_count": 2,
+            "trade_floor_years": 2,
+            "win_rate_gate_years": 0
+          },
+          "passed": false
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_floor_2026-05-02.json",
+          "decision": {
+            "failed_positive_years": [],
+            "failed_reasons": [
+              "no_ok_test_folds"
+            ],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [],
+            "passed": false,
+            "positive_test_years": 0,
+            "test_year_count": 0,
+            "trade_floor_years": 0,
+            "win_rate_gate_years": 0
+          },
+          "passed": false
+        },
+        {
+          "artifact": "reports/nq_vol_execution_55wr_15r_objective_audit_2026-05-02.json",
+          "decision": {
+            "failed_gates": [
+              "vol_prescreen_has_70pct_win_rate",
+              "vol_strategy_reward_profile_ge_2r",
+              "vol_final_target_rows_exist",
+              "vol_quote_replay_ready",
+              "vol_paper_shadow_ready"
+            ],
+            "passed": false,
+            "reason": "VOL family does not satisfy every 70% win-rate, 2R, execution-evidence gate."
+          },
+          "passed": false
+        },
+        {
+          "artifact": "reports/nq_smc_lqem_ce_v1_55wr_15r_objective_gates_2026-05-02.json",
+          "decision": {
+            "failed_gates": [
+              "full_history_win_rate_ge_target",
+              "full_history_net_r_p75_ge_target",
+              "walk_forward_test_win_rate_ge_target",
+              "walk_forward_test_net_r_p75_ge_target",
+              "final_holdout_win_rate_ge_target",
+              "final_holdout_net_r_p75_ge_target"
+            ],
+            "passed": false
+          },
+          "passed": false
+        },
+        {
+          "artifact": "experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json",
+          "decision": {
+            "passed": false,
+            "positive_years": 7,
+            "reason": "Full-sample low-R probe is below 55% win rate or lacks all-year profitability.",
+            "win_rate": 0.5084822234253745,
+            "year_count": 8
+          },
+          "passed": false
+        }
+      ],
+      "gap": "No relaxed candidate passes the objective gates, so there is no candidate to promote to quote replay/live readiness.",
+      "id": "live_ready",
+      "passed": false,
+      "requirement": "Relaxed candidate must be eligible for execution/tick validation and promotion."
+    }
+  ],
+  "schema_version": 1,
+  "smc_report": {
+    "artifact": "reports/nq_smc_lqem_ce_v1_55wr_15r_objective_gates_2026-05-02.json",
+    "decision": {
+      "failed_gates": [
+        "full_history_win_rate_ge_target",
+        "full_history_net_r_p75_ge_target",
+        "walk_forward_test_win_rate_ge_target",
+        "walk_forward_test_net_r_p75_ge_target",
+        "final_holdout_win_rate_ge_target",
+        "final_holdout_net_r_p75_ge_target"
+      ],
+      "passed": false
+    },
+    "family": "smc_lqem_ce",
+    "method": {
+      "selection": "SMC validation objective gates with relaxed target thresholds."
+    },
+    "oos_min_year_win_rate": null,
+    "oos_total_net_pnl": -525.0,
+    "oos_total_trades": 3,
+    "passed": false,
+    "reward_gate_passed": false,
+    "reward_gates": [
+      {
+        "actual": -1.0949675324675325,
+        "name": "full_history_net_r_p75_ge_target",
+        "passed": false,
+        "threshold": ">= 1.5"
+      },
+      {
+        "actual": -1.0535714285714286,
+        "name": "walk_forward_test_net_r_p75_ge_target",
+        "passed": false,
+        "threshold": ">= 1.5 on every test fold"
+      },
+      {
+        "actual": null,
+        "name": "final_holdout_net_r_p75_ge_target",
+        "passed": false,
+        "threshold": ">= 1.5"
+      }
+    ],
+    "win_rate_gate_passed": false,
+    "win_rate_gates": [
+      {
+        "actual": 0.0,
+        "name": "full_history_win_rate_ge_target",
+        "passed": false,
+        "threshold": ">= 0.55"
+      },
+      {
+        "actual": 0.0,
+        "name": "walk_forward_test_win_rate_ge_target",
+        "passed": false,
+        "threshold": ">= 0.55 on every test fold"
+      },
+      {
+        "actual": null,
+        "name": "final_holdout_win_rate_ge_target",
+        "passed": false,
+        "threshold": ">= 0.55"
+      }
+    ]
+  },
+  "strategy_family_reports": [
+    {
+      "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_hard_gate_2026-05-02.json",
+      "decision": {
+        "failed_positive_years": [
+          2022,
+          2025
+        ],
+        "failed_reasons": [],
+        "failed_trade_floor_years": [],
+        "failed_win_rate_years": [
+          2022,
+          2023,
+          2025
+        ],
+        "passed": false,
+        "positive_test_years": 1,
+        "test_year_count": 3,
+        "trade_floor_years": 3,
+        "win_rate_gate_years": 0
+      },
+      "family": "expanded_high_edge",
+      "method": {
+        "folds": [
+          {
+            "test_year": 2021,
+            "train_years": [
+              2019,
+              2020
+            ]
+          },
+          {
+            "test_year": 2022,
+            "train_years": [
+              2019,
+              2020,
+              2021
+            ]
+          },
+          {
+            "test_year": 2023,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022
+            ]
+          },
+          {
+            "test_year": 2024,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023
+            ]
+          },
+          {
+            "test_year": 2025,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024
+            ]
+          },
+          {
+            "test_year": 2026,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ]
+          }
+        ],
+        "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+        "selection_profile": "stable"
+      },
+      "min_test_win_rate": 0.55,
+      "min_train_win_rate": 0.55,
+      "oos_min_year_pnl": -284315.0,
+      "oos_min_year_win_rate": 0.4714983713355049,
+      "oos_total_net_pnl": -186572.5,
+      "oos_total_trades": 5654,
+      "passed": false,
+      "reward_gate_passed": true,
+      "selection_profile": "stable",
+      "take_profit_r_grid": [
+        1.5
+      ],
+      "uses_1_5r_only": true
+    },
+    {
+      "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_net_2026-05-02.json",
+      "decision": {
+        "failed_positive_years": [
+          2022
+        ],
+        "failed_reasons": [],
+        "failed_trade_floor_years": [],
+        "failed_win_rate_years": [
+          2022,
+          2023
+        ],
+        "passed": false,
+        "positive_test_years": 1,
+        "test_year_count": 2,
+        "trade_floor_years": 2,
+        "win_rate_gate_years": 0
+      },
+      "family": "expanded_high_edge",
+      "method": {
+        "folds": [
+          {
+            "test_year": 2021,
+            "train_years": [
+              2019,
+              2020
+            ]
+          },
+          {
+            "test_year": 2022,
+            "train_years": [
+              2019,
+              2020,
+              2021
+            ]
+          },
+          {
+            "test_year": 2023,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022
+            ]
+          },
+          {
+            "test_year": 2024,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023
+            ]
+          },
+          {
+            "test_year": 2025,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024
+            ]
+          },
+          {
+            "test_year": 2026,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ]
+          }
+        ],
+        "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+        "selection_profile": "net"
+      },
+      "min_test_win_rate": 0.55,
+      "min_train_win_rate": 0.55,
+      "oos_min_year_pnl": -405680.0,
+      "oos_min_year_win_rate": 0.44460712542703756,
+      "oos_total_net_pnl": -267310.0,
+      "oos_total_trades": 4359,
+      "passed": false,
+      "reward_gate_passed": true,
+      "selection_profile": "net",
+      "take_profit_r_grid": [
+        1.5
+      ],
+      "uses_1_5r_only": true
+    },
+    {
+      "artifact": "reports/nq_expanded_high_edge_walk_forward_55wr_15r_floor_2026-05-02.json",
+      "decision": {
+        "failed_positive_years": [],
+        "failed_reasons": [
+          "no_ok_test_folds"
+        ],
+        "failed_trade_floor_years": [],
+        "failed_win_rate_years": [],
+        "passed": false,
+        "positive_test_years": 0,
+        "test_year_count": 0,
+        "trade_floor_years": 0,
+        "win_rate_gate_years": 0
+      },
+      "family": "expanded_high_edge",
+      "method": {
+        "folds": [
+          {
+            "test_year": 2021,
+            "train_years": [
+              2019,
+              2020
+            ]
+          },
+          {
+            "test_year": 2022,
+            "train_years": [
+              2019,
+              2020,
+              2021
+            ]
+          },
+          {
+            "test_year": 2023,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022
+            ]
+          },
+          {
+            "test_year": 2024,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023
+            ]
+          },
+          {
+            "test_year": 2025,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024
+            ]
+          },
+          {
+            "test_year": 2026,
+            "train_years": [
+              2019,
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ]
+          }
+        ],
+        "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+        "selection_profile": "floor"
+      },
+      "min_test_win_rate": 0.55,
+      "min_train_win_rate": 0.55,
+      "oos_min_year_pnl": null,
+      "oos_min_year_win_rate": null,
+      "oos_total_net_pnl": 0,
+      "oos_total_trades": 0,
+      "passed": false,
+      "reward_gate_passed": true,
+      "selection_profile": "floor",
+      "take_profit_r_grid": [
+        1.5
+      ],
+      "uses_1_5r_only": true
+    },
+    {
+      "artifact": "reports/nq_vol_execution_55wr_15r_objective_audit_2026-05-02.json",
+      "decision": {
+        "failed_gates": [
+          "vol_prescreen_has_70pct_win_rate",
+          "vol_strategy_reward_profile_ge_2r",
+          "vol_final_target_rows_exist",
+          "vol_quote_replay_ready",
+          "vol_paper_shadow_ready"
+        ],
+        "passed": false,
+        "reason": "VOL family does not satisfy every 70% win-rate, 2R, execution-evidence gate."
+      },
+      "family": "vol_execution",
+      "method": {
+        "selection": "VOL prescreen plus reward-profile audit."
+      },
+      "oos_min_year_win_rate": null,
+      "oos_total_net_pnl": null,
+      "oos_total_trades": null,
+      "passed": false,
+      "reward_gate": {
+        "evidence": {
+          "min_required_reward_r": 1.5,
+          "min_reward_r_by_strategy": [
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_01.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_01"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_02.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_02"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_03.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_03"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_04.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_04"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_05.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_05"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_06.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_06"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_07.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_07"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_08.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_08"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_09.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_09"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_absorb_10.yaml",
+              "strategy_name": "nq_vol_execution_vol_absorb_10"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_01.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_01"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_02.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_02"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_03.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_03"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_04.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_04"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_05.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_05"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_06.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_06"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_07.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_07"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_08.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_08"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_09.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_09"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_breakout_10.yaml",
+              "strategy_name": "nq_vol_execution_vol_breakout_10"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_01.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_01"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_02.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_02"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_03.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_03"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_04.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_04"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_05.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_05"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_06.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_06"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_07.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_07"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_08.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_08"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_09.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_09"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_macd_10.yaml",
+              "strategy_name": "nq_vol_execution_vol_macd_10"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_01.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_01"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_02.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_02"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_03.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_03"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_04.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_04"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_05.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_05"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_06.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_06"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_07.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_07"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_08.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_08"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_09.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_09"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_pullback_10.yaml",
+              "strategy_name": "nq_vol_execution_vol_pullback_10"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_01.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_01"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_02.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_02"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_03.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_03"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_04.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_04"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_05.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_05"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_06.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_06"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_07.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_07"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_08.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_08"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_09.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_09"
+            },
+            {
+              "fixed_exit_r": 1.6,
+              "grammar_exit_r": 1.4545454545454546,
+              "min_reward_r": 1.4545454545454546,
+              "path": "strategies/nq_vol_execution_vol_revert_10.yaml",
+              "strategy_name": "nq_vol_execution_vol_revert_10"
+            }
+          ],
+          "strategy_file_count": 50,
+          "two_r_strategy_count": 0
+        },
+        "name": "vol_strategy_reward_profile_ge_2r",
+        "passed": false
+      },
+      "reward_gate_passed": false,
+      "win_rate_gate": {
+        "evidence": {
+          "best_rows": [],
+          "best_win_probability": 0.406721586352701,
+          "min_required_win_rate": 0.55,
+          "passing_strategy_count": 0,
+          "strategy_count": 50
+        },
+        "name": "vol_prescreen_has_70pct_win_rate",
+        "passed": false
+      },
+      "win_rate_gate_passed": false
+    },
+    {
+      "artifact": "reports/nq_smc_lqem_ce_v1_55wr_15r_objective_gates_2026-05-02.json",
+      "decision": {
+        "failed_gates": [
+          "full_history_win_rate_ge_target",
+          "full_history_net_r_p75_ge_target",
+          "walk_forward_test_win_rate_ge_target",
+          "walk_forward_test_net_r_p75_ge_target",
+          "final_holdout_win_rate_ge_target",
+          "final_holdout_net_r_p75_ge_target"
+        ],
+        "passed": false
+      },
+      "family": "smc_lqem_ce",
+      "method": {
+        "selection": "SMC validation objective gates with relaxed target thresholds."
+      },
+      "oos_min_year_win_rate": null,
+      "oos_total_net_pnl": -525.0,
+      "oos_total_trades": 3,
+      "passed": false,
+      "reward_gate_passed": false,
+      "reward_gates": [
+        {
+          "actual": -1.0949675324675325,
+          "name": "full_history_net_r_p75_ge_target",
+          "passed": false,
+          "threshold": ">= 1.5"
+        },
+        {
+          "actual": -1.0535714285714286,
+          "name": "walk_forward_test_net_r_p75_ge_target",
+          "passed": false,
+          "threshold": ">= 1.5 on every test fold"
+        },
+        {
+          "actual": null,
+          "name": "final_holdout_net_r_p75_ge_target",
+          "passed": false,
+          "threshold": ">= 1.5"
+        }
+      ],
+      "win_rate_gate_passed": false,
+      "win_rate_gates": [
+        {
+          "actual": 0.0,
+          "name": "full_history_win_rate_ge_target",
+          "passed": false,
+          "threshold": ">= 0.55"
+        },
+        {
+          "actual": 0.0,
+          "name": "walk_forward_test_win_rate_ge_target",
+          "passed": false,
+          "threshold": ">= 0.55 on every test fold"
+        },
+        {
+          "actual": null,
+          "name": "final_holdout_win_rate_ge_target",
+          "passed": false,
+          "threshold": ">= 0.55"
+        }
+      ]
+    },
+    {
+      "artifact": "experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json",
+      "decision": {
+        "passed": false,
+        "positive_years": 7,
+        "reason": "Full-sample low-R probe is below 55% win rate or lacks all-year profitability.",
+        "win_rate": 0.5084822234253745,
+        "year_count": 8
+      },
+      "family": "low_r_high_frequency_probe",
+      "method": {
+        "selection": "Full-sample low-R high-frequency parameter probe; not walk-forward-selected."
+      },
+      "oos_min_year_win_rate": 0.5084822234253745,
+      "oos_total_net_pnl": 3418345.0,
+      "oos_total_trades": 44328,
+      "passed": false,
+      "reward_gate_passed": true,
+      "take_profit_scale": 2.0
+    }
+  ],
+  "vol_report": {
+    "artifact": "reports/nq_vol_execution_55wr_15r_objective_audit_2026-05-02.json",
+    "decision": {
+      "failed_gates": [
+        "vol_prescreen_has_70pct_win_rate",
+        "vol_strategy_reward_profile_ge_2r",
+        "vol_final_target_rows_exist",
+        "vol_quote_replay_ready",
+        "vol_paper_shadow_ready"
+      ],
+      "passed": false,
+      "reason": "VOL family does not satisfy every 70% win-rate, 2R, execution-evidence gate."
+    },
+    "family": "vol_execution",
+    "method": {
+      "selection": "VOL prescreen plus reward-profile audit."
+    },
+    "oos_min_year_win_rate": null,
+    "oos_total_net_pnl": null,
+    "oos_total_trades": null,
+    "passed": false,
+    "reward_gate": {
+      "evidence": {
+        "min_required_reward_r": 1.5,
+        "min_reward_r_by_strategy": [
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_10"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_10"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_10"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_10"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_10"
+          }
+        ],
+        "strategy_file_count": 50,
+        "two_r_strategy_count": 0
+      },
+      "name": "vol_strategy_reward_profile_ge_2r",
+      "passed": false
+    },
+    "reward_gate_passed": false,
+    "win_rate_gate": {
+      "evidence": {
+        "best_rows": [],
+        "best_win_probability": 0.406721586352701,
+        "min_required_win_rate": 0.55,
+        "passing_strategy_count": 0,
+        "strategy_count": 50
+      },
+      "name": "vol_prescreen_has_70pct_win_rate",
+      "passed": false
+    },
+    "win_rate_gate_passed": false
+  }
+}

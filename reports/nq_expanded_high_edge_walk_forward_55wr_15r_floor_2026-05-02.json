@@ -1,0 +1,196 @@
+{
+  "artifact": "expanded_high_edge_walk_forward_validation",
+  "date_from": "2019-01-01",
+  "date_to": "2026-04-27",
+  "symbol": "NQ_CME",
+  "method": {
+    "folds": [
+      {
+        "train_years": [
+          2019,
+          2020
+        ],
+        "test_year": 2021
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021
+        ],
+        "test_year": 2022
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "test_year": 2023
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "test_year": 2024
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "test_year": 2025
+      },
+      {
+        "train_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "test_year": 2026
+      }
+    ],
+    "selection": "For each fold, candidate groups and combo specs are selected only on train years, then replayed on the next test year.",
+    "max_preselect": 80,
+    "max_specs": 8,
+    "min_edge_count": 1,
+    "selection_profile": "floor",
+    "excluded_scan_types": [],
+    "max_scan_type_counts": {},
+    "min_scan_type_counts": {},
+    "slippage_ticks_per_side": 1.0,
+    "take_profit_r_grid": [
+      1.5
+    ],
+    "full_grid": false,
+    "min_full_year_trades": 1000,
+    "min_train_win_rate": 0.55,
+    "min_test_win_rate": 0.55
+  },
+  "summary": {
+    "decision": {
+      "passed": false,
+      "positive_test_years": 0,
+      "test_year_count": 0,
+      "trade_floor_years": 0,
+      "win_rate_gate_years": 0,
+      "failed_positive_years": [],
+      "failed_trade_floor_years": [],
+      "failed_win_rate_years": [],
+      "failed_reasons": [
+        "no_ok_test_folds"
+      ]
+    },
+    "oos_total_net_pnl": 0,
+    "oos_min_year_pnl": null,
+    "oos_min_year_trades": null,
+    "oos_min_year_trade_floor_count": null,
+    "oos_total_trades": 0,
+    "oos_min_year_win_rate": null,
+    "average_turnover_jaccard": null,
+    "min_turnover_jaccard": null,
+    "multiple_testing": {
+      "candidate_group_count": 26148,
+      "evaluated_train_combo_count": 192,
+      "effective_trial_count_floor": 26340,
+      "penalty_decision": "fail",
+      "selection_bias_note": "Treat in-sample net PnL as rejected unless rolling OOS gates pass; statistical deflated Sharpe is not estimated because per-trial return paths are not persisted."
+    }
+  },
+  "folds": [
+    {
+      "train_years": [
+        2019,
+        2020
+      ],
+      "test_year": 2021,
+      "status": "no_train_combo",
+      "candidate_group_count": 80,
+      "evaluated_single_count": 80,
+      "evaluated_combo_count": 32
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021
+      ],
+      "test_year": 2022,
+      "status": "no_train_combo",
+      "candidate_group_count": 80,
+      "evaluated_single_count": 80,
+      "evaluated_combo_count": 32
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022
+      ],
+      "test_year": 2023,
+      "status": "no_train_combo",
+      "candidate_group_count": 80,
+      "evaluated_single_count": 80,
+      "evaluated_combo_count": 32
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023
+      ],
+      "test_year": 2024,
+      "status": "no_train_combo",
+      "candidate_group_count": 80,
+      "evaluated_single_count": 80,
+      "evaluated_combo_count": 32
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "test_year": 2025,
+      "status": "no_train_combo",
+      "candidate_group_count": 80,
+      "evaluated_single_count": 80,
+      "evaluated_combo_count": 32
+    },
+    {
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "test_year": 2026,
+      "status": "no_train_combo",
+      "candidate_group_count": 80,
+      "evaluated_single_count": 80,
+      "evaluated_combo_count": 32
+    }
+  ]
+}
