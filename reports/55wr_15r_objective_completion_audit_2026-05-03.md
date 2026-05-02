@@ -13,6 +13,7 @@
 - experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json: family=low_r_high_frequency_probe, passed=False, profile=None, oos_net=3418345.0, min_win_rate=0.5084822234253745
 - reports/low_r_15r_subset_search_55wr_wide_2026-05-03.json: family=low_r_15r_subset_search, passed=False, profile=None, oos_net=888047.5, min_win_rate=0.5352691593741713
 - reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json: family=low_r_15r_subset_walk_forward, passed=False, profile=None, oos_net=271807.5, min_win_rate=0.4134529147982063
+- reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json: family=tick_microstructure_filter, passed=False, profile=None, oos_net=7220.0, min_win_rate=0.6111111111111112
 
 ## Checklist
 

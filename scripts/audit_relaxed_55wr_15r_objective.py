@@ -25,6 +25,7 @@ DEFAULT_SMC_REPORT = Path("reports/nq_smc_lqem_ce_v1_55wr_15r_objective_gates_20
 DEFAULT_LOW_R_REPORT = Path("experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json")
 DEFAULT_LOW_R_SUBSET_REPORT = Path("reports/low_r_15r_subset_search_55wr_wide_2026-05-03.json")
 DEFAULT_LOW_R_SUBSET_WALK_FORWARD_REPORT = Path("reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json")
+DEFAULT_TICK_MICROSTRUCTURE_REPORT = Path("reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -36,6 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--low-r-report", type=Path, default=DEFAULT_LOW_R_REPORT)
     parser.add_argument("--low-r-subset-report", type=Path, default=DEFAULT_LOW_R_SUBSET_REPORT)
     parser.add_argument("--low-r-subset-walk-forward-report", type=Path, default=DEFAULT_LOW_R_SUBSET_WALK_FORWARD_REPORT)
+    parser.add_argument("--tick-microstructure-report", type=Path, default=DEFAULT_TICK_MICROSTRUCTURE_REPORT)
     parser.add_argument("--output", type=Path, default=Path("reports/55wr_15r_objective_completion_audit_2026-05-02.json"))
     parser.add_argument("--markdown-output", type=Path, default=Path("reports/55wr_15r_objective_completion_audit_2026-05-02.md"))
     args = parser.parse_args(argv)
@@ -55,6 +57,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.low_r_subset_walk_forward_report.exists()
         else None
     )
+    tick_microstructure_report = (
+        (args.tick_microstructure_report, load_json(args.tick_microstructure_report))
+        if args.tick_microstructure_report.exists()
+        else None
+    )
     payload = build_relaxed_audit(
         expanded_reports,
         vol_report=vol_report,
@@ -62,6 +69,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         low_r_report=low_r_report,
         low_r_subset_report=low_r_subset_report,
         low_r_subset_walk_forward_report=low_r_subset_walk_forward_report,
+        tick_microstructure_report=tick_microstructure_report,
     )
     write_json(args.output, payload)
     args.markdown_output.write_text(render_markdown(payload), encoding="utf-8")
@@ -77,6 +85,7 @@ def build_relaxed_audit(
     low_r_report: tuple[Path, dict[str, Any]] | None = None,
     low_r_subset_report: tuple[Path, dict[str, Any]] | None = None,
     low_r_subset_walk_forward_report: tuple[Path, dict[str, Any]] | None = None,
+    tick_microstructure_report: tuple[Path, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     expanded_rows = [summarize_expanded_report(path, payload) for path, payload in reports]
     vol_row = summarize_vol_report(*vol_report) if vol_report else None
@@ -88,9 +97,14 @@ def build_relaxed_audit(
         if low_r_subset_walk_forward_report
         else None
     )
+    tick_microstructure_row = (
+        summarize_tick_microstructure_report(*tick_microstructure_report)
+        if tick_microstructure_report
+        else None
+    )
     strategy_family_rows = expanded_rows + [
         row
-        for row in (vol_row, smc_row, low_r_row, low_r_subset_row, low_r_subset_walk_forward_row)
+        for row in (vol_row, smc_row, low_r_row, low_r_subset_row, low_r_subset_walk_forward_row, tick_microstructure_row)
         if row is not None
     ]
     passing = [row for row in strategy_family_rows if row["passed"]]
@@ -109,6 +123,8 @@ def build_relaxed_audit(
         reward_evidence.append({"artifact": low_r_subset_row["artifact"], "forced_take_profit_r": low_r_subset_row["forced_take_profit_r"]})
     if low_r_subset_walk_forward_row:
         reward_evidence.append({"artifact": low_r_subset_walk_forward_row["artifact"], "forced_take_profit_r": low_r_subset_walk_forward_row["forced_take_profit_r"]})
+    if tick_microstructure_row:
+        reward_evidence.append({"artifact": tick_microstructure_row["artifact"], "min_take_profit_r": tick_microstructure_row["min_take_profit_r"]})
     requirements = [
         requirement(
             "reward_1_5r",
@@ -158,6 +174,7 @@ def build_relaxed_audit(
         "low_r_report": low_r_row,
         "low_r_subset_report": low_r_subset_row,
         "low_r_subset_walk_forward_report": low_r_subset_walk_forward_row,
+        "tick_microstructure_report": tick_microstructure_row,
         "best_expanded_report": best,
         "strategy_family_reports": strategy_family_rows,
         "requirements": requirements,
@@ -337,6 +354,38 @@ def summarize_low_r_subset_walk_forward_report(path: Path, payload: dict[str, An
         "oos_total_net_pnl": summary.get("oos_total_net_pnl"),
         "oos_total_trades": summary.get("oos_total_trades"),
         "oos_min_year_win_rate": summary.get("oos_min_year_win_rate"),
+    }
+
+
+def summarize_tick_microstructure_report(path: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    target = payload.get("target") or {}
+    coverage = payload.get("coverage") or {}
+    selected = payload.get("selected_rule") or {}
+    decision = payload.get("decision") or {}
+    test = selected.get("test") or {}
+    passed = bool(decision.get("passed")) and bool(decision.get("live_ready"))
+    return {
+        "family": "tick_microstructure_filter",
+        "artifact": str(path),
+        "passed": passed,
+        "decision": {
+            **decision,
+            "objective_passed_but_not_live_ready": bool(decision.get("passed")) and not bool(decision.get("live_ready")),
+            "selected_rule": selected.get("name"),
+            "selected_test_win_rate": test.get("win_rate"),
+            "selected_test_trade_count": test.get("trade_count"),
+            "eligible_trade_count": coverage.get("eligible_trade_count"),
+        },
+        "reward_gate_passed": float(target.get("min_take_profit_r") or 0.0) >= 1.5,
+        "min_take_profit_r": target.get("min_take_profit_r"),
+        "method": {
+            "selection": (payload.get("method") or {}).get("selection"),
+            "scope": (payload.get("method") or {}).get("scope"),
+            "non_overfit_guardrail": (payload.get("method") or {}).get("non_overfit_guardrail"),
+        },
+        "oos_total_net_pnl": test.get("net_pnl"),
+        "oos_total_trades": test.get("trade_count"),
+        "oos_min_year_win_rate": test.get("win_rate"),
     }
 
 

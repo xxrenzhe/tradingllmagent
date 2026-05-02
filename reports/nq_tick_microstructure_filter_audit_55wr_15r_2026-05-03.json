@@ -1,0 +1,1009 @@
+{
+  "artifact": "nq_tick_microstructure_filter_audit_55wr_15r",
+  "baseline": {
+    "conditions": [],
+    "name": "no_filter",
+    "test": {
+      "avg_trade_net_pnl": 492.265625,
+      "first_entry_time": "2026-03-26T16:24:00",
+      "gate_passed": true,
+      "last_entry_time": "2026-04-23T19:06:00",
+      "net_pnl": 31505.0,
+      "trade_count": 64,
+      "win_rate": 0.609375,
+      "winning_trade_count": 39
+    },
+    "train": {
+      "avg_trade_net_pnl": 373.359375,
+      "first_entry_time": "2026-03-03T16:46:00",
+      "gate_passed": false,
+      "last_entry_time": "2026-03-26T16:23:00",
+      "net_pnl": 23895.0,
+      "trade_count": 64,
+      "win_rate": 0.53125,
+      "winning_trade_count": 34
+    }
+  },
+  "coverage": {
+    "eligible_trade_count": 128,
+    "first_entry_time": "2026-03-03T16:46:00",
+    "last_entry_time": "2026-04-23T19:06:00",
+    "microstructure_row_count": 128,
+    "missing_quote_count": 0,
+    "quote_file_count": 16,
+    "source_trade_count": 159
+  },
+  "decision": {
+    "live_ready": false,
+    "live_ready_reason": "This is a two-month tick-window diagnostic, not a multi-year walk-forward strategy with paper-readiness evidence.",
+    "passed": false,
+    "reason": "No train-selected entry-time MBP-1 filter passed the holdout 55% win-rate, trade-count, and positive-PnL gates."
+  },
+  "feature_diagnostics": {
+    "aligned_imbalance": {
+      "p25": -0.3333333333333333,
+      "p50": -0.0,
+      "p75": 0.2727272727272727
+    },
+    "diagnostic_adverse_1m_ticks": {
+      "p25": -31.0,
+      "p50": -1.5,
+      "p75": 30.5
+    },
+    "diagnostic_adverse_5m_ticks": {
+      "p25": -52.5,
+      "p50": -8.0,
+      "p75": 61.5
+    },
+    "entry_latency_ms": {
+      "p25": 1.176,
+      "p50": 3.196,
+      "p75": 6.4590000000000005
+    },
+    "pre_mid_move_10s_aligned": {
+      "p25": -6.5,
+      "p50": 4.5,
+      "p75": 20.0
+    },
+    "pre_mid_move_300s_aligned": {
+      "p25": 45.5,
+      "p50": 114.5,
+      "p75": 172.5
+    },
+    "pre_mid_move_60s_aligned": {
+      "p25": -5.0,
+      "p50": 25.0,
+      "p75": 60.0
+    },
+    "relevant_depth": {
+      "p25": 1.0,
+      "p50": 2.0,
+      "p75": 2.0
+    },
+    "spread_ticks": {
+      "p25": 2.0,
+      "p50": 3.0,
+      "p75": 3.0
+    }
+  },
+  "method": {
+    "candidate_features": [
+      "spread_ticks",
+      "relevant_depth",
+      "aligned_imbalance",
+      "pre_mid_move_10s_aligned",
+      "pre_mid_move_60s_aligned",
+      "pre_mid_move_300s_aligned"
+    ],
+    "candidate_rule_count": 108,
+    "eligible_trade_rule": "take_profit_r >= 1.5",
+    "non_overfit_guardrail": "Future adverse-selection and quote-arrival latency fields are reported as diagnostics only and are not used as filter inputs.",
+    "scope": "Only trades from the existing MBP-1 quote replay window are analyzed.",
+    "selection": "Candidate filters use only entry-time observable quote features; first half of trades selects the filter, second half is holdout.",
+    "train_test_split": {
+      "test_start_entry_time": "2026-03-26T16:24:00",
+      "train_end_entry_time": "2026-03-26T16:23:00"
+    }
+  },
+  "quote_replay_report": "reports/nq_expanded_high_edge_quote_replay_mbp1_full_2026-05-02.json",
+  "quote_replay_trades": "reports/nq_expanded_high_edge_quote_replay_mbp1_full_2026-05-02_trades.json",
+  "schema_version": 1,
+  "selected_rule": {
+    "conditions": [
+      {
+        "feature": "relevant_depth",
+        "op": ">=",
+        "value": 2.0
+      },
+      {
+        "feature": "aligned_imbalance",
+        "op": ">=",
+        "value": -0.14285714285714285
+      }
+    ],
+    "name": "relevant_depth >= 2 AND aligned_imbalance >= -0.142857",
+    "test": {
+      "avg_trade_net_pnl": 401.1111111111111,
+      "first_entry_time": "2026-03-26T16:24:00",
+      "gate_passed": false,
+      "last_entry_time": "2026-04-23T19:06:00",
+      "net_pnl": 7220.0,
+      "trade_count": 18,
+      "win_rate": 0.6111111111111112,
+      "winning_trade_count": 11
+    },
+    "train": {
+      "avg_trade_net_pnl": 565.3846153846154,
+      "first_entry_time": "2026-03-05T17:22:00",
+      "gate_passed": false,
+      "last_entry_time": "2026-03-13T15:58:00",
+      "net_pnl": 7350.0,
+      "trade_count": 13,
+      "win_rate": 0.6923076923076923,
+      "winning_trade_count": 9
+    }
+  },
+  "target": {
+    "min_take_profit_r": 1.5,
+    "min_test_trades": 30,
+    "min_train_trades": 30,
+    "min_win_rate": 0.55
+  },
+  "top_rules": [
+    {
+      "conditions": [
+        {
+          "feature": "relevant_depth",
+          "op": ">=",
+          "value": 2.0
+        },
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.14285714285714285
+        }
+      ],
+      "name": "relevant_depth >= 2 AND aligned_imbalance >= -0.142857",
+      "test": {
+        "avg_trade_net_pnl": 401.1111111111111,
+        "first_entry_time": "2026-03-26T16:24:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T19:06:00",
+        "net_pnl": 7220.0,
+        "trade_count": 18,
+        "win_rate": 0.6111111111111112,
+        "winning_trade_count": 11
+      },
+      "train": {
+        "avg_trade_net_pnl": 565.3846153846154,
+        "first_entry_time": "2026-03-05T17:22:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-13T15:58:00",
+        "net_pnl": 7350.0,
+        "trade_count": 13,
+        "win_rate": 0.6923076923076923,
+        "winning_trade_count": 9
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "spread_ticks",
+          "op": "<=",
+          "value": 3.0
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 28.5
+        }
+      ],
+      "name": "spread_ticks <= 3 AND pre_mid_move_10s_aligned >= 28.5",
+      "test": {
+        "avg_trade_net_pnl": 2070.0,
+        "first_entry_time": "2026-04-14T14:17:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-14T14:17:00",
+        "net_pnl": 2070.0,
+        "trade_count": 1,
+        "win_rate": 1.0,
+        "winning_trade_count": 1
+      },
+      "train": {
+        "avg_trade_net_pnl": 935.0,
+        "first_entry_time": "2026-03-03T16:51:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 11220.0,
+        "trade_count": 12,
+        "win_rate": 0.6666666666666666,
+        "winning_trade_count": 8
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "relevant_depth",
+          "op": ">=",
+          "value": 2.0
+        },
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.0
+        }
+      ],
+      "name": "relevant_depth >= 2 AND aligned_imbalance >= -0",
+      "test": {
+        "avg_trade_net_pnl": 401.1111111111111,
+        "first_entry_time": "2026-03-26T16:24:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T19:06:00",
+        "net_pnl": 7220.0,
+        "trade_count": 18,
+        "win_rate": 0.6111111111111112,
+        "winning_trade_count": 11
+      },
+      "train": {
+        "avg_trade_net_pnl": 423.3333333333333,
+        "first_entry_time": "2026-03-05T17:22:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-13T15:58:00",
+        "net_pnl": 5080.0,
+        "trade_count": 12,
+        "win_rate": 0.6666666666666666,
+        "winning_trade_count": 8
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": 0.2
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 10.5
+        }
+      ],
+      "name": "aligned_imbalance >= 0.2 AND pre_mid_move_10s_aligned >= 10.5",
+      "test": {
+        "avg_trade_net_pnl": 193.88888888888889,
+        "first_entry_time": "2026-03-27T14:40:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T18:50:00",
+        "net_pnl": 1745.0,
+        "trade_count": 9,
+        "win_rate": 0.4444444444444444,
+        "winning_trade_count": 4
+      },
+      "train": {
+        "avg_trade_net_pnl": 413.125,
+        "first_entry_time": "2026-03-05T17:25:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-24T15:17:00",
+        "net_pnl": 3305.0,
+        "trade_count": 8,
+        "win_rate": 0.625,
+        "winning_trade_count": 5
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.14285714285714285
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 28.5
+        }
+      ],
+      "name": "aligned_imbalance >= -0.142857 AND pre_mid_move_10s_aligned >= 28.5",
+      "test": {
+        "avg_trade_net_pnl": 638.3333333333334,
+        "first_entry_time": "2026-04-14T14:17:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T17:57:00",
+        "net_pnl": 1915.0,
+        "trade_count": 3,
+        "win_rate": 0.6666666666666666,
+        "winning_trade_count": 2
+      },
+      "train": {
+        "avg_trade_net_pnl": 829.2307692307693,
+        "first_entry_time": "2026-03-03T16:50:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 10780.0,
+        "trade_count": 13,
+        "win_rate": 0.6153846153846154,
+        "winning_trade_count": 8
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "spread_ticks",
+          "op": "<=",
+          "value": 3.0
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 10.5
+        }
+      ],
+      "name": "spread_ticks <= 3 AND pre_mid_move_10s_aligned >= 10.5",
+      "test": {
+        "avg_trade_net_pnl": 133.68421052631578,
+        "first_entry_time": "2026-03-26T16:26:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T18:50:00",
+        "net_pnl": 2540.0,
+        "trade_count": 19,
+        "win_rate": 0.47368421052631576,
+        "winning_trade_count": 9
+      },
+      "train": {
+        "avg_trade_net_pnl": 606.4,
+        "first_entry_time": "2026-03-03T16:51:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 15160.0,
+        "trade_count": 25,
+        "win_rate": 0.6,
+        "winning_trade_count": 15
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "spread_ticks",
+          "op": "<=",
+          "value": 3.0
+        },
+        {
+          "feature": "relevant_depth",
+          "op": ">=",
+          "value": 2.0
+        }
+      ],
+      "name": "spread_ticks <= 3 AND relevant_depth >= 2",
+      "test": {
+        "avg_trade_net_pnl": 532.0731707317074,
+        "first_entry_time": "2026-03-26T16:26:00",
+        "gate_passed": true,
+        "last_entry_time": "2026-04-23T19:06:00",
+        "net_pnl": 21815.0,
+        "trade_count": 41,
+        "win_rate": 0.6585365853658537,
+        "winning_trade_count": 27
+      },
+      "train": {
+        "avg_trade_net_pnl": 240.5,
+        "first_entry_time": "2026-03-03T16:48:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:23:00",
+        "net_pnl": 4810.0,
+        "trade_count": 20,
+        "win_rate": 0.6,
+        "winning_trade_count": 12
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 28.5
+        }
+      ],
+      "name": "pre_mid_move_10s_aligned >= 28.5",
+      "test": {
+        "avg_trade_net_pnl": 638.3333333333334,
+        "first_entry_time": "2026-04-14T14:17:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T17:57:00",
+        "net_pnl": 1915.0,
+        "trade_count": 3,
+        "win_rate": 0.6666666666666666,
+        "winning_trade_count": 2
+      },
+      "train": {
+        "avg_trade_net_pnl": 703.5294117647059,
+        "first_entry_time": "2026-03-03T16:49:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 11960.0,
+        "trade_count": 17,
+        "win_rate": 0.5882352941176471,
+        "winning_trade_count": 10
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "relevant_depth",
+          "op": ">=",
+          "value": 1.0
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 28.5
+        }
+      ],
+      "name": "relevant_depth >= 1 AND pre_mid_move_10s_aligned >= 28.5",
+      "test": {
+        "avg_trade_net_pnl": 638.3333333333334,
+        "first_entry_time": "2026-04-14T14:17:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T17:57:00",
+        "net_pnl": 1915.0,
+        "trade_count": 3,
+        "win_rate": 0.6666666666666666,
+        "winning_trade_count": 2
+      },
+      "train": {
+        "avg_trade_net_pnl": 703.5294117647059,
+        "first_entry_time": "2026-03-03T16:49:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 11960.0,
+        "trade_count": 17,
+        "win_rate": 0.5882352941176471,
+        "winning_trade_count": 10
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "relevant_depth",
+          "op": ">=",
+          "value": 2.0
+        }
+      ],
+      "name": "relevant_depth >= 2",
+      "test": {
+        "avg_trade_net_pnl": 566.1363636363636,
+        "first_entry_time": "2026-03-26T16:24:00",
+        "gate_passed": true,
+        "last_entry_time": "2026-04-23T19:06:00",
+        "net_pnl": 24910.0,
+        "trade_count": 44,
+        "win_rate": 0.6590909090909091,
+        "winning_trade_count": 29
+      },
+      "train": {
+        "avg_trade_net_pnl": 350.51724137931035,
+        "first_entry_time": "2026-03-03T16:48:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:23:00",
+        "net_pnl": 10165.0,
+        "trade_count": 29,
+        "win_rate": 0.5862068965517241,
+        "winning_trade_count": 17
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.0
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 28.5
+        }
+      ],
+      "name": "aligned_imbalance >= -0 AND pre_mid_move_10s_aligned >= 28.5",
+      "test": {
+        "avg_trade_net_pnl": 638.3333333333334,
+        "first_entry_time": "2026-04-14T14:17:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T17:57:00",
+        "net_pnl": 1915.0,
+        "trade_count": 3,
+        "win_rate": 0.6666666666666666,
+        "winning_trade_count": 2
+      },
+      "train": {
+        "avg_trade_net_pnl": 709.1666666666666,
+        "first_entry_time": "2026-03-03T16:50:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 8510.0,
+        "trade_count": 12,
+        "win_rate": 0.5833333333333334,
+        "winning_trade_count": 7
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.14285714285714285
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 10.5
+        }
+      ],
+      "name": "aligned_imbalance >= -0.142857 AND pre_mid_move_10s_aligned >= 10.5",
+      "test": {
+        "avg_trade_net_pnl": -76.66666666666667,
+        "first_entry_time": "2026-03-27T14:40:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T18:50:00",
+        "net_pnl": -1150.0,
+        "trade_count": 15,
+        "win_rate": 0.4666666666666667,
+        "winning_trade_count": 7
+      },
+      "train": {
+        "avg_trade_net_pnl": 570.5769230769231,
+        "first_entry_time": "2026-03-03T16:50:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 14835.0,
+        "trade_count": 26,
+        "win_rate": 0.5769230769230769,
+        "winning_trade_count": 15
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "relevant_depth",
+          "op": ">=",
+          "value": 2.0
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": -6.5
+        }
+      ],
+      "name": "relevant_depth >= 2 AND pre_mid_move_10s_aligned >= -6.5",
+      "test": {
+        "avg_trade_net_pnl": 423.19444444444446,
+        "first_entry_time": "2026-03-26T16:26:00",
+        "gate_passed": true,
+        "last_entry_time": "2026-04-23T18:51:00",
+        "net_pnl": 15235.0,
+        "trade_count": 36,
+        "win_rate": 0.6388888888888888,
+        "winning_trade_count": 23
+      },
+      "train": {
+        "avg_trade_net_pnl": 344.2857142857143,
+        "first_entry_time": "2026-03-03T16:49:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:23:00",
+        "net_pnl": 7230.0,
+        "trade_count": 21,
+        "win_rate": 0.5714285714285714,
+        "winning_trade_count": 12
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "relevant_depth",
+          "op": ">=",
+          "value": 2.0
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 28.5
+        }
+      ],
+      "name": "relevant_depth >= 2 AND pre_mid_move_10s_aligned >= 28.5",
+      "test": {
+        "avg_trade_net_pnl": 1445.0,
+        "first_entry_time": "2026-04-23T17:02:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T17:02:00",
+        "net_pnl": 1445.0,
+        "trade_count": 1,
+        "win_rate": 1.0,
+        "winning_trade_count": 1
+      },
+      "train": {
+        "avg_trade_net_pnl": 453.57142857142856,
+        "first_entry_time": "2026-03-03T16:49:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-20T14:09:00",
+        "net_pnl": 3175.0,
+        "trade_count": 7,
+        "win_rate": 0.5714285714285714,
+        "winning_trade_count": 4
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "relevant_depth",
+          "op": ">=",
+          "value": 2.0
+        },
+        {
+          "feature": "pre_mid_move_60s_aligned",
+          "op": ">=",
+          "value": 36.0
+        }
+      ],
+      "name": "relevant_depth >= 2 AND pre_mid_move_60s_aligned >= 36",
+      "test": {
+        "avg_trade_net_pnl": 510.8333333333333,
+        "first_entry_time": "2026-03-26T16:26:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T18:50:00",
+        "net_pnl": 6130.0,
+        "trade_count": 12,
+        "win_rate": 0.5833333333333334,
+        "winning_trade_count": 7
+      },
+      "train": {
+        "avg_trade_net_pnl": 357.1875,
+        "first_entry_time": "2026-03-05T17:20:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:23:00",
+        "net_pnl": 5715.0,
+        "trade_count": 16,
+        "win_rate": 0.5625,
+        "winning_trade_count": 9
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.0
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 10.5
+        }
+      ],
+      "name": "aligned_imbalance >= -0 AND pre_mid_move_10s_aligned >= 10.5",
+      "test": {
+        "avg_trade_net_pnl": -76.66666666666667,
+        "first_entry_time": "2026-03-27T14:40:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T18:50:00",
+        "net_pnl": -1150.0,
+        "trade_count": 15,
+        "win_rate": 0.4666666666666667,
+        "winning_trade_count": 7
+      },
+      "train": {
+        "avg_trade_net_pnl": 502.6,
+        "first_entry_time": "2026-03-03T16:50:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 12565.0,
+        "trade_count": 25,
+        "win_rate": 0.56,
+        "winning_trade_count": 14
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.14285714285714285
+        }
+      ],
+      "name": "aligned_imbalance >= -0.142857",
+      "test": {
+        "avg_trade_net_pnl": 363.55263157894734,
+        "first_entry_time": "2026-03-26T16:24:00",
+        "gate_passed": true,
+        "last_entry_time": "2026-04-23T19:06:00",
+        "net_pnl": 13815.0,
+        "trade_count": 38,
+        "win_rate": 0.5526315789473685,
+        "winning_trade_count": 21
+      },
+      "train": {
+        "avg_trade_net_pnl": 439.1666666666667,
+        "first_entry_time": "2026-03-03T16:46:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 21080.0,
+        "trade_count": 48,
+        "win_rate": 0.5416666666666666,
+        "winning_trade_count": 26
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "relevant_depth",
+          "op": ">=",
+          "value": 1.0
+        },
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.14285714285714285
+        }
+      ],
+      "name": "relevant_depth >= 1 AND aligned_imbalance >= -0.142857",
+      "test": {
+        "avg_trade_net_pnl": 363.55263157894734,
+        "first_entry_time": "2026-03-26T16:24:00",
+        "gate_passed": true,
+        "last_entry_time": "2026-04-23T19:06:00",
+        "net_pnl": 13815.0,
+        "trade_count": 38,
+        "win_rate": 0.5526315789473685,
+        "winning_trade_count": 21
+      },
+      "train": {
+        "avg_trade_net_pnl": 439.1666666666667,
+        "first_entry_time": "2026-03-03T16:46:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 21080.0,
+        "trade_count": 48,
+        "win_rate": 0.5416666666666666,
+        "winning_trade_count": 26
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": 10.5
+        },
+        {
+          "feature": "pre_mid_move_300s_aligned",
+          "op": ">=",
+          "value": 65.0
+        }
+      ],
+      "name": "pre_mid_move_10s_aligned >= 10.5 AND pre_mid_move_300s_aligned >= 65",
+      "test": {
+        "avg_trade_net_pnl": 620.4166666666666,
+        "first_entry_time": "2026-03-26T16:26:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T17:48:00",
+        "net_pnl": 7445.0,
+        "trade_count": 12,
+        "win_rate": 0.6666666666666666,
+        "winning_trade_count": 8
+      },
+      "train": {
+        "avg_trade_net_pnl": 342.9166666666667,
+        "first_entry_time": "2026-03-03T16:49:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 8230.0,
+        "trade_count": 24,
+        "win_rate": 0.5416666666666666,
+        "winning_trade_count": 13
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "spread_ticks",
+          "op": "<=",
+          "value": 3.0
+        },
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.14285714285714285
+        }
+      ],
+      "name": "spread_ticks <= 3 AND aligned_imbalance >= -0.142857",
+      "test": {
+        "avg_trade_net_pnl": 376.40625,
+        "first_entry_time": "2026-03-26T17:43:00",
+        "gate_passed": true,
+        "last_entry_time": "2026-04-23T19:06:00",
+        "net_pnl": 12045.0,
+        "trade_count": 32,
+        "win_rate": 0.5625,
+        "winning_trade_count": 18
+      },
+      "train": {
+        "avg_trade_net_pnl": 397.3076923076923,
+        "first_entry_time": "2026-03-03T16:51:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 15495.0,
+        "trade_count": 39,
+        "win_rate": 0.5384615384615384,
+        "winning_trade_count": 21
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "spread_ticks",
+          "op": "<=",
+          "value": 3.0
+        },
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.0
+        }
+      ],
+      "name": "spread_ticks <= 3 AND aligned_imbalance >= -0",
+      "test": {
+        "avg_trade_net_pnl": 376.40625,
+        "first_entry_time": "2026-03-26T17:43:00",
+        "gate_passed": true,
+        "last_entry_time": "2026-04-23T19:06:00",
+        "net_pnl": 12045.0,
+        "trade_count": 32,
+        "win_rate": 0.5625,
+        "winning_trade_count": 18
+      },
+      "train": {
+        "avg_trade_net_pnl": 397.3076923076923,
+        "first_entry_time": "2026-03-03T16:51:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 15495.0,
+        "trade_count": 39,
+        "win_rate": 0.5384615384615384,
+        "winning_trade_count": 21
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "spread_ticks",
+          "op": "<=",
+          "value": 3.0
+        },
+        {
+          "feature": "pre_mid_move_10s_aligned",
+          "op": ">=",
+          "value": -6.5
+        }
+      ],
+      "name": "spread_ticks <= 3 AND pre_mid_move_10s_aligned >= -6.5",
+      "test": {
+        "avg_trade_net_pnl": 518.0,
+        "first_entry_time": "2026-03-26T16:26:00",
+        "gate_passed": true,
+        "last_entry_time": "2026-04-23T18:51:00",
+        "net_pnl": 23310.0,
+        "trade_count": 45,
+        "win_rate": 0.6444444444444445,
+        "winning_trade_count": 29
+      },
+      "train": {
+        "avg_trade_net_pnl": 368.5897435897436,
+        "first_entry_time": "2026-03-03T16:51:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:23:00",
+        "net_pnl": 14375.0,
+        "trade_count": 39,
+        "win_rate": 0.5384615384615384,
+        "winning_trade_count": 21
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.14285714285714285
+        },
+        {
+          "feature": "pre_mid_move_300s_aligned",
+          "op": ">=",
+          "value": 179.5
+        }
+      ],
+      "name": "aligned_imbalance >= -0.142857 AND pre_mid_move_300s_aligned >= 179.5",
+      "test": {
+        "avg_trade_net_pnl": 170.625,
+        "first_entry_time": "2026-03-27T14:40:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T17:47:00",
+        "net_pnl": 1365.0,
+        "trade_count": 8,
+        "win_rate": 0.5,
+        "winning_trade_count": 4
+      },
+      "train": {
+        "avg_trade_net_pnl": 484.2307692307692,
+        "first_entry_time": "2026-03-03T16:47:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 6295.0,
+        "trade_count": 13,
+        "win_rate": 0.5384615384615384,
+        "winning_trade_count": 7
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.0
+        },
+        {
+          "feature": "pre_mid_move_300s_aligned",
+          "op": ">=",
+          "value": 179.5
+        }
+      ],
+      "name": "aligned_imbalance >= -0 AND pre_mid_move_300s_aligned >= 179.5",
+      "test": {
+        "avg_trade_net_pnl": 170.625,
+        "first_entry_time": "2026-03-27T14:40:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-04-23T17:47:00",
+        "net_pnl": 1365.0,
+        "trade_count": 8,
+        "win_rate": 0.5,
+        "winning_trade_count": 4
+      },
+      "train": {
+        "avg_trade_net_pnl": 484.2307692307692,
+        "first_entry_time": "2026-03-03T16:47:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 6295.0,
+        "trade_count": 13,
+        "win_rate": 0.5384615384615384,
+        "winning_trade_count": 7
+      }
+    },
+    {
+      "conditions": [
+        {
+          "feature": "aligned_imbalance",
+          "op": ">=",
+          "value": -0.0
+        }
+      ],
+      "name": "aligned_imbalance >= -0",
+      "test": {
+        "avg_trade_net_pnl": 363.55263157894734,
+        "first_entry_time": "2026-03-26T16:24:00",
+        "gate_passed": true,
+        "last_entry_time": "2026-04-23T19:06:00",
+        "net_pnl": 13815.0,
+        "trade_count": 38,
+        "win_rate": 0.5526315789473685,
+        "winning_trade_count": 21
+      },
+      "train": {
+        "avg_trade_net_pnl": 400.21276595744683,
+        "first_entry_time": "2026-03-03T16:46:00",
+        "gate_passed": false,
+        "last_entry_time": "2026-03-26T16:12:00",
+        "net_pnl": 18810.0,
+        "trade_count": 47,
+        "win_rate": 0.5319148936170213,
+        "winning_trade_count": 25
+      }
+    }
+  ]
+}

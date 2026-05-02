@@ -135,6 +135,15 @@ Low-R subset walk-forward search: `reports/low_r_15r_subset_walk_forward_55wr_20
 - Minimum test-year win rate: 41.35%, below the 55% fallback threshold.
 - 2025 also failed the trade-floor gate with 232 trades and 271 annualized trades.
 
+Tick microstructure filter audit: `reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json`.
+
+- Analyzed the 2-month Databento MBP-1 quote replay window only, using 128 trades with `take_profit_r >= 1.5`.
+- Candidate filters used entry-time observable quote features only: spread, top-level depth, aligned imbalance, and pre-entry mid moves.
+- Future adverse selection and quote-arrival latency were diagnostic-only and excluded from selection.
+- No train-selected filter passed both train and holdout gates with at least 30 trades.
+- The best train-ranked rule had 69.23% train win rate and 61.11% holdout win rate, but only 13 train trades and 18 holdout trades, below the trade-count floor.
+- Baseline no-filter holdout was profitable with 60.94% win rate, but the train half was 53.13%, so the 2-month tick window does not establish a robust train-selected strategy.
+
 The fallback remains below the acceptance threshold. It produces no candidate eligible for quote replay, paper shadow, or live promotion.
 
 ### Independent Signal Family Expansion

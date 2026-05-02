@@ -530,7 +530,7 @@
     "reward_gate_passed": true
   },
   "objective": "Fallback objective: find a 55%+ win-rate, 1.5R+, non-overfit, long-term profitable, live-ready strategy if the 70%/2R target cannot be found.",
-  "report_hash": "995178e292cc98d618f8202f811621ef673665ecdb82b2ba09864dd2c7f8bb41",
+  "report_hash": "8ba59e534a504359035ed5ca814afd7fdde4a97d5980d78ce36f43d49dfa096c",
   "requirements": [
     {
       "evidence": [
@@ -950,6 +950,10 @@
         {
           "artifact": "reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json",
           "forced_take_profit_r": 1.5
+        },
+        {
+          "artifact": "reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json",
+          "min_take_profit_r": 1.5
         }
       ],
       "gap": "Expanded searches forced 1.5R, but no full strategy family passes 55%/1.5R gates.",
@@ -1100,6 +1104,22 @@
           },
           "family": "low_r_15r_subset_walk_forward",
           "oos_min_year_win_rate": 0.4134529147982063
+        },
+        {
+          "artifact": "reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json",
+          "decision": {
+            "eligible_trade_count": 128,
+            "live_ready": false,
+            "live_ready_reason": "This is a two-month tick-window diagnostic, not a multi-year walk-forward strategy with paper-readiness evidence.",
+            "objective_passed_but_not_live_ready": false,
+            "passed": false,
+            "reason": "No train-selected entry-time MBP-1 filter passed the holdout 55% win-rate, trade-count, and positive-PnL gates.",
+            "selected_rule": "relevant_depth >= 2 AND aligned_imbalance >= -0.142857",
+            "selected_test_trade_count": 18,
+            "selected_test_win_rate": 0.6111111111111112
+          },
+          "family": "tick_microstructure_filter",
+          "oos_min_year_win_rate": 0.6111111111111112
         }
       ],
       "gap": "No relaxed strategy family passes the 55% win-rate gate.",
@@ -1505,6 +1525,26 @@
             ],
             "selection": "Train-only low-R subset selection per fold, exact-replayed on the next unseen test year."
           }
+        },
+        {
+          "artifact": "reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json",
+          "decision": {
+            "eligible_trade_count": 128,
+            "live_ready": false,
+            "live_ready_reason": "This is a two-month tick-window diagnostic, not a multi-year walk-forward strategy with paper-readiness evidence.",
+            "objective_passed_but_not_live_ready": false,
+            "passed": false,
+            "reason": "No train-selected entry-time MBP-1 filter passed the holdout 55% win-rate, trade-count, and positive-PnL gates.",
+            "selected_rule": "relevant_depth >= 2 AND aligned_imbalance >= -0.142857",
+            "selected_test_trade_count": 18,
+            "selected_test_win_rate": 0.6111111111111112
+          },
+          "family": "tick_microstructure_filter",
+          "method": {
+            "non_overfit_guardrail": "Future adverse-selection and quote-arrival latency fields are reported as diagnostics only and are not used as filter inputs.",
+            "scope": "Only trades from the existing MBP-1 quote replay window are analyzed.",
+            "selection": "Candidate filters use only entry-time observable quote features; first half of trades selects the filter, second half is holdout."
+          }
         }
       ],
       "gap": "The protocol is walk-forward, but no candidate survives all gates.",
@@ -1566,6 +1606,12 @@
           "failed_positive_years": [],
           "family": "low_r_15r_subset_walk_forward",
           "oos_total_net_pnl": 271807.5
+        },
+        {
+          "artifact": "reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json",
+          "failed_positive_years": [],
+          "family": "tick_microstructure_filter",
+          "oos_total_net_pnl": 7220.0
         }
       ],
       "gap": "Relaxed runs still have negative OOS years, no qualifying rows, or negative full-history PnL.",
@@ -1706,6 +1752,21 @@
             "passed": false,
             "positive_test_years": 4,
             "reason": "No train-only selected forced-1.5R low-R subset passed every next-year 55% win-rate, trade-floor, and positive-PnL gate."
+          },
+          "passed": false
+        },
+        {
+          "artifact": "reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json",
+          "decision": {
+            "eligible_trade_count": 128,
+            "live_ready": false,
+            "live_ready_reason": "This is a two-month tick-window diagnostic, not a multi-year walk-forward strategy with paper-readiness evidence.",
+            "objective_passed_but_not_live_ready": false,
+            "passed": false,
+            "reason": "No train-selected entry-time MBP-1 filter passed the holdout 55% win-rate, trade-count, and positive-PnL gates.",
+            "selected_rule": "relevant_depth >= 2 AND aligned_imbalance >= -0.142857",
+            "selected_test_trade_count": 18,
+            "selected_test_win_rate": 0.6111111111111112
           },
           "passed": false
         }
@@ -2659,8 +2720,60 @@
       "oos_total_trades": 4736,
       "passed": false,
       "reward_gate_passed": true
+    },
+    {
+      "artifact": "reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json",
+      "decision": {
+        "eligible_trade_count": 128,
+        "live_ready": false,
+        "live_ready_reason": "This is a two-month tick-window diagnostic, not a multi-year walk-forward strategy with paper-readiness evidence.",
+        "objective_passed_but_not_live_ready": false,
+        "passed": false,
+        "reason": "No train-selected entry-time MBP-1 filter passed the holdout 55% win-rate, trade-count, and positive-PnL gates.",
+        "selected_rule": "relevant_depth >= 2 AND aligned_imbalance >= -0.142857",
+        "selected_test_trade_count": 18,
+        "selected_test_win_rate": 0.6111111111111112
+      },
+      "family": "tick_microstructure_filter",
+      "method": {
+        "non_overfit_guardrail": "Future adverse-selection and quote-arrival latency fields are reported as diagnostics only and are not used as filter inputs.",
+        "scope": "Only trades from the existing MBP-1 quote replay window are analyzed.",
+        "selection": "Candidate filters use only entry-time observable quote features; first half of trades selects the filter, second half is holdout."
+      },
+      "min_take_profit_r": 1.5,
+      "oos_min_year_win_rate": 0.6111111111111112,
+      "oos_total_net_pnl": 7220.0,
+      "oos_total_trades": 18,
+      "passed": false,
+      "reward_gate_passed": true
     }
   ],
+  "tick_microstructure_report": {
+    "artifact": "reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json",
+    "decision": {
+      "eligible_trade_count": 128,
+      "live_ready": false,
+      "live_ready_reason": "This is a two-month tick-window diagnostic, not a multi-year walk-forward strategy with paper-readiness evidence.",
+      "objective_passed_but_not_live_ready": false,
+      "passed": false,
+      "reason": "No train-selected entry-time MBP-1 filter passed the holdout 55% win-rate, trade-count, and positive-PnL gates.",
+      "selected_rule": "relevant_depth >= 2 AND aligned_imbalance >= -0.142857",
+      "selected_test_trade_count": 18,
+      "selected_test_win_rate": 0.6111111111111112
+    },
+    "family": "tick_microstructure_filter",
+    "method": {
+      "non_overfit_guardrail": "Future adverse-selection and quote-arrival latency fields are reported as diagnostics only and are not used as filter inputs.",
+      "scope": "Only trades from the existing MBP-1 quote replay window are analyzed.",
+      "selection": "Candidate filters use only entry-time observable quote features; first half of trades selects the filter, second half is holdout."
+    },
+    "min_take_profit_r": 1.5,
+    "oos_min_year_win_rate": 0.6111111111111112,
+    "oos_total_net_pnl": 7220.0,
+    "oos_total_trades": 18,
+    "passed": false,
+    "reward_gate_passed": true
+  },
   "vol_report": {
     "artifact": "reports/nq_vol_execution_55wr_15r_objective_audit_2026-05-02.json",
     "decision": {

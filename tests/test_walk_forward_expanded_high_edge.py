@@ -362,6 +362,46 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         self.assertEqual(subset["decision"]["oos_min_year_win_rate"], 0.54)
         self.assertEqual(subset["method"]["selection"], "Train-only low-R subset selection per fold, exact-replayed on the next unseen test year.")
 
+    def test_relaxed_audit_rejects_tick_filter_without_live_readiness(self) -> None:
+        audit = build_relaxed_audit(
+            [
+                (
+                    Path("expanded.json"),
+                    {
+                        "method": {"take_profit_r_grid": [1.5]},
+                        "summary": {
+                            "decision": {"passed": False},
+                            "oos_total_net_pnl": -100.0,
+                            "oos_total_trades": 10,
+                            "oos_min_year_win_rate": 0.4,
+                        },
+                    },
+                )
+            ],
+            tick_microstructure_report=(
+                Path("tick.json"),
+                {
+                    "target": {"min_take_profit_r": 1.5},
+                    "coverage": {"eligible_trade_count": 128},
+                    "method": {
+                        "selection": "first half train, second half holdout",
+                        "scope": "two-month MBP-1 window",
+                        "non_overfit_guardrail": "latency excluded",
+                    },
+                    "selected_rule": {
+                        "name": "spread_ticks <= 3",
+                        "test": {"win_rate": 0.65, "trade_count": 40, "net_pnl": 1000.0},
+                    },
+                    "decision": {"passed": True, "live_ready": False},
+                },
+            ),
+        )
+
+        tick = next(row for row in audit["strategy_family_reports"] if row["family"] == "tick_microstructure_filter")
+        self.assertFalse(tick["passed"])
+        self.assertTrue(tick["decision"]["objective_passed_but_not_live_ready"])
+        self.assertIn("live_ready", audit["decision"]["failed_requirements"])
+
     def test_low_r_subset_walk_forward_summary_requires_all_test_gates(self) -> None:
         summary = summarize_low_r_subset_walk_forward(
             [
