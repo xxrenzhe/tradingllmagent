@@ -4,9 +4,17 @@ import unittest
 
 from scripts.walk_forward_expanded_high_edge import (
     build_walk_forward_specs,
+    cached_single_replay,
     parse_float_grid,
     parse_scan_type_counts,
 )
+from scripts.cached_walk_forward_expanded_high_edge import (
+    leaderboard_sort_key,
+    parse_int_grid,
+    parse_text_grid,
+)
+from scripts.search_expanded_high_edge_strategy import CandidateStats
+from tlm.low_r_regime_basket import LowRRegimeBasketConfig, RegimeEdge
 
 
 def _single(candidate_id: str, scan_type: str, avg_pnl: float) -> dict:
@@ -55,6 +63,92 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         )
 
         self.assertEqual(specs[0]["candidate_ids"], ("prior-1", "orb-1", "orb-2", "vwap-1"))
+
+    def test_cached_single_replay_reuses_existing_result(self) -> None:
+        stats = CandidateStats(
+            candidate_id="cached-edge",
+            group_level="scan_session_dow_trend",
+            scan_type="opening_range_breakout",
+            direction_label="long",
+            session_bucket="ny_0930_1159",
+            dow=1,
+            trend_bin=1,
+            volume_bin=None,
+            range_bin=None,
+            total_trades=100,
+            fixed_net_pnl=1000.0,
+            fixed_avg_pnl=10.0,
+            fixed_profit_factor=1.2,
+            fixed_positive_years=2,
+            fixed_worst_year_pnl=100.0,
+            fixed_min_full_year_trades=10,
+        )
+        edge = RegimeEdge(
+            scan_type="opening_range_breakout",
+            direction_label="long",
+            horizon_minutes=120,
+            session_bucket="ny_0930_1159",
+            dow=1,
+            trend_bin=1,
+            volume_bin=0,
+            range_bin=0,
+            take_profit_r=1.0,
+        )
+        params = {
+            "max_hold_minutes": 120,
+            "stop_range_multiple": 6.0,
+            "min_stop_points": 8.0,
+            "max_stop_points": 90.0,
+            "flatten_on_date_change": True,
+        }
+        cache = {
+            ((2019, 2020), "cached-edge", 1.0, tuple(sorted(params.items()))): {
+                "source_candidate_id": "cached-edge",
+                "source_stats": {},
+                "metrics": {"net_pnl": 123.0},
+            }
+        }
+
+        result = cached_single_replay(
+            cache=cache,
+            train_years=(2019, 2020),
+            candidate_id="cached-edge",
+            take_profit_r=1.0,
+            params=params,
+            stats=stats,
+            bars=[],
+            signals=[],
+            edge=edge,
+            config=LowRRegimeBasketConfig(),
+            coverage_days={},
+            min_full_year_trades=1000,
+        )
+
+        self.assertEqual(result["metrics"]["net_pnl"], 123.0)
+
+    def test_cached_grid_parsers_and_leaderboard_sort(self) -> None:
+        self.assertEqual(parse_int_grid("4, 8", option_name="--x"), (4, 8))
+        self.assertEqual(parse_text_grid("stress,floor", option_name="--profile"), ("stress", "floor"))
+        passed = {
+            "summary": {
+                "decision": {"passed": True, "positive_test_years": 6, "trade_floor_years": 6},
+                "oos_min_year_pnl": 10.0,
+                "oos_total_net_pnl": 100.0,
+                "oos_min_year_trade_floor_count": 1000.0,
+                "multiple_testing": {"effective_trial_count_floor": 10},
+            }
+        }
+        failed = {
+            "summary": {
+                "decision": {"passed": False, "positive_test_years": 5, "trade_floor_years": 6},
+                "oos_min_year_pnl": 1000.0,
+                "oos_total_net_pnl": 10000.0,
+                "oos_min_year_trade_floor_count": 2000.0,
+                "multiple_testing": {"effective_trial_count_floor": 1},
+            }
+        }
+
+        self.assertGreater(leaderboard_sort_key(passed), leaderboard_sort_key(failed))
 
 
 if __name__ == "__main__":

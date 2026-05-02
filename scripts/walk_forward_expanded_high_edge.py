@@ -201,6 +201,7 @@ def run_fold(
     min_full_year_trades: int,
     previous_ids: Sequence[str],
     cost_adjustment_usd: float,
+    single_replay_cache: dict[tuple[Any, ...], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     excluded = set(excluded_scan_types)
     raw_candidate_stats = [
@@ -234,20 +235,21 @@ def run_fold(
             best_single = None
             for take_profit_r in take_profit_r_grid:
                 edge = edge_from_stats(stats, take_profit_r)
-                result = replay_summary_result(
-                    label=stats.candidate_id,
-                    spec={"name": "walk_forward_single", "candidate_ids": (stats.candidate_id,)},
+                result = cached_single_replay(
+                    cache=single_replay_cache,
+                    train_years=train_years,
+                    candidate_id=stats.candidate_id,
+                    take_profit_r=take_profit_r,
+                    params=params,
+                    stats=stats,
                     bars=bars,
                     signals=train_signals,
-                    edges=(edge,),
+                    edge=edge,
                     config=config_from_params(base_config, {**params, "max_concurrent_positions": 1}),
                     coverage_days=coverage_days,
                     min_full_year_trades=min_full_year_trades,
-                    params={**params, "max_concurrent_positions": 1},
                 )
                 evaluated_single_count += 1
-                result["source_candidate_id"] = stats.candidate_id
-                result["source_stats"] = asdict(stats)
                 if best_single is None or single_train_sort_key(result, train_years, selection_profile) > single_train_sort_key(best_single, train_years, selection_profile):
                     best_single = result
             if best_single is not None:
@@ -349,6 +351,47 @@ def run_fold(
         "test_metrics": compact_metrics(test_result),
         "test_yearly_result": compact_year(test_result, test_year, coverage_days),
     }
+
+
+def cached_single_replay(
+    *,
+    cache: dict[tuple[Any, ...], dict[str, Any]] | None,
+    train_years: Sequence[int],
+    candidate_id: str,
+    take_profit_r: float,
+    params: dict[str, Any],
+    stats: CandidateStats,
+    bars: Sequence[dict[str, Any]],
+    signals: Sequence[dict[str, Any]],
+    edge: RegimeEdge,
+    config: LowRRegimeBasketConfig,
+    coverage_days: dict[int, int],
+    min_full_year_trades: int,
+) -> dict[str, Any]:
+    cache_key = (
+        tuple(int(year) for year in train_years),
+        candidate_id,
+        float(take_profit_r),
+        tuple(sorted(params.items())),
+    )
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
+    result = replay_summary_result(
+        label=candidate_id,
+        spec={"name": "walk_forward_single", "candidate_ids": (candidate_id,)},
+        bars=bars,
+        signals=signals,
+        edges=(edge,),
+        config=config,
+        coverage_days=coverage_days,
+        min_full_year_trades=min_full_year_trades,
+        params={**params, "max_concurrent_positions": 1},
+    )
+    result["source_candidate_id"] = candidate_id
+    result["source_stats"] = asdict(stats)
+    if cache is not None:
+        cache[cache_key] = result
+    return result
 
 
 def load_candidate_stats_for_years(

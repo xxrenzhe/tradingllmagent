@@ -98,6 +98,21 @@ The signal search was expanded with RSI and stochastic extreme reversals, moving
 
 This closes the obvious next attempt: adding independent bar-signal families increased the candidate group count, but it still did not produce a non-overfit 70% win-rate / 2R / cost-stressed strategy.
 
+### Cached Walk-Forward Grid Check
+
+Source: `reports/nq_expanded_high_edge_cached_walk_forward_grid_small_2026-05-02.json`
+
+A cached walk-forward grid runner was added so feature tables, signal tables, and single-edge train replays can be reused across profile/cap/slippage sweeps. A six-config grid over stress/floor profiles and 1x/2x/3x slippage was run with scan-family caps to avoid repeating the prior over-concentration failure mode.
+
+- Best cached-grid row: failed; 1x slippage, floor profile, positive years 5 of 6.
+- Failed positive year: 2022.
+- Failed trade-floor years: 2024 and 2025.
+- OOS total net PnL: 125,533.75.
+- OOS minimum year PnL: -60,235.00.
+- OOS trades: 8,333.
+
+The cached grid improves experiment throughput and makes future sweeps less redundant, but the best row still fails the non-overfit promotion gate and is not a 70% win-rate / 2R strategy.
+
 ## Black-Box Test Result
 
 Black-box execution replay is now available for the provided recent MBP-1 zip, but only for the two-month Databento window.

@@ -1,0 +1,927 @@
+{
+  "artifact": "cached_expanded_high_edge_walk_forward_grid",
+  "date_from": "2019-01-01",
+  "date_to": "2026-04-27",
+  "symbol": "NQ_CME",
+  "leaderboard": [
+    {
+      "config": {
+        "slippage_ticks_per_side": 1.0,
+        "selection_profile": "stress",
+        "max_preselect": 20,
+        "max_specs": 2,
+        "min_edge_count": 4,
+        "take_profit_r_grid": [
+          1.0
+        ],
+        "full_low_r_grid": false,
+        "max_scan_type_counts": {},
+        "min_scan_type_counts": {},
+        "excluded_scan_types": []
+      },
+      "summary": {
+        "decision": {
+          "passed": false,
+          "positive_test_years": 4,
+          "test_year_count": 6,
+          "trade_floor_years": 2,
+          "failed_positive_years": [
+            2025,
+            2026
+          ],
+          "failed_trade_floor_years": [
+            2023,
+            2024,
+            2025,
+            2026
+          ]
+        },
+        "oos_total_net_pnl": 194870.0,
+        "oos_min_year_pnl": -5775.0,
+        "oos_min_year_trades": 93,
+        "oos_min_year_trade_floor_count": 339.45,
+        "oos_total_trades": 3903,
+        "average_turnover_jaccard": 0.2633333333333333,
+        "min_turnover_jaccard": 0.2,
+        "multiple_testing": {
+          "candidate_group_count": 26148,
+          "evaluated_train_combo_count": 48,
+          "effective_trial_count_floor": 26196,
+          "penalty_decision": "fail",
+          "selection_bias_note": "Treat in-sample net PnL as rejected unless rolling OOS gates pass; statistical deflated Sharpe is not estimated because per-trial return paths are not persisted."
+        }
+      },
+      "folds": [
+        {
+          "train_years": [
+            2019,
+            2020
+          ],
+          "test_year": 2021,
+          "status": "ok",
+          "candidate_group_count": 20,
+          "evaluated_single_count": 20,
+          "evaluated_combo_count": 8,
+          "selection": {
+            "label": "walk_forward_stress_top_6",
+            "edge_count": 6,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 99
+            },
+            "edge_summary": {
+              "scan_types": {
+                "opening_range_breakout": 4,
+                "prior_day_breakout": 2
+              },
+              "take_profit_r": {
+                "1.0": 6
+              },
+              "sessions": {
+                "ny_0930_1159": 6
+              }
+            }
+          },
+          "selected_candidate_ids": [
+            "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=1",
+            "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1",
+            "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0|range=0",
+            "opening_range_breakout|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=0",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=0|range=0",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|trend=1|vol=2|range=0"
+          ],
+          "selected_edges": [
+            {
+              "scan_type": "opening_range_breakout",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": -1,
+              "volume_bin": 1,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "opening_range_breakout",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": -1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "opening_range_breakout",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": -1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "opening_range_breakout",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": -1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": -99,
+              "trend_bin": 1,
+              "volume_bin": 2,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            }
+          ],
+          "selected_edge_turnover": {
+            "jaccard_similarity": null,
+            "added_count": null,
+            "removed_count": null
+          },
+          "train_metrics": {
+            "trade_count": 2360,
+            "net_pnl": 213810.0,
+            "profit_factor": 1.2784999739488354,
+            "avg_trade_net_pnl": 90.59745762711864,
+            "max_drawdown": 138810.0,
+            "net_pnl_to_max_drawdown": 1.5403068943159715,
+            "win_rate": 0.5423728813559322
+          },
+          "test_metrics": {
+            "trade_count": 1098,
+            "net_pnl": 53760.0,
+            "profit_factor": 1.1034851153524095,
+            "avg_trade_net_pnl": 48.96174863387978,
+            "max_drawdown": 107980.0,
+            "net_pnl_to_max_drawdown": 0.4978699759214669,
+            "win_rate": 0.4936247723132969
+          },
+          "test_yearly_result": {
+            "year": 2021,
+            "trade_count": 1098,
+            "annualized_trade_count": 1098.0,
+            "coverage_days": 311,
+            "net_pnl": 53760.0,
+            "profit_factor": 1.1034851153524095,
+            "avg_trade_net_pnl": 48.96174863387978,
+            "max_drawdown": 107980.0
+          }
+        },
+        {
+          "train_years": [
+            2019,
+            2020,
+            2021
+          ],
+          "test_year": 2022,
+          "status": "ok",
+          "candidate_group_count": 20,
+          "evaluated_single_count": 20,
+          "evaluated_combo_count": 8,
+          "selection": {
+            "label": "walk_forward_stress_top_6",
+            "edge_count": 6,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 99
+            },
+            "edge_summary": {
+              "scan_types": {
+                "closing_drive_continuation": 1,
+                "low_volume_drift": 2,
+                "prior_day_breakout": 3
+              },
+              "take_profit_r": {
+                "1.0": 6
+              },
+              "sessions": {
+                "ny_0930_1159": 3,
+                "ny_1200_1559": 1,
+                "ny_1600_1759": 2
+              }
+            }
+          },
+          "selected_candidate_ids": [
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=0|range=0",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|trend=1|vol=2|range=0",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=0",
+            "low_volume_drift|dir=short|sess=ny_1600_1759|dow=4|trend=-1",
+            "low_volume_drift|dir=short|sess=ny_1600_1759|dow=4|trend=-1|vol=-1",
+            "closing_drive_continuation|dir=long|sess=ny_1200_1559|dow=5|trend=1|vol=0"
+          ],
+          "selected_edges": [
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": -99,
+              "trend_bin": 1,
+              "volume_bin": 2,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "low_volume_drift",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1600_1759",
+              "dow": 4,
+              "trend_bin": -1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "low_volume_drift",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1600_1759",
+              "dow": 4,
+              "trend_bin": -1,
+              "volume_bin": -1,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "closing_drive_continuation",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1200_1559",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            }
+          ],
+          "selected_edge_turnover": {
+            "jaccard_similarity": 0.2,
+            "added_count": 4,
+            "removed_count": 4
+          },
+          "train_metrics": {
+            "trade_count": 2429,
+            "net_pnl": 242440.0,
+            "profit_factor": 1.4642043387519865,
+            "avg_trade_net_pnl": 99.81062165500205,
+            "max_drawdown": 76760.0,
+            "net_pnl_to_max_drawdown": 3.1584158415841586,
+            "win_rate": 0.5537258130918074
+          },
+          "test_metrics": {
+            "trade_count": 1074,
+            "net_pnl": 65695.0,
+            "profit_factor": 1.1670480840135276,
+            "avg_trade_net_pnl": 61.16852886405959,
+            "max_drawdown": 69170.0,
+            "net_pnl_to_max_drawdown": 0.9497614572791673,
+            "win_rate": 0.5204841713221602
+          },
+          "test_yearly_result": {
+            "year": 2022,
+            "trade_count": 1074,
+            "annualized_trade_count": 1074.0,
+            "coverage_days": 310,
+            "net_pnl": 65695.0,
+            "profit_factor": 1.1670480840135276,
+            "avg_trade_net_pnl": 61.16852886405959,
+            "max_drawdown": 69170.0
+          }
+        },
+        {
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022
+          ],
+          "test_year": 2023,
+          "status": "ok",
+          "candidate_group_count": 20,
+          "evaluated_single_count": 20,
+          "evaluated_combo_count": 8,
+          "selection": {
+            "label": "walk_forward_stress_top_6",
+            "edge_count": 6,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 99
+            },
+            "edge_summary": {
+              "scan_types": {
+                "closing_drive_continuation": 1,
+                "prior_day_breakout": 3,
+                "range_expansion_continuation": 1,
+                "session_extreme_reversion": 1
+              },
+              "take_profit_r": {
+                "1.0": 6
+              },
+              "sessions": {
+                "ny_0930_1159": 5,
+                "ny_1200_1559": 1
+              }
+            }
+          },
+          "selected_candidate_ids": [
+            "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=3",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|trend=1|vol=2|range=0",
+            "session_extreme_reversion|dir=long|sess=ny_0930_1159|dow=4|trend=-1",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=0|range=0",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=0",
+            "closing_drive_continuation|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=2"
+          ],
+          "selected_edges": [
+            {
+              "scan_type": "range_expansion_continuation",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": -1,
+              "volume_bin": 3,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": -99,
+              "trend_bin": 1,
+              "volume_bin": 2,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "session_extreme_reversion",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 4,
+              "trend_bin": -1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "closing_drive_continuation",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1200_1559",
+              "dow": 1,
+              "trend_bin": 1,
+              "volume_bin": 2,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            }
+          ],
+          "selected_edge_turnover": {
+            "jaccard_similarity": 0.3333333333333333,
+            "added_count": 3,
+            "removed_count": 3
+          },
+          "train_metrics": {
+            "trade_count": 2817,
+            "net_pnl": 425655.0,
+            "profit_factor": 1.4750719882140226,
+            "avg_trade_net_pnl": 151.10223642172525,
+            "max_drawdown": 68715.0,
+            "net_pnl_to_max_drawdown": 6.1944990176817285,
+            "win_rate": 0.6059637912673056
+          },
+          "test_metrics": {
+            "trade_count": 807,
+            "net_pnl": 67575.0,
+            "profit_factor": 1.1916260208711433,
+            "avg_trade_net_pnl": 83.7360594795539,
+            "max_drawdown": 131845.0,
+            "net_pnl_to_max_drawdown": 0.5125336569456559,
+            "win_rate": 0.5786864931846345
+          },
+          "test_yearly_result": {
+            "year": 2023,
+            "trade_count": 807,
+            "annualized_trade_count": 807.0,
+            "coverage_days": 310,
+            "net_pnl": 67575.0,
+            "profit_factor": 1.1916260208711433,
+            "avg_trade_net_pnl": 83.7360594795539,
+            "max_drawdown": 131845.0
+          }
+        },
+        {
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "test_year": 2024,
+          "status": "ok",
+          "candidate_group_count": 20,
+          "evaluated_single_count": 20,
+          "evaluated_combo_count": 8,
+          "selection": {
+            "label": "walk_forward_stress_top_6",
+            "edge_count": 6,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 12
+            },
+            "edge_summary": {
+              "scan_types": {
+                "closing_drive_continuation": 1,
+                "ma_reacceleration": 1,
+                "prior_day_breakout": 3,
+                "range_expansion_continuation": 1
+              },
+              "take_profit_r": {
+                "1.0": 6
+              },
+              "sessions": {
+                "ny_0930_1159": 4,
+                "ny_1200_1559": 2
+              }
+            }
+          },
+          "selected_candidate_ids": [
+            "range_expansion_continuation|dir=short|sess=ny_0930_1159|dow=5|trend=-1|vol=3",
+            "prior_day_breakout|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=2|range=0",
+            "closing_drive_continuation|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=2",
+            "ma_reacceleration|dir=short|sess=ny_0930_1159|trend=-1|vol=3|range=3",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=1|range=0",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=0|range=-1"
+          ],
+          "selected_edges": [
+            {
+              "scan_type": "range_expansion_continuation",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": -1,
+              "volume_bin": 3,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1200_1559",
+              "dow": 1,
+              "trend_bin": 1,
+              "volume_bin": 2,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "closing_drive_continuation",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1200_1559",
+              "dow": 1,
+              "trend_bin": 1,
+              "volume_bin": 2,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "ma_reacceleration",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": -99,
+              "trend_bin": -1,
+              "volume_bin": 3,
+              "range_bin": 3,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 1,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 0,
+              "range_bin": -1,
+              "take_profit_r": 1.0
+            }
+          ],
+          "selected_edge_turnover": {
+            "jaccard_similarity": 0.2,
+            "added_count": 4,
+            "removed_count": 4
+          },
+          "train_metrics": {
+            "trade_count": 2102,
+            "net_pnl": 319240.0,
+            "profit_factor": 1.4828958016623934,
+            "avg_trade_net_pnl": 151.8744053282588,
+            "max_drawdown": 36050.0,
+            "net_pnl_to_max_drawdown": 8.855478502080445,
+            "win_rate": 0.6013320647002854
+          },
+          "test_metrics": {
+            "trade_count": 416,
+            "net_pnl": 17505.0,
+            "profit_factor": 1.0871958357201563,
+            "avg_trade_net_pnl": 42.07932692307692,
+            "max_drawdown": 36115.0,
+            "net_pnl_to_max_drawdown": 0.48470164751488304,
+            "win_rate": 0.5384615384615384
+          },
+          "test_yearly_result": {
+            "year": 2024,
+            "trade_count": 416,
+            "annualized_trade_count": 416.0,
+            "coverage_days": 313,
+            "net_pnl": 17505.0,
+            "profit_factor": 1.0871958357201563,
+            "avg_trade_net_pnl": 42.07932692307692,
+            "max_drawdown": 36115.0
+          }
+        },
+        {
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022,
+            2023,
+            2024
+          ],
+          "test_year": 2025,
+          "status": "ok",
+          "candidate_group_count": 20,
+          "evaluated_single_count": 20,
+          "evaluated_combo_count": 8,
+          "selection": {
+            "label": "walk_forward_stress_top_6",
+            "edge_count": 6,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 24
+            },
+            "edge_summary": {
+              "scan_types": {
+                "closing_drive_continuation": 1,
+                "ma_reacceleration": 1,
+                "prior_day_breakout": 3,
+                "vwap_pullback_bounce": 1
+              },
+              "take_profit_r": {
+                "1.0": 6
+              },
+              "sessions": {
+                "ny_0930_1159": 3,
+                "ny_1200_1559": 3
+              }
+            }
+          },
+          "selected_candidate_ids": [
+            "prior_day_breakout|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=2|range=0",
+            "closing_drive_continuation|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=2",
+            "ma_reacceleration|dir=short|sess=ny_0930_1159|trend=-1|vol=3|range=3",
+            "prior_day_breakout|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=1|range=2",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=2",
+            "vwap_pullback_bounce|dir=long|sess=ny_0930_1159|dow=5|trend=1|vol=0"
+          ],
+          "selected_edges": [
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1200_1559",
+              "dow": 1,
+              "trend_bin": 1,
+              "volume_bin": 2,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "closing_drive_continuation",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1200_1559",
+              "dow": 1,
+              "trend_bin": 1,
+              "volume_bin": 2,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "ma_reacceleration",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": -99,
+              "trend_bin": -1,
+              "volume_bin": 3,
+              "range_bin": 3,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1200_1559",
+              "dow": 1,
+              "trend_bin": 1,
+              "volume_bin": 1,
+              "range_bin": 2,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 2,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "vwap_pullback_bounce",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 5,
+              "trend_bin": 1,
+              "volume_bin": 0,
+              "range_bin": 0,
+              "take_profit_r": 1.0
+            }
+          ],
+          "selected_edge_turnover": {
+            "jaccard_similarity": 0.3333333333333333,
+            "added_count": 3,
+            "removed_count": 3
+          },
+          "train_metrics": {
+            "trade_count": 2247,
+            "net_pnl": 296345.0,
+            "profit_factor": 1.4399159788611127,
+            "avg_trade_net_pnl": 131.8847352024922,
+            "max_drawdown": 28965.0,
+            "net_pnl_to_max_drawdown": 10.231141032280338,
+            "win_rate": 0.5874499332443258
+          },
+          "test_metrics": {
+            "trade_count": 415,
+            "net_pnl": -5775.0,
+            "profit_factor": 0.9738006124532154,
+            "avg_trade_net_pnl": -13.91566265060241,
+            "max_drawdown": 38600.0,
+            "net_pnl_to_max_drawdown": -0.14961139896373057,
+            "win_rate": 0.5012048192771085
+          },
+          "test_yearly_result": {
+            "year": 2025,
+            "trade_count": 415,
+            "annualized_trade_count": 415.0,
+            "coverage_days": 312,
+            "net_pnl": -5775.0,
+            "profit_factor": 0.9738006124532154,
+            "avg_trade_net_pnl": -13.91566265060241,
+            "max_drawdown": 38600.0
+          }
+        },
+        {
+          "train_years": [
+            2019,
+            2020,
+            2021,
+            2022,
+            2023,
+            2024,
+            2025
+          ],
+          "test_year": 2026,
+          "status": "ok",
+          "candidate_group_count": 20,
+          "evaluated_single_count": 20,
+          "evaluated_combo_count": 8,
+          "selection": {
+            "label": "walk_forward_stress_top_4",
+            "edge_count": 4,
+            "params": {
+              "max_hold_minutes": 120,
+              "stop_range_multiple": 6.0,
+              "min_stop_points": 8.0,
+              "max_stop_points": 90.0,
+              "flatten_on_date_change": true,
+              "max_concurrent_positions": 6
+            },
+            "edge_summary": {
+              "scan_types": {
+                "ma_reacceleration": 1,
+                "opening_range_breakout": 1,
+                "prior_day_breakout": 2
+              },
+              "take_profit_r": {
+                "1.0": 4
+              },
+              "sessions": {
+                "ny_0930_1159": 2,
+                "ny_1200_1559": 2
+              }
+            }
+          },
+          "selected_candidate_ids": [
+            "ma_reacceleration|dir=short|sess=ny_0930_1159|trend=-1|vol=3|range=3",
+            "prior_day_breakout|dir=long|sess=ny_0930_1159|dow=2|trend=1|vol=1|range=-1",
+            "prior_day_breakout|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=1|range=2",
+            "opening_range_breakout|dir=long|sess=ny_1200_1559|dow=1|trend=1|vol=1|range=2"
+          ],
+          "selected_edges": [
+            {
+              "scan_type": "ma_reacceleration",
+              "direction_label": "short",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": -99,
+              "trend_bin": -1,
+              "volume_bin": 3,
+              "range_bin": 3,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_0930_1159",
+              "dow": 2,
+              "trend_bin": 1,
+              "volume_bin": 1,
+              "range_bin": -1,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "prior_day_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1200_1559",
+              "dow": 1,
+              "trend_bin": 1,
+              "volume_bin": 1,
+              "range_bin": 2,
+              "take_profit_r": 1.0
+            },
+            {
+              "scan_type": "opening_range_breakout",
+              "direction_label": "long",
+              "horizon_minutes": 120,
+              "session_bucket": "ny_1200_1559",
+              "dow": 1,
+              "trend_bin": 1,
+              "volume_bin": 1,
+              "range_bin": 2,
+              "take_profit_r": 1.0
+            }
+          ],
+          "selected_edge_turnover": {
+            "jaccard_similarity": 0.25,
+            "added_count": 2,
+            "removed_count": 4
+          },
+          "train_metrics": {
+            "trade_count": 1748,
+            "net_pnl": 215570.0,
+            "profit_factor": 1.3919027015234702,
+            "avg_trade_net_pnl": 123.32379862700229,
+            "max_drawdown": 33700.0,
+            "net_pnl_to_max_drawdown": 6.39673590504451,
+            "win_rate": 0.5766590389016019
+          },
+          "test_metrics": {
+            "trade_count": 93,
+            "net_pnl": -3890.0,
+            "profit_factor": 0.9306409913524115,
+            "avg_trade_net_pnl": -41.82795698924731,
+            "max_drawdown": 30400.0,
+            "net_pnl_to_max_drawdown": -0.12796052631578947,
+            "win_rate": 0.4946236559139785
+          },
+          "test_yearly_result": {
+            "year": 2026,
+            "trade_count": 93,
+            "annualized_trade_count": 339.45,
+            "coverage_days": 100,
+            "net_pnl": -3890.0,
+            "profit_factor": 0.9306409913524115,
+            "avg_trade_net_pnl": -41.82795698924731,
+            "max_drawdown": 30400.0
+          }
+        }
+      ]
+    }
+  ]
+}
