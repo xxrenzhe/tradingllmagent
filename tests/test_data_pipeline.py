@@ -6,6 +6,7 @@ import io
 import struct
 import tempfile
 import unittest
+import zipfile
 from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -378,6 +379,62 @@ class BarAndQualityTests(unittest.TestCase):
         self.assertEqual(first_rows, [("NQ_CME", datetime(2025, 3, 19, 13, 30), 20010.0, 20010.5, 20)])
         self.assertEqual(second_rows, [("NQ_CME", 20100.0, 20100.5, 30)])
         self.assertIn("instrument_id", output.getvalue())
+
+    def test_cli_import_databento_mbp1_zip_selects_active_outright_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            csv_path = Path(temp_dir) / "glbx-mdp3-20260427.mbp-1.csv"
+            csv_path.write_text(
+                "ts_recv,ts_event,rtype,publisher_id,instrument_id,action,side,depth,price,size,flags,"
+                "ts_in_delta,sequence,bid_px_00,ask_px_00,bid_sz_00,ask_sz_00,bid_ct_00,ask_ct_00,symbol\n"
+                "2026-04-27T13:30:00.000000000Z,2026-04-27T13:30:00.000000000Z,1,1,1,A,N,0,1,1,0,"
+                "0,1,27000.00,27000.25,1,1,1,1,NQM6\n"
+                "2026-04-27T13:30:01.000000000Z,2026-04-27T13:30:01.000000000Z,1,1,1,A,N,0,1,1,0,"
+                "0,2,27000.25,27000.50,2,3,1,1,NQM6\n"
+                "2026-04-27T13:30:02.000000000Z,2026-04-27T13:30:02.000000000Z,1,1,2,A,N,0,1,1,0,"
+                "0,3,27100.00,27100.25,1,1,1,1,NQU6\n"
+                "2026-04-27T13:30:03.000000000Z,2026-04-27T13:30:03.000000000Z,1,1,3,A,N,0,1,1,0,"
+                "0,4,1.00,2.00,1,1,1,1,NQM6-NQU6\n",
+                encoding="utf-8",
+            )
+            zip_path = Path(temp_dir) / "mbp1.zip"
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                archive.write(csv_path, arcname=csv_path.name)
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "data",
+                        "import-databento-mbp1",
+                        "--symbol",
+                        "NQ_CME",
+                        "--input",
+                        str(zip_path),
+                    ]
+                )
+
+            quote_path = data_root / "normalized" / "quotes" / "NQ_CME" / "date=2026-04-27" / "part-000.parquet"
+            con = duckdb.connect(":memory:")
+            try:
+                rows = con.execute(
+                    "SELECT symbol, timestamp, bid, ask, bid_size, ask_size FROM read_parquet(?) ORDER BY timestamp",
+                    [str(quote_path)],
+                ).fetchall()
+            finally:
+                con.close()
+
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            rows,
+            [
+                ("NQ_CME", datetime(2026, 4, 27, 13, 30), 27000.0, 27000.25, 1.0, 1.0),
+                ("NQ_CME", datetime(2026, 4, 27, 13, 30, 1), 27000.25, 27000.5, 2.0, 3.0),
+            ],
+        )
+        self.assertIn('"selected_contract": "NQM6"', output.getvalue())
 
     def test_iter_databento_ohlcv_filters_calendar_spreads(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

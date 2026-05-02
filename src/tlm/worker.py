@@ -22,7 +22,7 @@ from .monitor import build_monitor_report, write_monitor_outputs
 from .modules import build_target_frequency_pool, discover_module_memory_files, load_module_performance_memory
 from .paper import export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_bar_quality_report
-from .quotes import build_quote_execution_report, import_databento_quotes
+from .quotes import build_quote_execution_report, import_databento_mbp1_quotes, import_databento_quotes
 from .research import (
     StrategyTargetCriteria,
     discover_strategy_seed_specs,
@@ -111,6 +111,8 @@ def execute_task(task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return execute_data_import_databento_quotes(payload)
     if task_type == "data.import_databento_tbbo":
         return execute_data_import_databento_quotes(payload)
+    if task_type == "data.import_databento_mbp1":
+        return execute_data_import_databento_mbp1(payload)
     if task_type == "data.import_databento_ohlcv":
         return execute_data_import_databento_ohlcv(payload)
     if task_type == "data.quote_replay":
@@ -450,6 +452,23 @@ def execute_data_import_databento_quotes(payload: dict[str, Any]) -> dict[str, A
         symbol=symbol_alias,
         source_timezone=str(payload.get("source_timezone", "UTC")),
         force=bool(payload.get("force", False)),
+    )
+    return {"symbol": symbol_alias, "provider": symbol.provider, "outputs": outputs}
+
+
+def execute_data_import_databento_mbp1(payload: dict[str, Any]) -> dict[str, Any]:
+    config_dir = Path(payload.get("config_dir", "configs"))
+    data_root = Path(payload.get("data_root", "data"))
+    symbol_alias = _required(payload, "symbol")
+    symbol = get_symbol(symbol_alias, config_dir)
+    if symbol.provider.lower() != "databento":
+        raise ValueError(f"Symbol {symbol_alias} provider must be databento, got {symbol.provider}")
+    outputs = import_databento_mbp1_quotes(
+        paths=[Path(path) for path in _required_list(payload, "input", "inputs")],
+        data_root=data_root,
+        symbol=symbol_alias,
+        force=bool(payload.get("force", False)),
+        zip_member=payload.get("member"),
     )
     return {"symbol": symbol_alias, "provider": symbol.provider, "outputs": outputs}
 

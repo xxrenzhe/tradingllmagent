@@ -28,6 +28,8 @@ from tlm.expanded_high_edge import (
     expanded_high_edge_preset_spec,
 )
 from tlm.low_r_regime_basket import LowRRegimeBasketConfig, RegimeEdge, _json_default
+from tlm.quotes import build_quote_execution_report
+from tlm.config import get_symbol
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -46,6 +48,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--min-full-year-trades", type=int, default=1000)
     parser.add_argument("--output", type=Path, default=Path("reports/nq_expanded_high_edge_execution_stress_2026-05-01.json"))
+    parser.add_argument("--write-trades", action="store_true")
+    parser.add_argument("--quote-replay-output", type=Path)
+    parser.add_argument("--quote-replay-date-from")
+    parser.add_argument("--quote-replay-date-to")
+    parser.add_argument("--config-dir", default="configs")
     parser.add_argument("--fail-on-cost-stress", action="store_true")
     args = parser.parse_args(argv)
 
@@ -108,12 +115,40 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     quote_files = _execution_files(Path(args.data_root), "quotes", args.symbol)
     tick_files = _execution_files(Path(args.data_root), "ticks", args.symbol)
+    quote_replay = None
+    quote_replay_trades_path = None
+    if args.quote_replay_output:
+        replay_date_from = args.quote_replay_date_from or args.date_from
+        replay_date_to = args.quote_replay_date_to or args.date_to
+        quote_replay_trades_path = args.quote_replay_output.with_name(args.quote_replay_output.stem + "_trades.json")
+        quote_replay_trades = _quote_replay_trades(stress_results, replay_date_from, replay_date_to)
+        selected_quote_files = _execution_files_for_trade_dates(
+            Path(args.data_root),
+            "quotes",
+            args.symbol,
+            quote_replay_trades,
+        )
+        quote_replay_trades_path.parent.mkdir(parents=True, exist_ok=True)
+        quote_replay_trades_path.write_text(
+            json.dumps({"trades": quote_replay_trades}, indent=2, default=_json_default) + "\n",
+            encoding="utf-8",
+        )
+        symbol_config = get_symbol(args.symbol, Path(args.config_dir))
+        quote_replay = build_quote_execution_report(
+            backtest_result_path=quote_replay_trades_path,
+            quote_files=selected_quote_files,
+            symbol_config=symbol_config,
+            output_path=args.quote_replay_output,
+        )
     quote_status = {
-        "status": "blocked_no_quote_or_tick_files" if not quote_files and not tick_files else "available_not_consumed_by_this_stress_script",
+        "status": _quote_replay_status(quote_files, tick_files, quote_replay),
         "quote_file_count": len(quote_files),
         "tick_file_count": len(tick_files),
         "quote_sample": [str(path) for path in quote_files[:5]],
         "tick_sample": [str(path) for path in tick_files[:5]],
+        "replay_output": str(args.quote_replay_output) if args.quote_replay_output else None,
+        "replay_trades": str(quote_replay_trades_path) if quote_replay_trades_path else None,
+        "replay_summary": _quote_replay_summary(quote_replay) if quote_replay else None,
     }
     cost_stress_passed = all(row["decision"]["passed"] for row in stress_results)
     payload = {
@@ -130,12 +165,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "cost_stress_passed": cost_stress_passed,
         "stress_results": stress_results,
         "decision": {
-            "passed": cost_stress_passed and quote_status["status"] != "blocked_no_quote_or_tick_files",
+            "passed": cost_stress_passed and quote_status["status"] == "passed",
             "cost_stress_passed": cost_stress_passed,
-            "quote_replay_passed": quote_status["status"] != "blocked_no_quote_or_tick_files",
-            "reason": None if quote_status["status"] != "blocked_no_quote_or_tick_files" else "No normalized quote/tick parquet files are available locally.",
+            "quote_replay_passed": quote_status["status"] == "passed",
+            "reason": _decision_reason(cost_stress_passed, quote_status),
         },
     }
+    if not args.write_trades:
+        _strip_trades(payload)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, default=_json_default) + "\n", encoding="utf-8")
     print(json.dumps({"output": str(args.output), **payload["decision"]}, indent=2))
@@ -214,6 +251,11 @@ def _run_walk_forward_stress(
                 "profit_factor": row.get("profit_factor"),
                 "max_drawdown": row.get("max_drawdown"),
                 "yearly_result": row,
+                "trades": [
+                    trade
+                    for trade in result.get("trades", [])
+                    if _parse_year(trade.get("exit_time")) == test_year
+                ],
             }
         )
     decision = _fold_decision(fold_results, min_full_year_trades)
@@ -293,6 +335,7 @@ def _run_fixed_preset_stress(
         "edge_summary": result["edge_summary"],
         "exit_reasons": result["exit_reasons"],
         "yearly_results": result["yearly_results"],
+        "trades": result["trades"],
         "decision": decision,
     }
 
@@ -436,6 +479,105 @@ def _execution_files(data_root: Path, kind: str, symbol: str) -> list[Path]:
     if not root.exists():
         return []
     return sorted(path for path in root.glob("date=*/part-000.parquet") if path.is_file())
+
+
+def _execution_files_in_range(data_root: Path, kind: str, symbol: str, date_from: str, date_to: str) -> list[Path]:
+    return [
+        path
+        for path in _execution_files(data_root, kind, symbol)
+        if date_from <= _date_partition(path) <= date_to
+    ]
+
+
+def _execution_files_for_trade_dates(
+    data_root: Path,
+    kind: str,
+    symbol: str,
+    trades: Sequence[dict[str, Any]],
+) -> list[Path]:
+    trade_dates = {str(trade.get("entry_time", ""))[:10] for trade in trades}
+    trade_dates.update(str(trade.get("exit_time", ""))[:10] for trade in trades)
+    return [
+        path
+        for path in _execution_files(data_root, kind, symbol)
+        if _date_partition(path) in trade_dates
+    ]
+
+
+def _date_partition(path: Path) -> str:
+    for part in path.parts:
+        if part.startswith("date="):
+            return part.removeprefix("date=")
+    return ""
+
+
+def _quote_replay_status(
+    quote_files: Sequence[Path],
+    tick_files: Sequence[Path],
+    quote_replay: dict[str, Any] | None,
+) -> str:
+    if quote_replay:
+        return "passed" if int(quote_replay.get("validated_trade_count") or 0) > 0 else "failed_no_validated_trades"
+    if not quote_files and not tick_files:
+        return "blocked_no_quote_or_tick_files"
+    return "available_not_consumed_by_this_stress_script"
+
+
+def _quote_replay_summary(quote_replay: dict[str, Any]) -> dict[str, Any]:
+    models = quote_replay.get("execution_models") or {}
+    return {
+        "trade_count": quote_replay.get("trade_count"),
+        "validated_trade_count": quote_replay.get("validated_trade_count"),
+        "missed_fill_count": quote_replay.get("missed_fill_count"),
+        "avg_gross_pnl_delta": quote_replay.get("avg_gross_pnl_delta"),
+        "avg_bid_ask_cost_usd": quote_replay.get("avg_bid_ask_cost_usd"),
+        "market_order_bid_ask_replay": models.get("market_order_bid_ask_replay"),
+        "fixed_conservative": models.get("fixed_conservative"),
+        "latency": models.get("latency"),
+        "partial_fill": models.get("partial_fill"),
+        "limit_missed_fill": models.get("limit_missed_fill"),
+        "adverse_selection": models.get("adverse_selection"),
+    }
+
+
+def _quote_replay_trades(stress_results: Sequence[dict[str, Any]], date_from: str, date_to: str) -> list[dict[str, Any]]:
+    trades = []
+    for stress in stress_results:
+        if int(stress.get("stress_multiple") or 0) != 1:
+            continue
+        if stress.get("mode") == "walk_forward_oos":
+            for fold in stress.get("fold_results") or []:
+                trades.extend(fold.get("trades") or [])
+        else:
+            trades.extend(stress.get("trades") or [])
+    return [
+        {**trade, "contracts": int(trade.get("contracts") or 1)}
+        for trade in trades
+        if date_from <= str(trade.get("entry_time", ""))[:10] <= date_to
+    ]
+
+
+def _strip_trades(payload: dict[str, Any]) -> None:
+    for stress in payload.get("stress_results") or []:
+        stress.pop("trades", None)
+        for fold in stress.get("fold_results") or []:
+            fold.pop("trades", None)
+
+
+def _parse_year(value: Any) -> int | None:
+    if not value:
+        return None
+    return int(str(value)[:4])
+
+
+def _decision_reason(cost_stress_passed: bool, quote_status: dict[str, Any]) -> str | None:
+    if not cost_stress_passed:
+        return "Bar-level cost stress failed."
+    if quote_status["status"] == "blocked_no_quote_or_tick_files":
+        return "No normalized quote/tick parquet files are available locally."
+    if quote_status["status"] != "passed":
+        return "Quote/tick files were not consumed by a replay with validated trades."
+    return None
 
 
 if __name__ == "__main__":

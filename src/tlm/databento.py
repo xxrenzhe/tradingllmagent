@@ -354,7 +354,9 @@ def _decompression_command(path: Path, zip_member: str | None = None) -> list[st
         return ["zstdcat", str(path)]
     if path.suffix == ".zip":
         member = zip_member or _find_ohlcv_member(path)
-        return ["sh", "-c", "unzip -p \"$1\" \"$2\" | zstdcat", "sh", str(path), member]
+        if member.endswith(".zst"):
+            return ["sh", "-c", "unzip -p \"$1\" \"$2\" | zstdcat", "sh", str(path), member]
+        return ["unzip", "-p", str(path), member]
     raise ValueError(f"Unsupported Databento OHLCV input format: {path}")
 
 

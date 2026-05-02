@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import json
 import re
+import tempfile
+import zipfile
 from bisect import bisect_left
 from collections import defaultdict
 from dataclasses import dataclass
@@ -15,6 +17,16 @@ import duckdb
 
 from .config import SymbolConfig
 from .storage import normalized_quote_path, write_json, write_quotes_parquet
+
+
+MBP1_COLUMN_TYPES = {
+    "ts_event": "VARCHAR",
+    "bid_px_00": "DOUBLE",
+    "ask_px_00": "DOUBLE",
+    "bid_sz_00": "DOUBLE",
+    "ask_sz_00": "DOUBLE",
+    "symbol": "VARCHAR",
+}
 
 
 @dataclass(frozen=True)
@@ -71,6 +83,192 @@ def import_databento_quotes(
     return outputs
 
 
+def import_databento_mbp1_quotes(
+    paths: Sequence[Path],
+    data_root: Path,
+    symbol: str,
+    force: bool = False,
+    zip_member: str | None = None,
+) -> list[dict[str, Any]]:
+    outputs = []
+    for path in paths:
+        source_outputs = _import_databento_mbp1_source(Path(path), data_root, symbol, force, zip_member)
+        outputs.extend(source_outputs)
+    return outputs
+
+
+def _import_databento_mbp1_source(
+    path: Path,
+    data_root: Path,
+    symbol: str,
+    force: bool,
+    zip_member: str | None,
+) -> list[dict[str, Any]]:
+    members = _mbp1_members(path, zip_member)
+    outputs = []
+    for member in members:
+        outputs.extend(_import_databento_mbp1_member(path, data_root, symbol, force, member))
+    return outputs
+
+
+def _import_databento_mbp1_member(
+    path: Path,
+    data_root: Path,
+    symbol: str,
+    force: bool,
+    member: str | None,
+) -> list[dict[str, Any]]:
+    with tempfile.TemporaryDirectory(prefix="tlm_mbp1_") as temp_dir:
+        source = _prepare_mbp1_source(path, Path(temp_dir), member)
+        return _import_databento_mbp1_csv_with_duckdb(source, data_root, symbol, force, str(path), member)
+
+
+def _prepare_mbp1_source(path: Path, temp_dir: Path, member: str | None) -> Path:
+    if path.suffix == ".zip":
+        if not member:
+            raise ValueError(f"Databento MBP-1 zip import requires a member for source preparation: {path}")
+        output = temp_dir / Path(member).name
+        with zipfile.ZipFile(path) as archive:
+            with archive.open(member) as source, output.open("wb") as target:
+                target.write(source.read())
+        return output
+    return path
+
+
+def _import_databento_mbp1_csv_with_duckdb(
+    source: Path,
+    data_root: Path,
+    symbol: str,
+    force: bool,
+    source_label: str,
+    member: str | None,
+) -> list[dict[str, Any]]:
+    con = duckdb.connect(":memory:")
+    try:
+        member_day = _mbp1_member_day(member)
+        types_sql = "{" + ", ".join(f"'{name}': '{kind}'" for name, kind in MBP1_COLUMN_TYPES.items()) + "}"
+        source_sql = _sql_literal(str(source))
+        member_day_filter = f"AND day = CAST({_sql_literal(member_day.isoformat())} AS DATE)" if member_day else ""
+        con.execute(
+            f"""
+            CREATE TEMP TABLE source AS
+            SELECT
+                CAST(strptime(regexp_replace(CAST(ts_event AS VARCHAR), '(\\.\\d{{6}})\\d+Z$', '\\1Z'), '%Y-%m-%dT%H:%M:%S.%fZ') AS TIMESTAMP) AS timestamp,
+                CAST(CAST(strptime(regexp_replace(CAST(ts_event AS VARCHAR), '(\\.\\d{{6}})\\d+Z$', '\\1Z'), '%Y-%m-%dT%H:%M:%S.%fZ') AS TIMESTAMP) AS DATE) AS day,
+                CAST(symbol AS VARCHAR) AS raw_symbol,
+                CAST(bid_px_00 AS DOUBLE) AS bid,
+                CAST(ask_px_00 AS DOUBLE) AS ask,
+                CAST(bid_sz_00 AS DOUBLE) AS bid_size,
+                CAST(ask_sz_00 AS DOUBLE) AS ask_size
+            FROM read_csv(
+                {source_sql},
+                header=true,
+                union_by_name=true,
+                sample_size=100000,
+                types={types_sql}
+            )
+            WHERE regexp_matches(CAST(symbol AS VARCHAR), '^NQ[HMUZ][0-9]$')
+              AND CAST(bid_px_00 AS DOUBLE) > 0
+              AND CAST(ask_px_00 AS DOUBLE) > 0
+              {member_day_filter}
+            """
+        )
+        con.execute(
+            """
+            CREATE TEMP TABLE active_contract AS
+            SELECT day, raw_symbol
+            FROM (
+                SELECT
+                    day,
+                    raw_symbol,
+                    COUNT(*) AS row_count,
+                    SUM(GREATEST(bid_size, 0.0) + GREATEST(ask_size, 0.0)) AS size_sum,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY day
+                        ORDER BY COUNT(*) DESC, SUM(GREATEST(bid_size, 0.0) + GREATEST(ask_size, 0.0)) DESC, raw_symbol ASC
+                    ) AS rank
+                FROM source
+                GROUP BY day, raw_symbol
+            )
+            WHERE rank = 1
+            """
+        )
+        days = con.execute(
+            """
+            SELECT source.day, active_contract.raw_symbol, COUNT(*) AS row_count
+            FROM source
+            JOIN active_contract USING (day, raw_symbol)
+            GROUP BY source.day, active_contract.raw_symbol
+            ORDER BY source.day
+            """
+        ).fetchall()
+        outputs = []
+        for day_value, contract, row_count in days:
+            output = normalized_quote_path(data_root, symbol, day_value)
+            if output.exists() and output.stat().st_size > 0 and not force:
+                outputs.append(
+                    {
+                        "day": day_value.isoformat(),
+                        "path": str(output),
+                        "rows": 0,
+                        "status": "skipped_existing",
+                        "source": source_label,
+                        "member": member,
+                    }
+                )
+                continue
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output_sql = _sql_literal(str(output))
+            symbol_sql = _sql_literal(symbol)
+            day_sql = _sql_literal(day_value.isoformat())
+            con.execute(
+                f"""
+                COPY (
+                    SELECT
+                        {symbol_sql} AS symbol,
+                        timestamp,
+                        LEAST(bid, ask) AS bid,
+                        GREATEST(bid, ask) AS ask,
+                        bid_size,
+                        ask_size,
+                        (LEAST(bid, ask) + GREATEST(bid, ask)) / 2.0 AS mid,
+                        GREATEST(bid, ask) - LEAST(bid, ask) AS spread
+                    FROM source
+                    JOIN active_contract USING (day, raw_symbol)
+                    WHERE day = CAST({day_sql} AS DATE)
+                    ORDER BY timestamp
+                ) TO {output_sql} (FORMAT PARQUET)
+                """
+            )
+            outputs.append(
+                {
+                    "day": day_value.isoformat(),
+                    "path": str(output),
+                    "rows": int(row_count),
+                    "status": "written",
+                    "selected_contract": str(contract),
+                    "source": source_label,
+                    "member": member,
+                }
+            )
+        return outputs
+    finally:
+        con.close()
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _mbp1_member_day(member: str | None) -> date | None:
+    if not member:
+        return None
+    match = re.search(r"(\d{8})\.mbp-1\.csv(?:\.zst)?$", member)
+    if not match:
+        return None
+    return datetime.strptime(match.group(1), "%Y%m%d").date()
+
+
 def build_quote_execution_report(
     *,
     backtest_result_path: Path,
@@ -78,10 +276,18 @@ def build_quote_execution_report(
     symbol_config: SymbolConfig,
     output_path: Path | None = None,
     limit_timeout_seconds: int = 60,
+    latency_seconds: Sequence[int] = (0, 1, 5),
+    quote_window_seconds: int = 5,
 ) -> dict[str, Any]:
     backtest = json.loads(backtest_result_path.read_text(encoding="utf-8"))
     trades = backtest.get("trades", [])
-    quotes = load_quote_rows(quote_files)
+    windows = _quote_windows_for_trades(
+        trades,
+        limit_timeout_seconds=max(limit_timeout_seconds, 0),
+        latency_seconds=latency_seconds,
+        padding_seconds=max(quote_window_seconds, 0),
+    )
+    quotes = load_quote_rows(quote_files, windows=windows)
     timestamps = [quote["timestamp"] for quote in quotes]
     validations = []
     missed_fills = 0
@@ -91,6 +297,8 @@ def build_quote_execution_report(
     spread_costs = []
     conservative_gross_deltas = []
     missed_opportunity_costs = []
+    partial_fill_ratios = []
+    latency_model_values: dict[str, list[float]] = {str(seconds): [] for seconds in latency_seconds}
     adverse_selection: dict[str, list[float]] = {"1m": [], "3m": [], "5m": [], "15m": []}
     for trade in trades:
         entry_time = _parse_iso_datetime(trade["entry_time"])
@@ -110,6 +318,8 @@ def build_quote_execution_report(
         gross_delta = quote_gross_pnl - original_gross_pnl
         entry_spread_usd = entry_quote["spread"] * symbol_config.point_value * contracts
         exit_spread_usd = exit_quote["spread"] * symbol_config.point_value * contracts
+        partial_ratio = _top_level_fill_ratio(entry_quote, side, contracts)
+        partial_fill_ratios.append(partial_ratio)
         conservative_entry_price = entry_price + symbol_config.tick_size if side == "long" else entry_price - symbol_config.tick_size
         conservative_exit_price = exit_price - symbol_config.tick_size if side == "long" else exit_price + symbol_config.tick_size
         fixed_conservative_gross_pnl = _trade_pnl(
@@ -120,6 +330,42 @@ def build_quote_execution_report(
             symbol_config.point_value,
         )
         conservative_gross_deltas.append(fixed_conservative_gross_pnl - original_gross_pnl)
+        latency_payload = {}
+        for seconds in latency_seconds:
+            latency_entry = _first_quote_at_or_after(quotes, timestamps, entry_time + timedelta(seconds=max(seconds, 0)))
+            latency_exit = _first_quote_at_or_after(quotes, timestamps, exit_time + timedelta(seconds=max(seconds, 0)))
+            if latency_entry is None or latency_exit is None:
+                latency_payload[str(seconds)] = {"status": "missing_quote"}
+                continue
+            latency_entry_price = latency_entry["ask"] if side == "long" else latency_entry["bid"]
+            latency_exit_price = latency_exit["bid"] if side == "long" else latency_exit["ask"]
+            latency_gross_pnl = _trade_pnl(
+                side,
+                latency_entry_price,
+                latency_exit_price,
+                contracts,
+                symbol_config.point_value,
+            )
+            latency_delta = latency_gross_pnl - original_gross_pnl
+            latency_model_values[str(seconds)].append(latency_delta)
+            latency_payload[str(seconds)] = {
+                "status": "validated",
+                "entry_time": latency_entry["timestamp"].isoformat(),
+                "exit_time": latency_exit["timestamp"].isoformat(),
+                "gross_pnl": latency_gross_pnl,
+                "gross_pnl_delta": latency_delta,
+            }
+        adverse_ticks = _adverse_selection_ticks(
+            quotes,
+            timestamps,
+            entry_quote["timestamp"],
+            side,
+            entry_price,
+            symbol_config.tick_size,
+        )
+        for horizon, value in adverse_ticks.items():
+            if value is not None:
+                adverse_selection[horizon].append(value)
         limit_price = float(trade.get("entry_price", entry_price))
         limit_fill = _limit_fill_quote(
             quotes,
@@ -143,7 +389,7 @@ def build_quote_execution_report(
         else:
             limit_fills += 1
             fill_quote, fill_price = limit_fill
-            adverse_ticks = _adverse_selection_ticks(
+            limit_adverse_ticks = _adverse_selection_ticks(
                 quotes,
                 timestamps,
                 fill_quote["timestamp"],
@@ -151,9 +397,6 @@ def build_quote_execution_report(
                 fill_price,
                 symbol_config.tick_size,
             )
-            for horizon, value in adverse_ticks.items():
-                if value is not None:
-                    adverse_selection[horizon].append(value)
             limit_payload = {
                 "status": "filled_limit",
                 "limit_price": limit_price,
@@ -162,7 +405,7 @@ def build_quote_execution_report(
                 "bid_size": fill_quote["bid_size"],
                 "ask_size": fill_quote["ask_size"],
                 "top_level_size_sufficient": _top_level_size_sufficient(fill_quote, side, contracts),
-                "adverse_selection_ticks": adverse_ticks,
+                "adverse_selection_ticks": limit_adverse_ticks,
             }
         gross_deltas.append(gross_delta)
         spread_costs.append(entry_spread_usd + exit_spread_usd)
@@ -185,6 +428,9 @@ def build_quote_execution_report(
                 "fixed_conservative_gross_pnl_delta": fixed_conservative_gross_pnl - original_gross_pnl,
                 "entry_spread_usd": entry_spread_usd,
                 "exit_spread_usd": exit_spread_usd,
+                "top_level_fill_ratio": partial_ratio,
+                "latency": latency_payload,
+                "adverse_excursion_ticks": adverse_ticks,
                 "limit_order": limit_payload,
             }
         )
@@ -211,6 +457,21 @@ def build_quote_execution_report(
                 "extra_round_trip_ticks": 2,
                 "avg_gross_pnl_delta": _average(conservative_gross_deltas),
             },
+            "latency": {
+                str(seconds): {
+                    "delay_seconds": seconds,
+                    "sample_count": len(latency_model_values[str(seconds)]),
+                    "avg_gross_pnl_delta": _average(latency_model_values[str(seconds)]),
+                    "p05_gross_pnl_delta": _percentile(latency_model_values[str(seconds)], 0.05),
+                }
+                for seconds in latency_seconds
+            },
+            "partial_fill": {
+                "sample_count": len(partial_fill_ratios),
+                "full_top_level_fill_count": sum(1 for ratio in partial_fill_ratios if ratio >= 1.0),
+                "min_top_level_fill_ratio": min(partial_fill_ratios) if partial_fill_ratios else None,
+                "avg_top_level_fill_ratio": _average(partial_fill_ratios),
+            },
             "limit_missed_fill": {
                 "timeout_seconds": limit_timeout_seconds,
                 "filled_count": limit_fills,
@@ -234,10 +495,15 @@ def build_quote_execution_report(
     return report
 
 
-def load_quote_rows(quote_files: Sequence[Path]) -> list[dict[str, Any]]:
-    files = [str(path) for path in quote_files if path.exists()]
+def load_quote_rows(
+    quote_files: Sequence[Path],
+    windows: Sequence[tuple[datetime, datetime]] | None = None,
+) -> list[dict[str, Any]]:
+    files = [path for path in quote_files if path.exists()]
     if not files:
         return []
+    if windows:
+        return _load_quote_rows_by_file(files, windows)
     con = duckdb.connect(":memory:")
     try:
         rows = con.execute(
@@ -246,10 +512,56 @@ def load_quote_rows(quote_files: Sequence[Path]) -> list[dict[str, Any]]:
             FROM read_parquet(?)
             ORDER BY timestamp
             """,
-            [files],
+            [[str(path) for path in files]],
         ).fetchall()
     finally:
         con.close()
+    return _quote_rows_from_duckdb(rows)
+
+
+def _load_quote_rows_by_file(
+    quote_files: Sequence[Path],
+    windows: Sequence[tuple[datetime, datetime]],
+) -> list[dict[str, Any]]:
+    windows_by_day: dict[str, list[tuple[datetime, datetime]]] = defaultdict(list)
+    for start, end in windows:
+        current_day = start.date()
+        while current_day <= end.date():
+            day_start = datetime.combine(current_day, datetime.min.time())
+            day_end = datetime.combine(current_day, datetime.max.time())
+            windows_by_day[current_day.isoformat()].append((max(start, day_start), min(end, day_end)))
+            current_day += timedelta(days=1)
+
+    all_rows = []
+    for path in quote_files:
+        day_windows = windows_by_day.get(_date_partition(path))
+        if not day_windows:
+            continue
+        merged = _merge_quote_windows(day_windows)
+        clauses = []
+        params: list[Any] = [str(path)]
+        for start, end in merged:
+            clauses.append("(timestamp BETWEEN ? AND ?)")
+            params.extend([start, end])
+        con = duckdb.connect(":memory:")
+        try:
+            all_rows.extend(
+                con.execute(
+                    f"""
+                    SELECT symbol, timestamp, bid, ask, bid_size, ask_size, mid, spread
+                    FROM read_parquet(?)
+                    WHERE {" OR ".join(clauses)}
+                    ORDER BY timestamp
+                    """,
+                    params,
+                ).fetchall()
+            )
+        finally:
+            con.close()
+    return _quote_rows_from_duckdb(sorted(all_rows, key=lambda row: row[1]))
+
+
+def _quote_rows_from_duckdb(rows: Sequence[tuple]) -> list[dict[str, Any]]:
     return [
         {
             "symbol": row[0],
@@ -279,6 +591,23 @@ def _parse_quote_row(row: dict[str, str], timezone: ZoneInfo) -> Quote:
         bid_size=_first_float(normalized, ("bid_size", "bid_sz_00", "bid_qty", "best_bid_size"), default=0.0),
         ask_size=_first_float(normalized, ("ask_size", "ask_sz_00", "ask_qty", "best_ask_size"), default=0.0),
     )
+
+
+def _mbp1_members(path: Path, zip_member: str | None) -> list[str | None]:
+    if path.suffix == ".zip":
+        import zipfile
+
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+        if zip_member:
+            if zip_member not in names:
+                raise ValueError(f"Databento MBP-1 zip member not found: {zip_member}")
+            return [zip_member]
+        members = sorted(name for name in names if name.endswith(".mbp-1.csv.zst") or name.endswith(".mbp-1.csv"))
+        if not members:
+            raise ValueError(f"No Databento MBP-1 CSV members found in {path}")
+        return members
+    return [zip_member]
 
 
 def _normalize_header(value: str) -> str:
@@ -340,6 +669,61 @@ def _parse_iso_datetime(value: str) -> datetime:
     return parsed
 
 
+def _quote_windows_for_trades(
+    trades: Sequence[dict[str, Any]],
+    *,
+    limit_timeout_seconds: int,
+    latency_seconds: Sequence[int],
+    padding_seconds: int,
+) -> list[tuple[datetime, datetime]]:
+    windows = []
+    for trade in trades:
+        entry_time = _parse_iso_datetime(trade["entry_time"])
+        exit_time = _parse_iso_datetime(trade["exit_time"])
+        windows.append(
+            (
+                entry_time - timedelta(seconds=padding_seconds),
+                entry_time + timedelta(seconds=limit_timeout_seconds + 900 + padding_seconds),
+            )
+        )
+        event_offsets = {0, limit_timeout_seconds, 60, 180, 300, 900, *latency_seconds}
+        for offset in event_offsets:
+            event_time = entry_time + timedelta(seconds=max(offset, 0))
+            windows.append(
+                (
+                    event_time - timedelta(seconds=padding_seconds),
+                    event_time + timedelta(seconds=padding_seconds),
+                )
+            )
+        for offset in {0, *latency_seconds}:
+            event_time = exit_time + timedelta(seconds=max(offset, 0))
+            windows.append(
+                (
+                    event_time - timedelta(seconds=padding_seconds),
+                    event_time + timedelta(seconds=padding_seconds),
+                )
+            )
+    return windows
+
+
+def _merge_quote_windows(windows: Sequence[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
+    merged = []
+    for start, end in sorted(windows):
+        if not merged or start > merged[-1][1]:
+            merged.append([start, end])
+            continue
+        if end > merged[-1][1]:
+            merged[-1][1] = end
+    return [(start, end) for start, end in merged]
+
+
+def _date_partition(path: Path) -> str:
+    for part in path.parts:
+        if part.startswith("date="):
+            return part.removeprefix("date=")
+    return ""
+
+
 def _first_quote_at_or_after(
     quotes: Sequence[dict[str, Any]],
     timestamps: Sequence[datetime],
@@ -374,6 +758,14 @@ def _top_level_size_sufficient(quote: dict[str, Any], side: str, contracts: int)
     if side == "long":
         return float(quote.get("ask_size") or 0.0) >= contracts
     return float(quote.get("bid_size") or 0.0) >= contracts
+
+
+def _top_level_fill_ratio(quote: dict[str, Any], side: str, contracts: int) -> float:
+    if contracts <= 0:
+        return 0.0
+    size_key = "ask_size" if side == "long" else "bid_size"
+    available = float(quote.get(size_key) or 0.0)
+    return min(max(available, 0.0) / contracts, 1.0)
 
 
 def _adverse_selection_ticks(

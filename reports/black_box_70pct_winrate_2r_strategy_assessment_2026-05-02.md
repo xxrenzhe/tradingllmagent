@@ -7,7 +7,7 @@ Symbol scope: NQ_CME / MNQ execution path
 
 No strategy in the current evidence set should be promoted as "70% win rate at 2R, non-overfit, live-ready, long-term profitable, black-box tested."
 
-The strongest validated candidates in this repository support a weaker claim: there are NQ strategy families with positive walk-forward or cost-stressed bar-replay evidence, but they do not meet the requested 70% win-rate and 2R profile, and local quote/tick replay evidence is absent.
+The strongest validated candidates in this repository support a weaker claim: there are NQ strategy families with positive walk-forward or cost-stressed bar-replay evidence, but they do not meet the requested 70% win-rate and 2R profile. The provided Databento MBP-1 zip has now been normalized and replayed for the available two-month tick/quote window, but that replay does not rescue the failed 70%/2R/live-readiness gate.
 
 ## Acceptance Gates
 
@@ -46,9 +46,9 @@ Source: `reports/nq_expanded_high_edge_cap24_fixed_execution_stress_2026-05-02.j
 - Stress 2x: net PnL 5,039,371.25, win rate 51.01%, profit factor 1.2715.
 - Stress 3x: net PnL 4,706,991.25, win rate 50.79%, profit factor 1.2514.
 - Cost-stress gate: passed.
-- Quote/tick replay gate: failed because no normalized local quote/tick parquet files are available.
+- Quote/tick replay gate: not proven for this full-history fixed candidate by the current MBP-1 replay, because the available zip only covers 2026-03-03 to 2026-05-01.
 
-This candidate is profitable under bar-based cost stress, but it is not 70% win rate, not 2R, and not black-box quote-replay validated.
+This candidate is profitable under bar-based cost stress, but it is not 70% win rate and not 2R.
 
 ### SMC LQEM Balanced R2 Candidate
 
@@ -81,15 +81,37 @@ This directly addresses the available `data/bars` evidence: even before quote/ti
 
 ## Black-Box Test Result
 
-Black-box execution replay is blocked in the current workspace.
+Black-box execution replay is now available for the provided recent MBP-1 zip, but only for the two-month Databento window.
 
-Both execution-stress reports record:
+Source: `data/raw/databento/GLBX-20260502-QG6TRKVV9Q.zip`
 
-- `quote_file_count`: 0
-- `tick_file_count`: 0
-- `quote_replay.status`: `blocked_no_quote_or_tick_files`
+Normalized quote output:
 
-Without quote/tick files, the repository can stress bar-based fills but cannot prove adverse queue position, spread crossing, or quote-level fill realism. That means "directly live-ready" is not substantiated.
+- Output root: `data/normalized/quotes/NQ_CME`
+- Date coverage: 2026-03-03 to 2026-05-01.
+- Databento MBP-1 members processed: 52.
+- Normalized quote rows: 505,942,666.
+
+Execution replay source: `reports/nq_expanded_high_edge_execution_stress_mbp1_full_2026-05-02.json`
+
+- Strategy window replayed: 2026-03-03 to 2026-05-01.
+- Candidate trades in this tick window: 159.
+- Quote replay status: passed for available trades.
+- Validated trades: 159 of 159.
+- Missed quote fills: 0.
+- 60-second limit-fill model: 156 filled, 3 missed, 98.11% fill rate.
+- Top-of-book size model: 159 of 159 full top-level fills, minimum fill ratio 1.0.
+- Latency model: 0s, 1s, and 5s delay scenarios were replayed.
+- Adverse excursion model: 1m, 3m, 5m, and 15m horizons were replayed.
+
+The same report still fails overall promotion:
+
+- 1x bar stress: 159 trades, net PnL 10,435.00, failed full walk-forward cost-stress gate.
+- 2x bar stress: 159 trades, net PnL 8,845.00, failed full walk-forward cost-stress gate.
+- 3x bar stress: 159 trades, net PnL 7,255.00, failed full walk-forward cost-stress gate.
+- Decision: `passed: false`, `cost_stress_passed: false`, `quote_replay_passed: true`.
+
+This removes the prior "no quote/tick files" blocker for the recent Databento window, but it does not create a live-ready 70% win-rate, 2R strategy. The strict 2R walk-forward evidence already fails, and the recent MBP-1 replay covers only 159 trades in 2026, not the full 2019-2026 out-of-sample history.
 
 ## Practical Strategy Boundary
 
@@ -97,7 +119,7 @@ The only defensible live-facing posture from current evidence is:
 
 - Use `expanded_high_edge_cap24` only as a paper-trading candidate, not a real-money guarantee.
 - Trade MNQ first, not NQ, until paper execution slippage and broker fills match assumptions.
-- Require a new quote/tick replay pass before production promotion.
+- Require quote/tick replay coverage across any future promotion window, not just the recent two-month Databento sample.
 - Reject any 70% win-rate at 2R claim unless it passes a locked walk-forward protocol and independent execution replay.
 
 Suggested paper gate:
@@ -113,4 +135,4 @@ Suggested paper gate:
 
 The requested deliverable cannot honestly be produced from the current repository evidence. A 70% win-rate, 2R, non-overfit, black-box-tested, live-ready strategy is not present.
 
-The engineering-valid output is a rejection of promotion plus a concrete next step: import normalized quote/tick data, run quote-level execution replay, then search only within a locked train/test protocol where 2R and 70% win rate are hard acceptance gates rather than optimization targets.
+The engineering-valid output is a rejection of promotion plus a concrete next step: search only within a locked train/test protocol where 2R and 70% win rate are hard acceptance gates, then require quote/tick replay across the final holdout before paper/live promotion.

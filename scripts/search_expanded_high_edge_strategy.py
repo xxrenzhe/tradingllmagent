@@ -946,6 +946,7 @@ def replay_result(
         "yearly_results": yearly,
         "constraints": constraint_summary(yearly, min_full_year_trades, coverage_days),
         "edges": [asdict(edge) for edge in edges],
+        "trades": result["trades"],
     }
 
 

@@ -52,7 +52,7 @@ from .modules import (
 )
 from .paper import build_paper_replay_attribution, export_ninjatrader_signals, load_backtest_result, replay_trades
 from .quality import build_bar_quality_report, build_quality_report
-from .quotes import build_quote_execution_report, import_databento_quotes
+from .quotes import build_quote_execution_report, import_databento_mbp1_quotes, import_databento_quotes
 from .profit_mining import mine_databento_nq_profitable_strategies
 from .research import (
     StrategyTargetCriteria,
@@ -258,6 +258,21 @@ def cmd_data_import_databento_quotes(args: argparse.Namespace) -> int:
         symbol=args.symbol,
         source_timezone=args.source_timezone,
         force=args.force,
+    )
+    print(json.dumps({"symbol": args.symbol, "outputs": outputs}, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_data_import_databento_mbp1(args: argparse.Namespace) -> int:
+    symbol = get_symbol(args.symbol, Path(args.config_dir))
+    if symbol.provider.lower() != "databento":
+        raise SystemExit(f"Symbol {args.symbol} provider must be databento, got {symbol.provider}")
+    outputs = import_databento_mbp1_quotes(
+        paths=[Path(path) for path in args.input],
+        data_root=Path(args.data_root),
+        symbol=args.symbol,
+        force=args.force,
+        zip_member=args.member,
     )
     print(json.dumps({"symbol": args.symbol, "outputs": outputs}, indent=2, sort_keys=True))
     return 0
@@ -1414,6 +1429,13 @@ def build_parser() -> argparse.ArgumentParser:
     import_databento_quotes.add_argument("--source-timezone", default="UTC")
     import_databento_quotes.add_argument("--force", action="store_true")
     import_databento_quotes.set_defaults(func=cmd_data_import_databento_quotes)
+
+    import_databento_mbp1 = data_subparsers.add_parser("import-databento-mbp1")
+    import_databento_mbp1.add_argument("--symbol", required=True)
+    import_databento_mbp1.add_argument("--input", action="append", required=True)
+    import_databento_mbp1.add_argument("--member")
+    import_databento_mbp1.add_argument("--force", action="store_true")
+    import_databento_mbp1.set_defaults(func=cmd_data_import_databento_mbp1)
 
     import_databento_ohlcv = data_subparsers.add_parser("import-databento-ohlcv")
     import_databento_ohlcv.add_argument("--symbol", required=True)
