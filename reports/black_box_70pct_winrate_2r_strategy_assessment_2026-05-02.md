@@ -122,7 +122,16 @@ Reversal extension: `reports/nq_mbp1_microstructure_2r_reversal_search_2026-05-0
 - Holdout result: 627 trades, 30.94% win rate, net PnL -$29,545.00.
 - Gate result: failed; reversal improves train PnL but fails the holdout win-rate and profitability gates.
 
-This closes a separate tick-data path: direct MBP-1 continuation and reversal microstructure mining also do not produce the requested 70%/2R candidate.
+Medium-grid specificity search: `reports/nq_mbp1_microstructure_2r_medium_specific_search_2026-05-03.json`.
+
+- Added cached one-second MBP-1 snapshots to avoid repeatedly scanning the full 505,942,666 normalized quote rows.
+- Evaluated the 200 most specific medium-grid continuation/reversal specs.
+- Best train-ranked spec: short continuation, aligned imbalance >= 0.25, 48-tick stop, 96-tick target.
+- Train result: 110 trades, 47.27% win rate, net PnL $7,585.00.
+- Holdout result: 320 trades, 31.88% win rate, net PnL -$11,035.00.
+- Gate result: failed; still far below the requested 70% win-rate and positive holdout gates.
+
+This closes a separate tick-data path: direct MBP-1 continuation, reversal, and stricter medium-grid microstructure mining also do not produce the requested 70%/2R candidate.
 
 ### Relaxed 55% Win-Rate / 1.5R Fallback Gate
 

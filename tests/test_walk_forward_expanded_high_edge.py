@@ -280,6 +280,16 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
                     },
                     "decision": {"passed": False},
                 },
+                "mbp1_microstructure_2r_medium": {
+                    "target": {"reward_r": 2.0, "min_win_rate": 0.70},
+                    "coverage": {"second_quote_count": 1000},
+                    "selected": {
+                        "spec": {"mode": "continuation", "direction": "short"},
+                        "train": {"win_rate": 0.47, "trade_count": 110, "gate_passed": False},
+                        "test": {"win_rate": 0.32, "trade_count": 320, "gate_passed": False},
+                    },
+                    "decision": {"passed": False},
+                },
                 "assessment": "reject promotion",
             }
         )
@@ -288,8 +298,9 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         self.assertIn("black_box_tick_test", [row["id"] for row in audit["requirements"] if row["passed"]])
         self.assertIn("win_rate_70pct", audit["decision"]["failed_requirements"])
         win_rate_requirement = next(row for row in audit["requirements"] if row["id"] == "win_rate_70pct")
-        self.assertEqual(win_rate_requirement["evidence"][-2]["finding"]["selected_test"]["win_rate"], 0.30)
-        self.assertEqual(win_rate_requirement["evidence"][-1]["finding"]["selected_spec"]["mode"], "reversal")
+        self.assertEqual(win_rate_requirement["evidence"][-3]["finding"]["selected_test"]["win_rate"], 0.30)
+        self.assertEqual(win_rate_requirement["evidence"][-2]["finding"]["selected_spec"]["mode"], "reversal")
+        self.assertEqual(win_rate_requirement["evidence"][-1]["finding"]["selected_test"]["win_rate"], 0.32)
 
     def test_relaxed_audit_rejects_low_r_probe_below_55pct(self) -> None:
         audit = build_relaxed_audit(
