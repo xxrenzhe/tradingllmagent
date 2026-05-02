@@ -38,8 +38,10 @@ from tlm.storage import (
     normalized_quote_path,
     normalized_tick_path,
     write_bars_parquet,
+    write_quotes_parquet,
     write_ticks_parquet,
 )
+from scripts.audit_databento_mbp1_quote_coverage import main as audit_mbp1_quote_coverage
 
 
 def make_bi5(records: list[tuple[int, int, int, float, float]]) -> bytes:
@@ -435,6 +437,78 @@ class BarAndQualityTests(unittest.TestCase):
             ],
         )
         self.assertIn('"selected_contract": "NQM6"', output.getvalue())
+
+    def test_audit_databento_mbp1_quote_coverage_requires_every_zip_day(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            zip_path = root / "mbp1.zip"
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                archive.writestr("glbx-mdp3-20260427.mbp-1.csv.zst", b"")
+                archive.writestr("glbx-mdp3-20260428.mbp-1.csv.zst", b"")
+            write_quotes_parquet(
+                normalized_quote_path(data_root, "NQ_CME", datetime(2026, 4, 27).date()),
+                [
+                    (
+                        "NQ_CME",
+                        datetime(2026, 4, 27, 13, 30),
+                        27000.0,
+                        27000.25,
+                        2.0,
+                        3.0,
+                        27000.125,
+                        0.25,
+                    )
+                ],
+            )
+            trades_path = root / "trades.json"
+            trades_path.write_text(
+                json.dumps(
+                    {
+                        "trades": [
+                            {
+                                "entry_time": "2026-04-27T13:30:00",
+                                "exit_time": "2026-04-27T13:31:00",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            replay_path = root / "replay.json"
+            replay_path.write_text(
+                json.dumps({"trade_count": 1, "validated_trade_count": 1, "missed_fill_count": 0}),
+                encoding="utf-8",
+            )
+            output_path = root / "audit.json"
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = audit_mbp1_quote_coverage(
+                    [
+                        "--data-root",
+                        str(data_root),
+                        "--symbol",
+                        "NQ_CME",
+                        "--raw-zip",
+                        str(zip_path),
+                        "--quote-replay-report",
+                        str(replay_path),
+                        "--quote-replay-trades",
+                        str(trades_path),
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+            report = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 0)
+        self.assertFalse(report["decision"]["passed"])
+        self.assertEqual(report["expected_quote_days"], 2)
+        self.assertEqual(report["analyzed_quote_days"], 1)
+        self.assertEqual(report["missing_quote_days"], ["2026-04-28"])
+        self.assertEqual(report["strategy_trade_dates"], ["2026-04-27"])
+        self.assertEqual(report["daily_quote_coverage"][0]["replay_trade_count"], 1)
 
     def test_iter_databento_ohlcv_filters_calendar_spreads(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

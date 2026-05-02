@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 import unittest
 
 from scripts.walk_forward_expanded_high_edge import (
@@ -14,6 +15,11 @@ from scripts.cached_walk_forward_expanded_high_edge import (
     parse_text_grid,
 )
 from scripts.search_expanded_high_edge_strategy import CandidateStats
+from scripts.search_expanded_high_edge_cooldown import (
+    parse_int_grid as parse_cooldown_int_grid,
+    replay_with_regime_cooldown,
+    signal_regime_key,
+)
 from tlm.low_r_regime_basket import LowRRegimeBasketConfig, RegimeEdge
 
 
@@ -149,6 +155,75 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         }
 
         self.assertGreater(leaderboard_sort_key(passed), leaderboard_sort_key(failed))
+
+    def test_cooldown_replay_suppresses_same_regime_entries(self) -> None:
+        edge = RegimeEdge(
+            scan_type="opening_range_breakout",
+            direction_label="long",
+            horizon_minutes=120,
+            session_bucket="ny_0930_1159",
+            dow=1,
+            trend_bin=1,
+            volume_bin=0,
+            range_bin=0,
+            take_profit_r=1.0,
+        )
+        start = datetime(2026, 1, 5, 14, 30)
+        bars = [
+            {
+                "timestamp": start + timedelta(minutes=index),
+                "open": 100.0 + index,
+                "high": 101.0 + index,
+                "low": 99.0 + index,
+                "close": 100.0 + index,
+                "range20": 1.0,
+            }
+            for index in range(10)
+        ]
+        signals = [
+            {
+                "signal_time": bars[0]["timestamp"],
+                "entry_time": bars[1]["timestamp"],
+                "entry_open": 101.0,
+                "range20": 1.0,
+                "edge_index": 0,
+                "entry_index": 1,
+                "scan_type": edge.scan_type,
+                "direction_label": "long",
+            },
+            {
+                "signal_time": bars[2]["timestamp"],
+                "entry_time": bars[3]["timestamp"],
+                "entry_open": 103.0,
+                "range20": 1.0,
+                "edge_index": 0,
+                "entry_index": 3,
+                "scan_type": edge.scan_type,
+                "direction_label": "long",
+            },
+        ]
+
+        no_cooldown = replay_with_regime_cooldown(
+            bars=bars,
+            signals=signals,
+            edges=(edge,),
+            config=LowRRegimeBasketConfig(max_concurrent_positions=99, max_hold_minutes=1),
+            cooldown_minutes=0,
+            same_scan_only=False,
+        )
+        with_cooldown = replay_with_regime_cooldown(
+            bars=bars,
+            signals=signals,
+            edges=(edge,),
+            config=LowRRegimeBasketConfig(max_concurrent_positions=99, max_hold_minutes=1),
+            cooldown_minutes=5,
+            same_scan_only=False,
+        )
+
+        self.assertEqual(len(no_cooldown), 2)
+        self.assertEqual(len(with_cooldown), 1)
+        self.assertIn("opening_range_breakout", signal_regime_key(signals[0], edge, same_scan_only=False))
+        self.assertEqual(parse_cooldown_int_grid("0,5", option_name="--cooldown"), (0, 5))
 
 
 if __name__ == "__main__":

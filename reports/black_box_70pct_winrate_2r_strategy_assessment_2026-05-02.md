@@ -113,6 +113,23 @@ A cached walk-forward grid runner was added so feature tables, signal tables, an
 
 The cached grid improves experiment throughput and makes future sweeps less redundant, but the best row still fails the non-overfit promotion gate and is not a 70% win-rate / 2R strategy.
 
+### Historical Cooldown Search
+
+Source files:
+
+- `reports/nq_expanded_high_edge_cooldown_search_exact_2026-05-02.json`
+- `reports/nq_expanded_high_edge_cooldown_search_scan_2026-05-02.json`
+
+Same-regime cooldown windows were evaluated on the locked expanded-high-edge walk-forward selections before any larger IBKR paper exposure. This varies only the execution suppression window after the original train-year selection; it does not refit edge selection on test years.
+
+- Exact regime cooldown best: 0 minutes; passed original non-2R walk-forward gates; OOS net PnL 285,980.00.
+- Exact 5-minute cooldown: higher OOS net PnL 368,101.25, but failed 2024 trade floor.
+- Exact 15-minute and longer cooldowns: failed trade-frequency gates and eventually failed profitability years.
+- Scan-only cooldown best: 0 minutes; passed original non-2R walk-forward gates.
+- Scan-only 5-minute cooldown: OOS net PnL 327,026.25, but failed 2024 and 2026 trade floors.
+
+Conclusion: the runtime 300-second same-regime cooldown is useful as an operational duplicate-signal guard, but historical replay does not support using cooldown as a promotion improvement. It also does not address the 70% win-rate or 2R requirements.
+
 ## Black-Box Test Result
 
 Black-box execution replay is now available for the provided recent MBP-1 zip, but only for the two-month Databento window.
@@ -128,7 +145,14 @@ Normalized quote output:
 
 Execution replay source: `reports/nq_expanded_high_edge_execution_stress_mbp1_full_2026-05-02.json`
 
+Full-window quote coverage audit: `reports/nq_expanded_high_edge_mbp1_quote_coverage_audit_2026-05-02.json`
+
 - Strategy window replayed: 2026-03-03 to 2026-05-01.
+- Expected Databento MBP-1 quote days from zip: 52.
+- Analyzed normalized quote days: 52.
+- Missing or zero-row quote days: 0.
+- Daily quote rows analyzed: 505,942,666.
+- Strategy trade days inside tick window: 16.
 - Candidate trades in this tick window: 159.
 - Quote replay status: passed for available trades.
 - Validated trades: 159 of 159.
@@ -145,7 +169,7 @@ The same report still fails overall promotion:
 - 3x bar stress: 159 trades, net PnL 7,255.00, failed full walk-forward cost-stress gate.
 - Decision: `passed: false`, `cost_stress_passed: false`, `quote_replay_passed: true`.
 
-This removes the prior "no quote/tick files" blocker for the recent Databento window, but it does not create a live-ready 70% win-rate, 2R strategy. The strict 2R walk-forward evidence already fails, and the recent MBP-1 replay covers only 159 trades in 2026, not the full 2019-2026 out-of-sample history.
+This removes the prior "no quote/tick files" blocker for the recent Databento window, and the full available two-month MBP-1 quote dataset has now been audited day by day. It still does not create a live-ready 70% win-rate, 2R strategy. The strict 2R walk-forward evidence already fails, and the recent MBP-1 replay validates only the 159 strategy trades that occurred inside the 2026 tick window, not the full 2019-2026 out-of-sample history.
 
 ## Practical Strategy Boundary
 
