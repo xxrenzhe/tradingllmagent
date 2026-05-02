@@ -118,6 +118,23 @@ The signal search was expanded with RSI and stochastic extreme reversals, moving
 
 This closes the obvious next attempt: adding independent bar-signal families increased the candidate group count, but it still did not produce a non-overfit 70% win-rate / 2R / cost-stressed strategy.
 
+### VOL Execution-Aware Strategy Family
+
+Source: `reports/nq_vol_execution_70wr_2r_objective_audit_2026-05-02.json`
+
+The generated VOL execution-aware strategy set was audited separately so the recent two-month tick requirement is not only attached to the expanded-high-edge candidate.
+
+- Strategy specs audited: 50.
+- VOL leaderboard rows audited: 50.
+- Strategies with at least 70% prescreen win probability and positive net PnL: 0.
+- Strategy files with a 2R or higher fixed/grammar reward profile: 0.
+- VOL final-target rows: 0.
+- Tick window coverage gate: passed, 52 of 52 MBP-1 quote days analyzed from 2026-03-03 to 2026-05-01.
+- VOL quote replay artifact: blocked.
+- VOL paper shadow artifact: blocked.
+
+This confirms the recent tick data coverage exists, but VOL is still not a qualifying 70% win-rate / 2R strategy family.
+
 ### Cached Walk-Forward Grid Check
 
 Source: `reports/nq_expanded_high_edge_cached_walk_forward_grid_small_2026-05-02.json`

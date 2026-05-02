@@ -20,6 +20,7 @@ DEFAULT_REPORTS = {
     "smc_objective": Path("reports/nq_smc_lqem_ce_v1_objective_gates_2026-05-02.json"),
     "tick_coverage": Path("reports/nq_expanded_high_edge_mbp1_quote_coverage_audit_2026-05-02.json"),
     "execution_stress": Path("reports/nq_expanded_high_edge_execution_stress_mbp1_full_2026-05-02.json"),
+    "vol_objective": Path("reports/nq_vol_execution_70wr_2r_objective_audit_2026-05-02.json"),
     "assessment": Path("reports/black_box_70pct_winrate_2r_strategy_assessment_2026-05-02.md"),
 }
 
@@ -54,6 +55,7 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
     smc_objective = evidence["smc_objective"]
     tick_coverage = evidence["tick_coverage"]
     execution_stress = evidence["execution_stress"]
+    vol_objective = evidence["vol_objective"]
 
     requirements = [
         requirement(
@@ -69,8 +71,12 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                     "artifact": str(DEFAULT_REPORTS["smc_objective"]),
                     "finding": gate_findings(smc_objective, ("full_history_win_rate_ge_target", "walk_forward_test_win_rate_ge_target")),
                 },
+                {
+                    "artifact": str(DEFAULT_REPORTS["vol_objective"]),
+                    "finding": gate_findings(vol_objective, ("vol_prescreen_has_70pct_win_rate",)),
+                },
             ],
-            gap="No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, and SMC v1 has 0% full-history win rate.",
+            gap="No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, SMC v1 has 0% full-history win rate, and VOL has no >=70% prescreen row.",
         ),
         requirement(
             "reward_2r",
@@ -85,8 +91,12 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                     "artifact": str(DEFAULT_REPORTS["smc_objective"]),
                     "finding": gate_findings(smc_objective, ("full_history_net_r_p75_ge_target", "walk_forward_test_net_r_p75_ge_target")),
                 },
+                {
+                    "artifact": str(DEFAULT_REPORTS["vol_objective"]),
+                    "finding": gate_findings(vol_objective, ("vol_strategy_reward_profile_ge_2r",)),
+                },
             ],
-            gap="Strict 2R expanded-high-edge walk-forward fails, and SMC v1 net-R gates are negative rather than >= 2R.",
+            gap="Strict 2R expanded-high-edge walk-forward fails, SMC v1 net-R gates are negative rather than >= 2R, and VOL generated specs are below 2R.",
         ),
         requirement(
             "non_overfit_walk_forward",
@@ -101,8 +111,12 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                     "artifact": str(DEFAULT_REPORTS["smc_objective"]),
                     "finding": gate_findings(smc_objective, ("walk_forward_test_win_rate_ge_target", "walk_forward_test_net_r_p75_ge_target")),
                 },
+                {
+                    "artifact": str(DEFAULT_REPORTS["vol_objective"]),
+                    "finding": gate_findings(vol_objective, ("vol_final_target_rows_exist",)),
+                },
             ],
-            gap="No locked walk-forward candidate survives the explicit 70%/2R objective gates.",
+            gap="No locked walk-forward candidate survives the explicit 70%/2R objective gates; VOL has no final-target rows.",
         ),
         requirement(
             "long_term_profitability",

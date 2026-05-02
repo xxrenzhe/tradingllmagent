@@ -22,6 +22,7 @@ from tlm.vol import (
     run_vol_prescreen,
     write_vol_research_artifacts,
 )
+from scripts.audit_vol_70wr_2r_objective import build_vol_objective_audit, reward_r_from_exit
 
 
 class VolResearchArtifactTests(unittest.TestCase):
@@ -318,6 +319,82 @@ class VolResearchArtifactTests(unittest.TestCase):
             self.assertIn("event_calendar_hash", leaderboard["artifact_hashes"])
             self.assertIn("session_attribution", leaderboard["rows"][0])
             self.assertEqual(leaderboard["rows"][0]["event_non_event_view"]["status"], "ready")
+
+    def test_vol_objective_audit_rejects_proxy_targets_without_70wr_2r(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            strategies_root = root / "strategies"
+            strategy_paths = write_vol_strategy_specs(strategies_root, count=1)
+            leaderboard = {
+                "target": {"min_win_probability": 0.53},
+                "summary": {"total_vol_rows": 1, "final_target_rows": 0},
+                "rows": [
+                    {
+                        "strategy_name": "nq_vol_execution_candidate",
+                        "strategy_family": "vol_breakout_trend",
+                        "trade_count": 100,
+                        "net_pnl_test": 1000,
+                        "win_probability_test": 0.69,
+                        "final_target_passed": False,
+                    }
+                ],
+                "final_target_leaderboard": [],
+            }
+            tick_coverage = {
+                "date_from": "2026-03-03",
+                "date_to": "2026-05-01",
+                "expected_quote_days": 52,
+                "analyzed_quote_days": 52,
+                "validated_trade_count": 159,
+                "decision": {"passed": True, "reason": None},
+            }
+
+            audit = build_vol_objective_audit(
+                leaderboard=leaderboard,
+                strategy_paths=strategy_paths,
+                tick_coverage=tick_coverage,
+                quote_replay={"status": "blocked", "missing_requirements": ["quote_replay_report"]},
+                paper_shadow={"status": "blocked", "missing_requirements": ["paper_shadow_trade_log"]},
+                min_win_rate=0.70,
+                min_reward_r=2.0,
+                evidence_paths={
+                    "leaderboard": root / "leaderboard.json",
+                    "strategies_root": strategies_root,
+                    "tick_coverage": root / "tick.json",
+                    "quote_replay": root / "quote.json",
+                    "paper_shadow": root / "paper.json",
+                },
+            )
+
+        self.assertFalse(audit["decision"]["passed"])
+        self.assertIn("vol_prescreen_has_70pct_win_rate", audit["decision"]["failed_gates"])
+        self.assertIn("vol_strategy_reward_profile_ge_2r", audit["decision"]["failed_gates"])
+        self.assertNotIn("full_recent_tick_window_analyzed", audit["decision"]["failed_gates"])
+        self.assertEqual(audit["summary"]["tick_window"]["analyzed_quote_days"], 52)
+
+    def test_reward_r_from_exit_handles_points_and_atr_multiples(self) -> None:
+        self.assertEqual(
+            reward_r_from_exit(
+                {
+                    "stop_loss": {"type": "points", "value": 10},
+                    "take_profit": {"type": "points", "value": 20},
+                },
+                "stop_loss",
+                "take_profit",
+            ),
+            2.0,
+        )
+        self.assertAlmostEqual(
+            reward_r_from_exit(
+                {
+                    "stop": {"type": "atr_multiple", "multiple": 1.1},
+                    "take_profit": {"type": "atr_multiple", "multiple": 1.65},
+                },
+                "stop",
+                "take_profit",
+            ),
+            1.5,
+        )
 
 
 if __name__ == "__main__":

@@ -48,9 +48,13 @@
               "threshold": ">= 0.7 on every test fold"
             }
           ]
+        },
+        {
+          "artifact": "reports/nq_vol_execution_70wr_2r_objective_audit_2026-05-02.json",
+          "finding": []
         }
       ],
-      "gap": "No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, and SMC v1 has 0% full-history win rate.",
+      "gap": "No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, SMC v1 has 0% full-history win rate, and VOL has no >=70% prescreen row.",
       "id": "win_rate_70pct",
       "passed": false,
       "requirement": "Strategy must demonstrate at least 70% win rate after costs."
@@ -90,9 +94,13 @@
               "threshold": ">= 2.0 on every test fold"
             }
           ]
+        },
+        {
+          "artifact": "reports/nq_vol_execution_70wr_2r_objective_audit_2026-05-02.json",
+          "finding": []
         }
       ],
-      "gap": "Strict 2R expanded-high-edge walk-forward fails, and SMC v1 net-R gates are negative rather than >= 2R.",
+      "gap": "Strict 2R expanded-high-edge walk-forward fails, SMC v1 net-R gates are negative rather than >= 2R, and VOL generated specs are below 2R.",
       "id": "reward_2r",
       "passed": false,
       "requirement": "Strategy must target and realize a 2R reward profile."
@@ -131,9 +139,13 @@
               "threshold": ">= 2.0 on every test fold"
             }
           ]
+        },
+        {
+          "artifact": "reports/nq_vol_execution_70wr_2r_objective_audit_2026-05-02.json",
+          "finding": []
         }
       ],
-      "gap": "No locked walk-forward candidate survives the explicit 70%/2R objective gates.",
+      "gap": "No locked walk-forward candidate survives the explicit 70%/2R objective gates; VOL has no final-target rows.",
       "id": "non_overfit_walk_forward",
       "passed": false,
       "requirement": "Strategy must pass locked train/test or walk-forward validation without post-hoc overfit."

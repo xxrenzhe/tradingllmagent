@@ -1,0 +1,488 @@
+{
+  "artifact": "vol_execution_70wr_2r_objective_audit",
+  "decision": {
+    "failed_gates": [
+      "vol_prescreen_has_70pct_win_rate",
+      "vol_strategy_reward_profile_ge_2r",
+      "vol_final_target_rows_exist",
+      "vol_quote_replay_ready",
+      "vol_paper_shadow_ready"
+    ],
+    "passed": false,
+    "reason": "VOL family does not satisfy every 70% win-rate, 2R, execution-evidence gate."
+  },
+  "evidence": {
+    "leaderboard": "experiments/vol_execution_artifacts/vol_strategy_leaderboard.json",
+    "paper_shadow": "experiments/vol_execution_artifacts/vol_paper_shadow_review.json",
+    "quote_replay": "experiments/vol_execution_artifacts/vol_quote_replay_report.json",
+    "strategies_root": "strategies",
+    "tick_coverage": "reports/nq_expanded_high_edge_mbp1_quote_coverage_audit_2026-05-02.json"
+  },
+  "gates": [
+    {
+      "evidence": {
+        "best_rows": [],
+        "best_win_probability": 0.406721586352701,
+        "min_required_win_rate": 0.7,
+        "passing_strategy_count": 0,
+        "strategy_count": 50
+      },
+      "name": "vol_prescreen_has_70pct_win_rate",
+      "passed": false
+    },
+    {
+      "evidence": {
+        "min_required_reward_r": 2.0,
+        "min_reward_r_by_strategy": [
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_absorb_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_absorb_10"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_breakout_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_breakout_10"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_macd_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_macd_10"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_pullback_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_pullback_10"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_01.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_01"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_02.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_02"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_03.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_03"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_04.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_04"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_05.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_05"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_06.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_06"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_07.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_07"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_08.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_08"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_09.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_09"
+          },
+          {
+            "fixed_exit_r": 1.6,
+            "grammar_exit_r": 1.4545454545454546,
+            "min_reward_r": 1.4545454545454546,
+            "path": "strategies/nq_vol_execution_vol_revert_10.yaml",
+            "strategy_name": "nq_vol_execution_vol_revert_10"
+          }
+        ],
+        "strategy_file_count": 50,
+        "two_r_strategy_count": 0
+      },
+      "name": "vol_strategy_reward_profile_ge_2r",
+      "passed": false
+    },
+    {
+      "evidence": {
+        "final_target_row_count": 0,
+        "summary": {
+          "candidate_vol_rows": 0,
+          "final_target_rows": 0,
+          "freeze_confirmed_vol_rows": 0,
+          "generated_seed_count": 50,
+          "total_vol_rows": 50
+        },
+        "target_in_report": {
+          "min_annual_trades": 1000,
+          "min_sharpe": 2,
+          "min_win_probability": 0.53,
+          "requires_paper_shadow": true,
+          "requires_quote_replay": true
+        }
+      },
+      "name": "vol_final_target_rows_exist",
+      "passed": false
+    },
+    {
+      "evidence": {
+        "analyzed_quote_days": 52,
+        "date_from": "2026-03-03",
+        "date_to": "2026-05-01",
+        "decision": {
+          "passed": true,
+          "reason": null
+        },
+        "expected_quote_days": 52,
+        "tick_coverage_artifact": "reports/nq_expanded_high_edge_mbp1_quote_coverage_audit_2026-05-02.json",
+        "validated_trade_count": 159
+      },
+      "name": "full_recent_tick_window_analyzed",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "missing_requirements": [
+          "quote_replay_report_with_market_limit_and_adverse_selection"
+        ],
+        "quote_replay_artifact": "experiments/vol_execution_artifacts/vol_quote_replay_report.json",
+        "status": "blocked"
+      },
+      "name": "vol_quote_replay_ready",
+      "passed": false
+    },
+    {
+      "evidence": {
+        "missing_requirements": [
+          "paper_shadow_trade_log",
+          "three_trading_days"
+        ],
+        "paper_shadow_artifact": "experiments/vol_execution_artifacts/vol_paper_shadow_review.json",
+        "status": "blocked",
+        "summary": {
+          "avg_adverse_selection_ticks_5m": null,
+          "avg_spread_ticks": null,
+          "blocked_count": 0,
+          "missed_limit_count": 0,
+          "record_count": 0,
+          "simulated_fill_count": 0,
+          "trading_day_count": 0
+        }
+      },
+      "name": "vol_paper_shadow_ready",
+      "passed": false
+    }
+  ],
+  "leaderboard_hash": "8ffd814d10657753e905649e342a80667df3bf9227a3beebda645f82c3098c76",
+  "objective": "Audit generated VOL execution-aware strategies against 70% win-rate, 2R reward, and full recent tick-window evidence.",
+  "schema_version": 1,
+  "strategy_spec_hash": "58631503751d25e23695b08f4969c196085e37210a7d5dd418cf89aa9372939e",
+  "summary": {
+    "final_target_rows": 0,
+    "leaderboard_70pct_win_rate_rows": 0,
+    "leaderboard_rows": 50,
+    "strategy_file_count": 50,
+    "strategy_files_with_2r_reward": 0,
+    "tick_window": {
+      "analyzed_quote_days": 52,
+      "date_from": "2026-03-03",
+      "date_to": "2026-05-01",
+      "expected_quote_days": 52
+    }
+  },
+  "target": {
+    "min_reward_r": 2.0,
+    "min_win_rate": 0.7,
+    "requires_full_recent_tick_window": true,
+    "requires_paper_shadow": true,
+    "requires_quote_replay": true
+  }
+}

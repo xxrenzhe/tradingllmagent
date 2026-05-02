@@ -249,6 +249,14 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
                 "execution_stress": {
                     "decision": {"passed": False, "cost_stress_passed": False, "quote_replay_passed": True}
                 },
+                "vol_objective": {
+                    "gates": [
+                        {"name": "vol_prescreen_has_70pct_win_rate", "passed": False},
+                        {"name": "vol_strategy_reward_profile_ge_2r", "passed": False},
+                        {"name": "vol_final_target_rows_exist", "passed": False},
+                    ],
+                    "decision": {"passed": False},
+                },
                 "assessment": "reject promotion",
             }
         )
