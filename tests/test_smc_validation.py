@@ -74,10 +74,16 @@ class SmcValidationReportTests(unittest.TestCase):
             self.assertEqual(report["artifact"], "smc_lqem_ce_validation_report")
             self.assertEqual(report["full_history"]["metrics"]["trade_count"], 1)
             self.assertEqual(len(report["cost_stress"]), 3)
+            self.assertTrue(report["objective_gates"])
+            self.assertTrue(next(row for row in report["objective_gates"] if row["name"] == "minimum_trade_count")["passed"])
+            self.assertTrue(next(row for row in report["objective_gates"] if row["name"] == "full_history_win_rate_ge_target")["passed"])
+            self.assertFalse(next(row for row in report["objective_gates"] if row["name"] == "walk_forward_test_win_rate_ge_target")["passed"])
+            self.assertFalse(next(row for row in report["objective_gates"] if row["name"] == "final_holdout_win_rate_ge_target")["passed"])
             self.assertEqual(report["walk_forward"]["status"], "ok")
             self.assertEqual(report["final_holdout"]["status"], "ok")
             self.assertEqual(report["full_history"]["audited_samples"]["top_winners"][0]["audit"]["direction"], "long")
             self.assertTrue(Path(outputs["markdown"]).exists())
+            self.assertIn("## Objective Gates", Path(outputs["markdown"]).read_text(encoding="utf-8"))
             self.assertEqual(json.loads(Path(outputs["json"]).read_text())["strategy_family"], "smc_lqem_ce")
 
 

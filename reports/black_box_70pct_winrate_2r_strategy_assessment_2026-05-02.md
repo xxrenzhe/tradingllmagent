@@ -52,14 +52,19 @@ This candidate is profitable under bar-based cost stress, but it is not 70% win 
 
 ### SMC LQEM Balanced R2 Candidate
 
-Source: `reports/nq_smc_lqem_optimization_balanced_r2_2026-05-01.md`
+Sources:
+
+- `reports/nq_smc_lqem_optimization_balanced_r2_2026-05-01.md`
+- `reports/nq_smc_lqem_ce_v1_objective_gates_2026-05-02.json`
 
 - Full-history trades: 10.
 - Full-history net PnL: -200.00.
 - Profit factor: 0.8326.
 - Promotion gates: failed minimum trade count, positive expectancy after 2x cost, final holdout profit factor, and yearly concentration.
+- Executable SMC v1 objective-gate check: 4 full-history trades, 0.0% win rate, p75 net R -1.0645.
+- SMC v1 objective gates: failed minimum trade count, full-history 70% win-rate gate, full-history 2R net-R gate, walk-forward test 70% win-rate gate, walk-forward test 2R net-R gate, and final-holdout win-rate/R gates.
 
-This is the only reviewed candidate explicitly aligned with an R2-style objective, and it fails promotion.
+This independent SMC candidate family is explicitly aligned with an R-style objective, but it fails promotion and also fails the requested 70% win-rate / 2R objective gates.
 
 ### Locked 2R Bar-Level Walk-Forward Check
 

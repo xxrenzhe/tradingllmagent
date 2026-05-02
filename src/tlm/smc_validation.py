@@ -39,6 +39,8 @@ def build_smc_validation_report(
     cost_stress_multipliers: Sequence[float] = DEFAULT_COST_STRESS_MULTIPLIERS,
     sample_trade_count: int = 5,
     min_trade_count: int = 200,
+    target_min_win_rate: float = 0.70,
+    target_min_reward_r: float = 2.0,
 ) -> dict:
     if spec.strategy_family != "smc_lqem_ce":
         raise ValueError("SMC validation requires strategy_family smc_lqem_ce")
@@ -146,6 +148,14 @@ def build_smc_validation_report(
             final_holdout=final_holdout,
             min_trade_count=min_trade_count,
         ),
+        "objective_gates": _objective_gates(
+            full_summary=full_summary,
+            walk_forward=walk_forward,
+            final_holdout=final_holdout,
+            min_trade_count=min_trade_count,
+            target_min_win_rate=target_min_win_rate,
+            target_min_reward_r=target_min_reward_r,
+        ),
     }
     report["status"] = "ready_for_review" if existing_files else "blocked_no_data"
     return report
@@ -223,6 +233,10 @@ def render_smc_validation_markdown(report: dict) -> str:
         "",
     ]
     for gate in gates:
+        status = "PASS" if gate["passed"] else "FAIL"
+        lines.append(f"- {gate['name']}: {status} (actual={gate['actual']}, threshold={gate['threshold']})")
+    lines.extend(["", "## Objective Gates", ""])
+    for gate in report.get("objective_gates", []):
         status = "PASS" if gate["passed"] else "FAIL"
         lines.append(f"- {gate['name']}: {status} (actual={gate['actual']}, threshold={gate['threshold']})")
     lines.extend(["", "## Cost Stress", ""])
@@ -522,6 +536,83 @@ def _promotion_gates(
             "threshold": "<= 0.40",
         },
     ]
+
+
+def _objective_gates(
+    *,
+    full_summary: dict,
+    walk_forward: dict,
+    final_holdout: dict,
+    min_trade_count: int,
+    target_min_win_rate: float,
+    target_min_reward_r: float,
+) -> list[dict]:
+    full_metrics = full_summary["metrics"]
+    full_r = full_summary["r_distribution"]["net"]
+    test_summaries = [
+        fold["test"]["summary"]
+        for fold in walk_forward.get("folds", [])
+        if fold.get("test", {}).get("summary")
+    ]
+    test_metrics = [summary["metrics"] for summary in test_summaries]
+    test_r = [summary["r_distribution"]["net"] for summary in test_summaries]
+    holdout_summary = (final_holdout.get("summary") or {}).get("summary", {})
+    holdout_metrics = holdout_summary.get("metrics", {})
+    holdout_r = holdout_summary.get("r_distribution", {}).get("net", {})
+    return [
+        {
+            "name": "minimum_trade_count",
+            "passed": int(full_metrics.get("trade_count") or 0) >= min_trade_count,
+            "actual": full_metrics.get("trade_count"),
+            "threshold": min_trade_count,
+        },
+        {
+            "name": "full_history_win_rate_ge_target",
+            "passed": _optional_ge(full_metrics.get("win_rate"), target_min_win_rate),
+            "actual": full_metrics.get("win_rate"),
+            "threshold": f">= {target_min_win_rate}",
+        },
+        {
+            "name": "full_history_net_r_p75_ge_target",
+            "passed": _optional_ge(full_r.get("p75"), target_min_reward_r),
+            "actual": full_r.get("p75"),
+            "threshold": f">= {target_min_reward_r}",
+        },
+        {
+            "name": "walk_forward_test_win_rate_ge_target",
+            "passed": bool(test_metrics)
+            and all(_optional_ge(metrics.get("win_rate"), target_min_win_rate) for metrics in test_metrics),
+            "actual": _minimum_optional(metrics.get("win_rate") for metrics in test_metrics),
+            "threshold": f">= {target_min_win_rate} on every test fold",
+        },
+        {
+            "name": "walk_forward_test_net_r_p75_ge_target",
+            "passed": bool(test_r) and all(_optional_ge(row.get("p75"), target_min_reward_r) for row in test_r),
+            "actual": _minimum_optional(row.get("p75") for row in test_r),
+            "threshold": f">= {target_min_reward_r} on every test fold",
+        },
+        {
+            "name": "final_holdout_win_rate_ge_target",
+            "passed": _optional_ge(holdout_metrics.get("win_rate"), target_min_win_rate),
+            "actual": holdout_metrics.get("win_rate"),
+            "threshold": f">= {target_min_win_rate}",
+        },
+        {
+            "name": "final_holdout_net_r_p75_ge_target",
+            "passed": _optional_ge(holdout_r.get("p75"), target_min_reward_r),
+            "actual": holdout_r.get("p75"),
+            "threshold": f">= {target_min_reward_r}",
+        },
+    ]
+
+
+def _optional_ge(value, threshold: float) -> bool:
+    return value is not None and float(value) >= threshold
+
+
+def _minimum_optional(values) -> float | None:
+    parsed = [float(value) for value in values if value is not None]
+    return min(parsed) if parsed else None
 
 
 def _format_optional(value) -> str:

@@ -1131,6 +1131,8 @@ def cmd_report_smc_validation(args: argparse.Namespace) -> int:
         indicator_warmup_days=args.indicator_warmup_days,
         sample_trade_count=args.sample_trade_count,
         min_trade_count=args.min_trade_count,
+        target_min_win_rate=args.target_min_win_rate,
+        target_min_reward_r=args.target_min_reward_r,
     )
     outputs = write_smc_validation_outputs(report, Path(args.output_dir), args.basename)
     print(json.dumps({**outputs, "status": report["status"]}, indent=2, sort_keys=True))
@@ -1813,6 +1815,8 @@ def build_parser() -> argparse.ArgumentParser:
     smc_validation.add_argument("--indicator-warmup-days", type=int, default=0)
     smc_validation.add_argument("--sample-trade-count", type=int, default=5)
     smc_validation.add_argument("--min-trade-count", type=int, default=200)
+    smc_validation.add_argument("--target-min-win-rate", type=float, default=0.70)
+    smc_validation.add_argument("--target-min-reward-r", type=float, default=2.0)
     smc_validation.set_defaults(func=cmd_report_smc_validation)
 
     ibkr = subparsers.add_parser("ibkr")
