@@ -1197,6 +1197,12 @@ def cmd_ibkr_loop(args: argparse.Namespace) -> int:
     os.environ["TLM_IBKR_POLL_INTERVAL_SECONDS"] = str(args.poll_interval_seconds)
     os.environ["TLM_IBKR_REVIEW_INTERVAL_SECONDS"] = str(args.review_interval_seconds)
     os.environ["TLM_IBKR_READINESS_MAX_STALE_SECONDS"] = str(args.max_stale_seconds)
+    os.environ["TLM_IBKR_SIGNAL_REGIME_COOLDOWN_SECONDS"] = str(args.signal_regime_cooldown_seconds)
+    os.environ["TLM_IBKR_TAKE_PROFIT_TICKS_MULTIPLIER"] = str(args.take_profit_ticks_multiplier)
+    if args.daily_trade_cap is not None:
+        os.environ["TLM_IBKR_DAILY_TRADE_CAP"] = str(args.daily_trade_cap)
+    if args.max_concurrent_positions is not None:
+        os.environ["TLM_IBKR_MAX_CONCURRENT_POSITIONS"] = str(args.max_concurrent_positions)
     if args.max_spread_ticks is not None:
         os.environ["TLM_IBKR_MAX_SPREAD_TICKS"] = str(args.max_spread_ticks)
     os.environ["TLM_IBKR_AUTO_SUBMIT"] = "1" if args.auto_submit else "0"
@@ -1840,6 +1846,10 @@ def build_parser() -> argparse.ArgumentParser:
     ibkr_loop.add_argument("--poll-interval-seconds", type=float, default=2.0)
     ibkr_loop.add_argument("--review-interval-seconds", type=float, default=300.0)
     ibkr_loop.add_argument("--max-stale-seconds", type=int, default=5)
+    ibkr_loop.add_argument("--signal-regime-cooldown-seconds", type=float, default=300.0)
+    ibkr_loop.add_argument("--take-profit-ticks-multiplier", type=float, default=1.0)
+    ibkr_loop.add_argument("--daily-trade-cap", type=int)
+    ibkr_loop.add_argument("--max-concurrent-positions", type=int)
     ibkr_loop.add_argument("--max-spread-ticks", type=float)
     ibkr_loop.add_argument("--auto-submit", action="store_true")
     ibkr_loop.add_argument("--no-connect", action="store_false", dest="connect")

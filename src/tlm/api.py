@@ -109,7 +109,9 @@ def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
             "tick_size": 0.25,
             "stop_loss_ticks": 20,
             "take_profit_ticks": 40,
+            "take_profit_ticks_multiplier": _ibkr_configured_take_profit_ticks_multiplier(),
             "max_holding_minutes": 20,
+            "max_concurrent_positions": _ibkr_configured_max_concurrent_positions(1),
         }
     if family == "expanded_high_edge":
         preset = (
@@ -132,11 +134,14 @@ def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
             "tick_size": 0.25,
             "stop_loss_ticks": 32,
             "take_profit_ticks": 48,
+            "take_profit_ticks_multiplier": _ibkr_configured_take_profit_ticks_multiplier(),
             "stop_range_multiple": preset_spec.stop_range_multiple,
             "min_stop_points": preset_spec.min_stop_points,
             "max_stop_points": preset_spec.max_stop_points,
             "max_holding_minutes": preset_spec.max_hold_minutes,
-            "max_concurrent_positions": preset_spec.max_concurrent_positions,
+            "max_concurrent_positions": _ibkr_configured_max_concurrent_positions(
+                preset_spec.max_concurrent_positions
+            ),
         }
     preset = os.environ.get("TLM_IBKR_LOW_R_PRESET", "simple_robust_low_r").strip() or "simple_robust_low_r"
     return {
@@ -151,16 +156,24 @@ def _ibkr_default_strategy(symbol: str = "MNQ") -> dict[str, Any]:
         "tick_size": 0.25,
         "stop_loss_ticks": 32,
         "take_profit_ticks": 40,
+        "take_profit_ticks_multiplier": _ibkr_configured_take_profit_ticks_multiplier(),
         "stop_range_multiple": 10.0,
         "min_stop_points": 8.0,
         "max_stop_points": 90.0,
         "max_holding_minutes": 300,
+        "max_concurrent_positions": _ibkr_configured_max_concurrent_positions(1),
     }
 
 
 IBKR_DEFAULT_MAX_SPREAD_TICKS = 2.0
 IBKR_HIGH_EDGE_MAX_SPREAD_TICKS = 4.0
 IBKR_MAX_SPREAD_TICKS_HARD_CAP = 4.0
+IBKR_DEFAULT_SIGNAL_REGIME_COOLDOWN_SECONDS = 300.0
+IBKR_DEFAULT_TAKE_PROFIT_TICKS_MULTIPLIER = 1.0
+IBKR_TAKE_PROFIT_TICKS_MULTIPLIER_HARD_CAP = 5.0
+IBKR_DEFAULT_DAILY_TRADE_CAP = 24
+IBKR_DAILY_TRADE_CAP_HARD_CAP = 24
+IBKR_MAX_CONCURRENT_POSITIONS_HARD_CAP = 24
 
 
 def _ibkr_strategy_default_max_spread_ticks(strategy: dict[str, Any] | None = None) -> float:
@@ -187,12 +200,63 @@ def _ibkr_configured_max_spread_ticks(strategy: dict[str, Any] | None = None) ->
     return _ibkr_parse_max_spread_ticks(os.environ.get("TLM_IBKR_MAX_SPREAD_TICKS"), default=default)
 
 
+def _ibkr_parse_take_profit_ticks_multiplier(value: object, *, default: float) -> float:
+    if value is None or str(value).strip() == "":
+        parsed = default
+    else:
+        parsed = float(value)
+    if parsed <= 0:
+        raise ValueError("take_profit_ticks_multiplier must be positive")
+    if parsed > IBKR_TAKE_PROFIT_TICKS_MULTIPLIER_HARD_CAP:
+        raise ValueError(
+            f"take_profit_ticks_multiplier must be <= {IBKR_TAKE_PROFIT_TICKS_MULTIPLIER_HARD_CAP}"
+        )
+    return parsed
+
+
+def _ibkr_configured_take_profit_ticks_multiplier() -> float:
+    return _ibkr_parse_take_profit_ticks_multiplier(
+        os.environ.get("TLM_IBKR_TAKE_PROFIT_TICKS_MULTIPLIER"),
+        default=IBKR_DEFAULT_TAKE_PROFIT_TICKS_MULTIPLIER,
+    )
+
+
+def _ibkr_parse_positive_int_cap(value: object, *, default: int, name: str, hard_cap: int) -> int:
+    if value is None or str(value).strip() == "":
+        parsed = default
+    else:
+        parsed = int(value)
+    if parsed <= 0:
+        raise ValueError(f"{name} must be positive")
+    if parsed > hard_cap:
+        raise ValueError(f"{name} must be <= {hard_cap}")
+    return parsed
+
+
+def _ibkr_configured_daily_trade_cap() -> int:
+    return _ibkr_parse_positive_int_cap(
+        os.environ.get("TLM_IBKR_DAILY_TRADE_CAP"),
+        default=IBKR_DEFAULT_DAILY_TRADE_CAP,
+        name="daily_trade_cap",
+        hard_cap=IBKR_DAILY_TRADE_CAP_HARD_CAP,
+    )
+
+
+def _ibkr_configured_max_concurrent_positions(default: int) -> int:
+    return _ibkr_parse_positive_int_cap(
+        os.environ.get("TLM_IBKR_MAX_CONCURRENT_POSITIONS"),
+        default=default,
+        name="max_concurrent_positions",
+        hard_cap=IBKR_MAX_CONCURRENT_POSITIONS_HARD_CAP,
+    )
+
+
 def _ibkr_default_control_state(strategy: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "mode": "paper",
         "min_confidence": 0.55,
         "max_spread_ticks": _ibkr_configured_max_spread_ticks(strategy),
-        "daily_trade_cap": 24,
+        "daily_trade_cap": _ibkr_configured_daily_trade_cap(),
         "strategies": {},
         "trade_session": {"start": "09:30", "end": "15:55"},
         "safe_mode": False,
@@ -209,6 +273,64 @@ def _parse_state_time(value: object) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _ibkr_signal_regime_key(signal: dict[str, Any]) -> str | None:
+    if signal.get("signal_class") != "strong_review":
+        return None
+    risk_context = signal.get("risk_context") if isinstance(signal.get("risk_context"), dict) else {}
+    trigger_reasons = signal.get("trigger_reasons") if isinstance(signal.get("trigger_reasons"), list) else []
+    key_payload = {
+        "strategy_id": signal.get("strategy_id"),
+        "strategy_spec_hash": signal.get("strategy_spec_hash"),
+        "module_id": signal.get("module_id"),
+        "family": signal.get("family"),
+        "symbol": signal.get("symbol"),
+        "timeframe": signal.get("timeframe"),
+        "side": signal.get("side"),
+        "preset": risk_context.get("preset"),
+        "edge_index": risk_context.get("edge_index"),
+        "scan_type": risk_context.get("scan_type"),
+        "session_bucket": risk_context.get("session_bucket"),
+        "trigger": trigger_reasons[0] if trigger_reasons else None,
+    }
+    return json.dumps(key_payload, sort_keys=True, separators=(",", ":"))
+
+
+def _ibkr_signal_regime_cooldown(
+    *,
+    signal: dict[str, Any],
+    state: dict[str, Any],
+    current: datetime,
+) -> dict[str, Any]:
+    regime_key = _ibkr_signal_regime_key(signal)
+    cooldown_seconds = max(
+        float(state.get("signal_regime_cooldown_seconds", IBKR_DEFAULT_SIGNAL_REGIME_COOLDOWN_SECONDS) or 0),
+        0.0,
+    )
+    result = {
+        "signal_regime_key": regime_key,
+        "signal_regime_cooldown_seconds": cooldown_seconds,
+        "signal_regime_cooldown_active": False,
+    }
+    if not regime_key or cooldown_seconds <= 0:
+        return result
+    last_key = state.get("last_planned_signal_regime_key")
+    last_at = _parse_state_time(state.get("last_planned_signal_regime_at"))
+    if last_key != regime_key or last_at is None:
+        return result
+    elapsed_seconds = max((current - last_at).total_seconds(), 0.0)
+    remaining_seconds = max(cooldown_seconds - elapsed_seconds, 0.0)
+    if remaining_seconds <= 0:
+        return result
+    result.update(
+        {
+            "signal_regime_cooldown_active": True,
+            "signal_regime_cooldown_remaining_seconds": remaining_seconds,
+            "last_planned_signal_regime_at": last_at.isoformat(),
+        }
+    )
+    return result
+
+
 def run_ibkr_decision_cycle(
     gateway: IbkrPaperGateway,
     *,
@@ -222,6 +344,7 @@ def run_ibkr_decision_cycle(
     strategy = state.setdefault("strategy", _ibkr_default_strategy(symbol))
     control_state = state.setdefault("control_state", _ibkr_default_control_state(strategy))
     review_interval_seconds = float(state.get("review_interval_seconds", 300.0))
+    auto_submit_configured = "auto_submit" in state
     auto_submit = bool(state.get("auto_submit", False))
     recent_snapshots = gateway.recent_market_data(symbol, limit=int(state.get("market_data_history_limit", 500)))
     if not recent_snapshots:
@@ -273,6 +396,7 @@ def run_ibkr_decision_cycle(
     daily_trade_cap_reached = (
         daily_trade_cap > 0 and completed_bracket_order_count + open_bracket_order_count >= daily_trade_cap
     )
+    signal_regime_cooldown = _ibkr_signal_regime_cooldown(signal=signal, state=state, current=current)
     risk_context = {
         "data_stale": market_data.get("status") != "ready",
         "daily_loss_limit_hit": (
@@ -287,6 +411,7 @@ def run_ibkr_decision_cycle(
         "daily_trade_cap": daily_trade_cap,
         "completed_bracket_order_count": completed_bracket_order_count,
         "daily_trade_cap_reached": daily_trade_cap_reached,
+        **signal_regime_cooldown,
     }
 
     last_review_at = _parse_state_time(state.get("last_review_at"))
@@ -312,6 +437,7 @@ def run_ibkr_decision_cycle(
             "tick_size": strategy.get("tick_size", 0.25),
             "stop_loss_ticks": signal.get("risk_context", {}).get("stop_loss_ticks", strategy.get("stop_loss_ticks", 20)),
             "take_profit_ticks": signal.get("risk_context", {}).get("take_profit_ticks", strategy.get("take_profit_ticks", 40)),
+            "take_profit_ticks_multiplier": strategy.get("take_profit_ticks_multiplier", 1.0),
             "max_holding_minutes": signal.get("risk_context", {}).get(
                 "max_holding_minutes",
                 strategy.get("max_holding_minutes", 20),
@@ -344,8 +470,10 @@ def run_ibkr_decision_cycle(
 
     bracket_event = None
     submit_event = None
+    bracket_build_skipped_reason = None
     plan = review["review_result"].get("paper_plan")
     signal_hash = signal.get("signal_hash")
+    signal_regime_key = signal_regime_cooldown.get("signal_regime_key")
     plan_quantity = int((plan or {}).get("quantity", 1) or 1)
     position_slots_after_plan = open_bracket_order_count + open_position_quantity + plan_quantity
     if (
@@ -356,12 +484,18 @@ def run_ibkr_decision_cycle(
         and not daily_trade_cap_reached
         and position_slots_after_plan <= max_concurrent_positions
     ):
-        bracket_event = gateway.build_bracket_order(plan)
-        if bracket_event.get("event_type") == "bracket_order_built":
-            state["last_planned_signal_hash"] = signal_hash
-            if auto_submit:
-                bracket_id = bracket_event["details"]["bracket_order"]["bracket_id"]
-                submit_event = gateway.submit_bracket_order(bracket_id)
+        if auto_submit or not auto_submit_configured:
+            bracket_event = gateway.build_bracket_order(plan)
+            if bracket_event.get("event_type") == "bracket_order_built":
+                state["last_planned_signal_hash"] = signal_hash
+                if signal_regime_key:
+                    state["last_planned_signal_regime_key"] = signal_regime_key
+                    state["last_planned_signal_regime_at"] = current.isoformat()
+                if auto_submit:
+                    bracket_id = bracket_event["details"]["bracket_order"]["bracket_id"]
+                    submit_event = gateway.submit_bracket_order(bracket_id)
+        else:
+            bracket_build_skipped_reason = "auto_submit_disabled"
 
     result = {
         "status": "review_completed",
@@ -372,6 +506,9 @@ def run_ibkr_decision_cycle(
         "optimizer_status": optimizer.get("status"),
         "bracket_event_type": bracket_event.get("event_type") if bracket_event else None,
         "submit_event_type": submit_event.get("event_type") if submit_event else None,
+        "bracket_build_skipped_reason": bracket_build_skipped_reason,
+        "signal_regime_key": signal_regime_key,
+        "signal_regime_cooldown_active": signal_regime_cooldown.get("signal_regime_cooldown_active"),
     }
     state["latest_review"] = _compact_ibkr_review(review)
     state["latest_optimizer"] = optimizer
@@ -464,6 +601,7 @@ def _compact_ibkr_poller_state(state: dict[str, Any]) -> dict[str, Any]:
         "max_review_history": state.get("max_review_history"),
         "max_optimizer_history": state.get("max_optimizer_history"),
         "readiness_max_stale_seconds": state.get("readiness_max_stale_seconds"),
+        "signal_regime_cooldown_seconds": state.get("signal_regime_cooldown_seconds"),
         "strategy": state.get("strategy"),
         "control_state": state.get("control_state"),
         "readiness_check_count": state.get("readiness_check_count", 0),
@@ -472,6 +610,8 @@ def _compact_ibkr_poller_state(state: dict[str, Any]) -> dict[str, Any]:
         "duplicate_order_event_count": state.get("duplicate_order_event_count", 0),
         "last_review_at": state.get("last_review_at"),
         "last_review_fill_count": state.get("last_review_fill_count", 0),
+        "last_planned_signal_regime_key": state.get("last_planned_signal_regime_key"),
+        "last_planned_signal_regime_at": state.get("last_planned_signal_regime_at"),
         "latest_bars": list(state.get("latest_bars", []))[-10:],
         "latest_signal": state.get("latest_signal"),
         "latest_signals": list(state.get("latest_signals", []))[-10:],
@@ -1104,6 +1244,9 @@ def create_app():
         "max_review_history": int(os.environ.get("TLM_IBKR_MAX_REVIEW_HISTORY", "200")),
         "max_optimizer_history": int(os.environ.get("TLM_IBKR_MAX_OPTIMIZER_HISTORY", "200")),
         "readiness_max_stale_seconds": int(os.environ.get("TLM_IBKR_READINESS_MAX_STALE_SECONDS", "5")),
+        "signal_regime_cooldown_seconds": float(
+            os.environ.get("TLM_IBKR_SIGNAL_REGIME_COOLDOWN_SECONDS", str(IBKR_DEFAULT_SIGNAL_REGIME_COOLDOWN_SECONDS))
+        ),
         "strategy": poll_strategy,
         "control_state": _ibkr_default_control_state(poll_strategy),
         "warm_start_root": os.environ.get("TLM_IBKR_WARM_START_ROOT", "experiments/ibkr_paper"),

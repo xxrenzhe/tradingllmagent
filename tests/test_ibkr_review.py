@@ -35,6 +35,34 @@ class IbkrReviewTests(unittest.TestCase):
         self.assertEqual(result["paper_plan"]["take_profit_price"], 19015.0)
         self.assertIn("review_result_hash", result)
 
+    def test_five_minute_review_applies_take_profit_ticks_multiplier(self) -> None:
+        request = build_five_minute_review_request(
+            bars_1m=[{"symbol": "MNQ", "close": 19000 + index} for index in range(5)],
+            signals=[
+                {
+                    "signal_class": "strong_review",
+                    "symbol": "MNQ",
+                    "side": "BUY",
+                    "bar_1m": {"close": 19005.0},
+                    "trigger_reasons": ["range_breakout_up"],
+                }
+            ],
+            execution_ledger={"positions": [], "fill_count": 0, "net_realized_pnl": 0, "total_commission": 0},
+            strategy_state={
+                "tick_size": 0.25,
+                "stop_loss_ticks": 20,
+                "take_profit_ticks": 40,
+                "take_profit_ticks_multiplier": 2.0,
+                "max_holding_minutes": 15,
+            },
+        )
+        result = deterministic_fallback_review(request)
+
+        self.assertEqual(result["paper_plan"]["stop_price"], 19000.0)
+        self.assertEqual(result["paper_plan"]["take_profit_price"], 19025.0)
+        self.assertEqual(result["paper_plan"]["take_profit_ticks"], 80)
+        self.assertEqual(result["paper_plan"]["take_profit_ticks_multiplier"], 2.0)
+
     def test_five_minute_review_blocks_on_stale_data_and_auto_applies_only_risk_reduction(self) -> None:
         request = build_five_minute_review_request(
             bars_1m=[],

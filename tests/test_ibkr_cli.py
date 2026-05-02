@@ -23,6 +23,8 @@ class IbkrCliTests(unittest.TestCase):
         self.assertEqual(args.low_r_preset, "simple_robust_low_r")
         self.assertEqual(args.expanded_high_edge_preset, "expanded_high_edge_cap24_balanced_risk")
         self.assertIsNone(args.max_spread_ticks)
+        self.assertIsNone(args.daily_trade_cap)
+        self.assertIsNone(args.max_concurrent_positions)
 
     def test_parser_exposes_ibkr_soak_monitor(self) -> None:
         parser = build_parser()
@@ -86,6 +88,14 @@ class IbkrCliTests(unittest.TestCase):
                 "120",
                 "--max-stale-seconds",
                 "9",
+                "--signal-regime-cooldown-seconds",
+                "180",
+                "--take-profit-ticks-multiplier",
+                "2",
+                "--daily-trade-cap",
+                "3",
+                "--max-concurrent-positions",
+                "1",
                 "--max-spread-ticks",
                 "4",
                 "--auto-submit",
@@ -108,6 +118,10 @@ class IbkrCliTests(unittest.TestCase):
                 self.assertEqual(os.environ["TLM_IBKR_POLL_INTERVAL_SECONDS"], "3.0")
                 self.assertEqual(os.environ["TLM_IBKR_REVIEW_INTERVAL_SECONDS"], "120.0")
                 self.assertEqual(os.environ["TLM_IBKR_READINESS_MAX_STALE_SECONDS"], "9")
+                self.assertEqual(os.environ["TLM_IBKR_SIGNAL_REGIME_COOLDOWN_SECONDS"], "180.0")
+                self.assertEqual(os.environ["TLM_IBKR_TAKE_PROFIT_TICKS_MULTIPLIER"], "2.0")
+                self.assertEqual(os.environ["TLM_IBKR_DAILY_TRADE_CAP"], "3")
+                self.assertEqual(os.environ["TLM_IBKR_MAX_CONCURRENT_POSITIONS"], "1")
                 self.assertEqual(os.environ["TLM_IBKR_MAX_SPREAD_TICKS"], "4.0")
                 self.assertEqual(os.environ["TLM_IBKR_AUTO_SUBMIT"], "1")
                 self.assertEqual(os.environ["TLM_IBKR_AUTO_CONNECT"], "1")

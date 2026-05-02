@@ -91,6 +91,8 @@ def deterministic_fallback_review(request: dict[str, Any]) -> dict[str, Any]:
         fast_changes.append({"change": "safe_mode", "reason": "daily_loss_limit_hit"})
     if risk_context.get("daily_trade_cap_reached"):
         blocked_reasons.append("daily_trade_cap_reached")
+    if risk_context.get("signal_regime_cooldown_active"):
+        blocked_reasons.append("signal_regime_cooldown_active")
     if (
         request.get("strong_signal_count", 0)
         and open_position_quantity + open_bracket_order_count >= max_concurrent_positions
@@ -191,13 +193,15 @@ def _paper_plan(request: dict[str, Any]) -> dict[str, Any]:
     close = float(bar.get("close", 0.0))
     stop_ticks = int(request.get("strategy_state", {}).get("stop_loss_ticks", 20))
     take_ticks = int(request.get("strategy_state", {}).get("take_profit_ticks", 40))
+    take_ticks_multiplier = max(float(request.get("strategy_state", {}).get("take_profit_ticks_multiplier", 1.0)), 0.0)
+    effective_take_ticks = max(int(round(take_ticks * take_ticks_multiplier)), 1)
     tick_size = float(request.get("strategy_state", {}).get("tick_size", 0.25))
     if side == "SELL":
         stop_price = close + stop_ticks * tick_size
-        take_profit_price = close - take_ticks * tick_size
+        take_profit_price = close - effective_take_ticks * tick_size
     else:
         stop_price = close - stop_ticks * tick_size
-        take_profit_price = close + take_ticks * tick_size
+        take_profit_price = close + effective_take_ticks * tick_size
     return {
         "symbol": signal.get("symbol", "MNQ"),
         "action": side,
@@ -206,6 +210,8 @@ def _paper_plan(request: dict[str, Any]) -> dict[str, Any]:
         "reference_price": close,
         "stop_price": stop_price,
         "take_profit_price": take_profit_price,
+        "take_profit_ticks": effective_take_ticks,
+        "take_profit_ticks_multiplier": take_ticks_multiplier,
         "max_holding_minutes": int(request.get("strategy_state", {}).get("max_holding_minutes", 20)),
     }
 
