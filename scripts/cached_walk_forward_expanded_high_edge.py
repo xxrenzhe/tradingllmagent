@@ -52,6 +52,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--min-scan-type-count", action="append", default=[])
     parser.add_argument("--exclude-scan-type", action="append", default=[])
     parser.add_argument("--min-full-year-trades", type=int, default=1000)
+    parser.add_argument("--min-train-win-rate", type=float)
+    parser.add_argument("--min-test-win-rate", type=float)
     parser.add_argument("--output", type=Path, default=Path("reports/nq_expanded_high_edge_cached_walk_forward_grid_2026-05-02.json"))
     args = parser.parse_args(argv)
 
@@ -123,10 +125,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 parameter_grid=low_r_grid(full_grid=args.full_low_r_grid),
                                 max_positions_grid=(1, 2, 3, 6, 12, 24, 99) if args.full_low_r_grid else (6, 12, 24, 99),
                                 min_full_year_trades=args.min_full_year_trades,
+                                min_train_win_rate=args.min_train_win_rate,
+                                min_test_win_rate=args.min_test_win_rate,
                                 cost_adjustment_usd=cost_adjustment_usd,
                                 single_replay_cache=single_replay_cache,
                             )
-                            summary = summarize_walk_forward(folds, all_candidate_stats, args.min_full_year_trades)
+                            summary = summarize_walk_forward(
+                                folds,
+                                all_candidate_stats,
+                                args.min_full_year_trades,
+                                min_test_win_rate=args.min_test_win_rate,
+                            )
                             rows.append(
                                 {
                                     "config": {
@@ -140,6 +149,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                         "max_scan_type_counts": max_scan_type_counts,
                                         "min_scan_type_counts": min_scan_type_counts,
                                         "excluded_scan_types": list(args.exclude_scan_type),
+                                        "min_train_win_rate": args.min_train_win_rate,
+                                        "min_test_win_rate": args.min_test_win_rate,
                                     },
                                     "summary": summary,
                                     "folds": folds,
@@ -179,6 +190,8 @@ def run_walk_forward_config(
     parameter_grid: Sequence[dict[str, Any]],
     max_positions_grid: Sequence[int],
     min_full_year_trades: int,
+    min_train_win_rate: float | None,
+    min_test_win_rate: float | None,
     cost_adjustment_usd: float,
     single_replay_cache: dict[tuple[Any, ...], dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -203,6 +216,8 @@ def run_walk_forward_config(
             parameter_grid=parameter_grid,
             max_positions_grid=max_positions_grid,
             min_full_year_trades=min_full_year_trades,
+            min_train_win_rate=min_train_win_rate,
+            min_test_win_rate=min_test_win_rate,
             previous_ids=previous_ids,
             cost_adjustment_usd=cost_adjustment_usd,
             single_replay_cache=single_replay_cache,

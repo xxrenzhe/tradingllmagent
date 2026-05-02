@@ -77,6 +77,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--full-grid", action="store_true")
     parser.add_argument("--min-full-year-trades", type=int, default=1000)
+    parser.add_argument("--min-train-win-rate", type=float)
+    parser.add_argument("--min-test-win-rate", type=float)
     parser.add_argument("--output", type=Path, default=Path("reports/nq_expanded_high_edge_walk_forward_2026-05-01.json"))
     args = parser.parse_args(argv)
     max_scan_type_counts = parse_scan_type_counts(args.max_scan_type_count, option_name="--max-scan-type-count")
@@ -134,10 +136,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 parameter_grid=parameter_grid,
                 max_positions_grid=max_positions_grid,
                 min_full_year_trades=args.min_full_year_trades,
+                min_train_win_rate=args.min_train_win_rate,
+                min_test_win_rate=args.min_test_win_rate,
                 previous_ids=previous_ids,
                 cost_adjustment_usd=cost_adjustment_usd,
             )
-            previous_ids = tuple(fold["selected_candidate_ids"])
+            previous_ids = tuple(fold.get("selected_candidate_ids") or ())
             folds.append(fold)
             print(
                 f"finished fold test={test_year} status={fold['status']} "
@@ -147,7 +151,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     finally:
         con.close()
 
-    summary = summarize_walk_forward(folds, all_candidate_stats, args.min_full_year_trades)
+    summary = summarize_walk_forward(
+        folds,
+        all_candidate_stats,
+        args.min_full_year_trades,
+        min_test_win_rate=args.min_test_win_rate,
+    )
     payload = {
         "artifact": "expanded_high_edge_walk_forward_validation",
         "date_from": args.date_from,
@@ -170,6 +179,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "take_profit_r_grid": list(take_profit_r_grid),
             "full_grid": args.full_grid,
             "min_full_year_trades": args.min_full_year_trades,
+            "min_train_win_rate": args.min_train_win_rate,
+            "min_test_win_rate": args.min_test_win_rate,
         },
         "summary": summary,
         "folds": folds,
@@ -199,6 +210,8 @@ def run_fold(
     parameter_grid: Sequence[dict[str, Any]],
     max_positions_grid: Sequence[int],
     min_full_year_trades: int,
+    min_train_win_rate: float | None,
+    min_test_win_rate: float | None,
     previous_ids: Sequence[str],
     cost_adjustment_usd: float,
     single_replay_cache: dict[tuple[Any, ...], dict[str, Any]] | None = None,
@@ -287,6 +300,16 @@ def run_fold(
                     params={**params, "max_concurrent_positions": max_positions},
                 )
                 evaluated_combo_count += 1
+                train_hard_gate = hard_gate_report_for_result(
+                    train_result,
+                    train_years,
+                    coverage_days,
+                    min_full_year_trades=min_full_year_trades,
+                    min_win_rate=min_train_win_rate,
+                )
+                train_result["hard_gate_report"] = train_hard_gate
+                if min_train_win_rate is not None and not train_hard_gate["passed"]:
+                    continue
                 if best_train_combo is None or train_combo_sort_key(
                     train_result,
                     train_years,
@@ -350,6 +373,13 @@ def run_fold(
         "train_metrics": compact_metrics(best_train_combo),
         "test_metrics": compact_metrics(test_result),
         "test_yearly_result": compact_year(test_result, test_year, coverage_days),
+        "test_hard_gate_report": hard_gate_report_for_result(
+            test_result,
+            (test_year,),
+            coverage_days,
+            min_full_year_trades=min_full_year_trades,
+            min_win_rate=min_test_win_rate,
+        ),
     }
 
 
@@ -946,6 +976,7 @@ def compact_year(result: dict[str, Any], year: int, coverage_days: dict[int, int
             "coverage_days": coverage_days.get(year, 0),
             "net_pnl": 0.0,
             "profit_factor": None,
+            "win_rate": None,
         }
     trade_count = int(row.get("trade_count") or 0)
     annualized_count = annualized_trade_count(trade_count, coverage_days.get(year, 365)) if year == 2026 else float(trade_count)
@@ -956,8 +987,48 @@ def compact_year(result: dict[str, Any], year: int, coverage_days: dict[int, int
         "coverage_days": coverage_days.get(year, 365),
         "net_pnl": row.get("net_pnl"),
         "profit_factor": row.get("profit_factor"),
+        "win_rate": row.get("win_rate"),
         "avg_trade_net_pnl": row.get("avg_trade_net_pnl"),
         "max_drawdown": row.get("max_drawdown"),
+    }
+
+
+def hard_gate_report_for_result(
+    result: dict[str, Any],
+    years: Sequence[int],
+    coverage_days: dict[int, int],
+    *,
+    min_full_year_trades: int,
+    min_win_rate: float | None,
+) -> dict[str, Any]:
+    by_year = {int(item["year"]): item for item in result.get("yearly_results", [])}
+    rows = [compact_year(result, int(year), coverage_days) for year in years]
+    failed_positive_years = [
+        int(row["year"])
+        for row in rows
+        if float(row.get("net_pnl") or 0.0) <= 0
+    ]
+    failed_trade_floor_years = [
+        int(row["year"])
+        for row in rows
+        if float(row.get("annualized_trade_count") or row.get("trade_count") or 0) <= min_full_year_trades
+    ]
+    failed_win_rate_years = [
+        int(row["year"])
+        for row in rows
+        if min_win_rate is not None and float(row.get("win_rate") or 0.0) < min_win_rate
+    ]
+    return {
+        "passed": not failed_positive_years and not failed_trade_floor_years and not failed_win_rate_years,
+        "min_win_rate": min_win_rate,
+        "checked_years": [int(year) for year in years],
+        "failed_positive_years": failed_positive_years,
+        "failed_trade_floor_years": failed_trade_floor_years,
+        "failed_win_rate_years": failed_win_rate_years,
+        "min_observed_win_rate": min(
+            (float(row.get("win_rate") or 0.0) for row in rows if int(row["year"]) in by_year),
+            default=None,
+        ),
     }
 
 
@@ -965,6 +1036,7 @@ def summarize_walk_forward(
     folds: Sequence[dict[str, Any]],
     all_candidate_stats: Sequence[CandidateStats],
     min_full_year_trades: int,
+    min_test_win_rate: float | None = None,
 ) -> dict[str, Any]:
     ok_folds = [fold for fold in folds if fold.get("status") == "ok"]
     test_rows = [fold["test_yearly_result"] for fold in ok_folds]
@@ -976,9 +1048,15 @@ def summarize_walk_forward(
         for fold in ok_folds
         if fold["selected_edge_turnover"]["jaccard_similarity"] is not None
     ]
-    evaluated_combos = sum(int(fold.get("evaluated_combo_count") or 0) for fold in ok_folds)
+    evaluated_combos = sum(int(fold.get("evaluated_combo_count") or 0) for fold in folds)
     positive_test_years = sum(1 for value in test_pnls if value > 0)
     trade_floor_years = sum(1 for value in trade_floor_counts if value > min_full_year_trades)
+    test_win_rates = [row.get("win_rate") for row in test_rows]
+    win_rate_gate_years = (
+        sum(1 for value in test_win_rates if value is not None and float(value) >= min_test_win_rate)
+        if min_test_win_rate is not None
+        else len(test_rows)
+    )
     failed_positive_years = [
         int(row["year"])
         for row in test_rows
@@ -989,13 +1067,25 @@ def summarize_walk_forward(
         for row in test_rows
         if float(row.get("annualized_trade_count") or row.get("trade_count") or 0) <= min_full_year_trades
     ]
+    failed_win_rate_years = [
+        int(row["year"])
+        for row in test_rows
+        if min_test_win_rate is not None and float(row.get("win_rate") or 0.0) < min_test_win_rate
+    ]
+    failed_reasons = [] if test_pnls else ["no_ok_test_folds"]
     decision = {
-        "passed": positive_test_years == len(test_pnls) and trade_floor_years == len(test_counts),
+        "passed": bool(test_pnls)
+        and positive_test_years == len(test_pnls)
+        and trade_floor_years == len(test_counts)
+        and win_rate_gate_years == len(test_rows),
         "positive_test_years": positive_test_years,
         "test_year_count": len(test_pnls),
         "trade_floor_years": trade_floor_years,
+        "win_rate_gate_years": win_rate_gate_years,
         "failed_positive_years": failed_positive_years,
         "failed_trade_floor_years": failed_trade_floor_years,
+        "failed_win_rate_years": failed_win_rate_years,
+        "failed_reasons": failed_reasons,
     }
     effective_trials = len(all_candidate_stats) + evaluated_combos
     return {
@@ -1005,13 +1095,14 @@ def summarize_walk_forward(
         "oos_min_year_trades": min(test_counts) if test_counts else None,
         "oos_min_year_trade_floor_count": min(trade_floor_counts) if trade_floor_counts else None,
         "oos_total_trades": sum(test_counts),
+        "oos_min_year_win_rate": min((float(value) for value in test_win_rates if value is not None), default=None),
         "average_turnover_jaccard": sum(turnover_values) / len(turnover_values) if turnover_values else None,
         "min_turnover_jaccard": min(turnover_values) if turnover_values else None,
         "multiple_testing": {
             "candidate_group_count": len(all_candidate_stats),
             "evaluated_train_combo_count": evaluated_combos,
             "effective_trial_count_floor": effective_trials,
-            "penalty_decision": "fail" if failed_positive_years or failed_trade_floor_years else "pass",
+            "penalty_decision": "pass" if decision["passed"] else "fail",
             "selection_bias_note": "Treat in-sample net PnL as rejected unless rolling OOS gates pass; statistical deflated Sharpe is not estimated because per-trial return paths are not persisted.",
         },
     }

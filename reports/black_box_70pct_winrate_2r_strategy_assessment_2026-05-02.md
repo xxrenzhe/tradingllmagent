@@ -79,6 +79,21 @@ After confirming historical bars exist under `data/bars`, the expanded high-edge
 
 This directly addresses the available `data/bars` evidence: even before quote/tick execution replay, the strict 2R bar-level candidate fails both the 70% win-rate requirement and the long-term profitability gate.
 
+### Locked 70% Win-Rate / 2R Hard Gate
+
+Source: `reports/nq_expanded_high_edge_walk_forward_70wr_2r_hard_gate_2026-05-02.json`
+
+The walk-forward runner now supports explicit train/test win-rate gates, so the 70% target is enforced during selection rather than checked only after the fact. A locked run was executed with `--take-profit-r-grid 2.0`, `--min-train-win-rate 0.70`, and `--min-test-win-rate 0.70`.
+
+- Data scope: `data/bars/1m/NQ_CME`, 2019-01-01 to 2026-04-27.
+- Selection method: rolling train years, next-year out-of-sample replay.
+- Candidate groups checked: 26,148.
+- Train combo attempts: 144.
+- Fold result: 6 of 6 folds had `no_train_combo`.
+- Gate result: failed; no strategy survived the training-side 70% win-rate / 2R hard gate.
+
+This is stricter than the prior locked 2R report. It shows the current expanded-high-edge candidate universe cannot even produce a train-selected 70% win-rate / 2R candidate under the rolling protocol, so there is no out-of-sample candidate to promote.
+
 ### Independent Signal Family Expansion
 
 Source files:

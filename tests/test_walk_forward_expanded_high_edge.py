@@ -6,8 +6,10 @@ import unittest
 from scripts.walk_forward_expanded_high_edge import (
     build_walk_forward_specs,
     cached_single_replay,
+    hard_gate_report_for_result,
     parse_float_grid,
     parse_scan_type_counts,
+    summarize_walk_forward,
 )
 from scripts.cached_walk_forward_expanded_high_edge import (
     leaderboard_sort_key,
@@ -155,6 +157,68 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         }
 
         self.assertGreater(leaderboard_sort_key(passed), leaderboard_sort_key(failed))
+
+    def test_hard_gate_report_rejects_low_win_rate_year(self) -> None:
+        result = {
+            "yearly_results": [
+                {
+                    "year": 2025,
+                    "trade_count": 1200,
+                    "net_pnl": 1000.0,
+                    "win_rate": 0.69,
+                }
+            ]
+        }
+
+        gate = hard_gate_report_for_result(
+            result,
+            (2025,),
+            {2025: 365},
+            min_full_year_trades=1000,
+            min_win_rate=0.70,
+        )
+
+        self.assertFalse(gate["passed"])
+        self.assertEqual(gate["failed_win_rate_years"], [2025])
+        self.assertEqual(gate["min_observed_win_rate"], 0.69)
+
+    def test_summarize_walk_forward_applies_test_win_rate_gate(self) -> None:
+        summary = summarize_walk_forward(
+            [
+                {
+                    "status": "ok",
+                    "evaluated_combo_count": 1,
+                    "selected_edge_turnover": {"jaccard_similarity": None},
+                    "test_yearly_result": {
+                        "year": 2025,
+                        "trade_count": 1200,
+                        "annualized_trade_count": 1200.0,
+                        "net_pnl": 1000.0,
+                        "win_rate": 0.69,
+                    },
+                }
+            ],
+            [],
+            min_full_year_trades=1000,
+            min_test_win_rate=0.70,
+        )
+
+        self.assertFalse(summary["decision"]["passed"])
+        self.assertEqual(summary["decision"]["failed_win_rate_years"], [2025])
+        self.assertEqual(summary["oos_min_year_win_rate"], 0.69)
+
+    def test_summarize_walk_forward_allows_no_combo_fold(self) -> None:
+        summary = summarize_walk_forward(
+            [{"status": "no_train_combo", "evaluated_combo_count": 3}],
+            [],
+            min_full_year_trades=1000,
+            min_test_win_rate=0.70,
+        )
+
+        self.assertFalse(summary["decision"]["passed"])
+        self.assertEqual(summary["decision"]["test_year_count"], 0)
+        self.assertEqual(summary["multiple_testing"]["evaluated_train_combo_count"], 3)
+        self.assertEqual(summary["multiple_testing"]["penalty_decision"], "fail")
 
     def test_cooldown_replay_suppresses_same_regime_entries(self) -> None:
         edge = RegimeEdge(
