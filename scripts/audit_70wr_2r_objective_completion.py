@@ -21,6 +21,7 @@ DEFAULT_REPORTS = {
     "tick_coverage": Path("reports/nq_expanded_high_edge_mbp1_quote_coverage_audit_2026-05-02.json"),
     "execution_stress": Path("reports/nq_expanded_high_edge_execution_stress_mbp1_full_2026-05-02.json"),
     "vol_objective": Path("reports/nq_vol_execution_70wr_2r_objective_audit_2026-05-02.json"),
+    "mbp1_microstructure_2r": Path("reports/nq_mbp1_microstructure_2r_search_2026-05-03.json"),
     "assessment": Path("reports/black_box_70pct_winrate_2r_strategy_assessment_2026-05-02.md"),
 }
 
@@ -56,6 +57,7 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
     tick_coverage = evidence["tick_coverage"]
     execution_stress = evidence["execution_stress"]
     vol_objective = evidence["vol_objective"]
+    mbp1_microstructure_2r = evidence.get("mbp1_microstructure_2r")
 
     requirements = [
         requirement(
@@ -74,6 +76,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                 {
                     "artifact": str(DEFAULT_REPORTS["vol_objective"]),
                     "finding": gate_findings(vol_objective, ("vol_prescreen_has_70pct_win_rate",)),
+                },
+                {
+                    "artifact": str(DEFAULT_REPORTS["mbp1_microstructure_2r"]),
+                    "finding": microstructure_finding(mbp1_microstructure_2r),
                 },
             ],
             gap="No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, SMC v1 has 0% full-history win rate, and VOL has no >=70% prescreen row.",
@@ -95,6 +101,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                     "artifact": str(DEFAULT_REPORTS["vol_objective"]),
                     "finding": gate_findings(vol_objective, ("vol_strategy_reward_profile_ge_2r",)),
                 },
+                {
+                    "artifact": str(DEFAULT_REPORTS["mbp1_microstructure_2r"]),
+                    "finding": microstructure_finding(mbp1_microstructure_2r),
+                },
             ],
             gap="Strict 2R expanded-high-edge walk-forward fails, SMC v1 net-R gates are negative rather than >= 2R, and VOL generated specs are below 2R.",
         ),
@@ -114,6 +124,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                 {
                     "artifact": str(DEFAULT_REPORTS["vol_objective"]),
                     "finding": gate_findings(vol_objective, ("vol_final_target_rows_exist",)),
+                },
+                {
+                    "artifact": str(DEFAULT_REPORTS["mbp1_microstructure_2r"]),
+                    "finding": microstructure_finding(mbp1_microstructure_2r),
                 },
             ],
             gap="No locked walk-forward candidate survives the explicit 70%/2R objective gates; VOL has no final-target rows.",
@@ -217,6 +231,20 @@ def requirement(
 def gate_findings(report: dict[str, Any], names: Sequence[str]) -> list[dict[str, Any]]:
     gates = {gate["name"]: gate for gate in report.get("objective_gates", [])}
     return [gates[name] for name in names if name in gates]
+
+
+def microstructure_finding(report: dict[str, Any] | None) -> dict[str, Any]:
+    if not report:
+        return {"status": "missing"}
+    selected = report.get("selected") or {}
+    return {
+        "decision": report.get("decision"),
+        "target": report.get("target"),
+        "coverage": report.get("coverage"),
+        "selected_spec": selected.get("spec"),
+        "selected_train": selected.get("train"),
+        "selected_test": selected.get("test"),
+    }
 
 
 def render_markdown(payload: dict[str, Any]) -> str:

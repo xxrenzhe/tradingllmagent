@@ -99,6 +99,23 @@ The walk-forward runner now supports explicit train/test win-rate gates, so the 
 
 This is stricter than the prior locked 2R report. It shows the current expanded-high-edge candidate universe cannot even produce a train-selected 70% win-rate / 2R candidate under the rolling protocol, so there is no out-of-sample candidate to promote.
 
+### Standalone MBP-1 Microstructure 2R Search
+
+Source: `reports/nq_mbp1_microstructure_2r_search_2026-05-03.json`
+
+The provided two-month Databento MBP-1 quote window was also searched directly as a standalone microstructure strategy source, instead of only using it to replay bar-selected trades.
+
+- Data scope: 52 normalized quote days, 3,488,665 one-second top-of-book snapshots from 2026-03-03 to 2026-05-01.
+- Selection method: chronological first half train, second half holdout.
+- Execution model: top-of-book bid/ask entries and exits with fixed 2R brackets.
+- Fast-grid specs evaluated: 64.
+- Best train-ranked spec: short momentum continuation, 48-tick stop, 96-tick target.
+- Train result: 351 trades, 37.04% win rate, net PnL $2,540.00.
+- Holdout result: 477 trades, 29.98% win rate, net PnL -$23,020.00.
+- Gate result: failed; no train-selected standalone MBP-1 2R strategy passed the 70% win-rate, trade-count, and positive-PnL holdout gates.
+
+This closes a separate tick-data path: direct MBP-1 microstructure mining also does not produce the requested 70%/2R candidate.
+
 ### Relaxed 55% Win-Rate / 1.5R Fallback Gate
 
 Source: `reports/55wr_15r_objective_completion_audit_2026-05-03.json`

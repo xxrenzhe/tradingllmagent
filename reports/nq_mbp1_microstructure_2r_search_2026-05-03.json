@@ -1,0 +1,2216 @@
+{
+  "artifact": "nq_mbp1_microstructure_2r_search",
+  "coverage": {
+    "quote_file_count": 52,
+    "second_quote_count": 3488665,
+    "test_second_quote_count": 1744333,
+    "train_second_quote_count": 1744332
+  },
+  "date_from": "2026-03-03",
+  "date_to": "2026-05-01",
+  "decision": {
+    "live_ready": false,
+    "live_ready_reason": "A two-month quote-only search cannot establish long-term profitability or paper readiness without multi-year walk-forward and live/paper evidence.",
+    "passed": false,
+    "reason": "No train-selected standalone MBP-1 2R strategy passed the 70% win-rate, trade-count, and positive-PnL holdout gates."
+  },
+  "method": {
+    "full_grid": false,
+    "long_term_limit": "Only covers the provided two-month tick window, so passing this report alone cannot satisfy long-term/live-ready requirements.",
+    "sampling": "Last quote per second; entries and exits use top-of-book bid/ask.",
+    "scope": "Standalone quote microstructure search on Databento MBP-1 normalized quote files.",
+    "selection": "Chronological first half selects specs; second half is untouched holdout.",
+    "spec_count": 64,
+    "train_test_split": {
+      "test_end": "2026-05-01T21:00:00.068017",
+      "test_start": "2026-04-01T07:56:53.964332",
+      "train_end": "2026-04-01T07:56:52.924422",
+      "train_start": "2026-03-03T00:00:00.983668"
+    }
+  },
+  "schema_version": 1,
+  "selected": {
+    "spec": {
+      "cooldown_seconds": 300,
+      "direction": "short",
+      "fast_seconds": 60,
+      "max_hold_seconds": 900,
+      "max_spread_ticks": 2.0,
+      "min_aligned_imbalance": 0.0,
+      "min_depth": 2.0,
+      "min_fast_move_ticks": 16.0,
+      "min_slow_move_ticks": 32.0,
+      "slow_seconds": 300,
+      "stop_ticks": 48.0
+    },
+    "test": {
+      "avg_trade_net_pnl": -48.259958071278824,
+      "exit_reasons": {
+        "stop_loss": 316,
+        "take_profit_2r": 118,
+        "time_exit": 43
+      },
+      "gate_passed": false,
+      "net_pnl": -23020.0,
+      "profit_factor": 0.7191484170072592,
+      "trade_count": 477,
+      "win_rate": 0.29979035639413,
+      "winning_trade_count": 143
+    },
+    "train": {
+      "avg_trade_net_pnl": 7.236467236467236,
+      "exit_reasons": {
+        "stop_loss": 219,
+        "take_profit_2r": 124,
+        "time_exit": 8
+      },
+      "gate_passed": false,
+      "net_pnl": 2540.0,
+      "profit_factor": 1.0452843644143341,
+      "trade_count": 351,
+      "win_rate": 0.37037037037037035,
+      "winning_trade_count": 130
+    }
+  },
+  "symbol": "NQ_CME",
+  "target": {
+    "min_test_trades": 100,
+    "min_train_trades": 100,
+    "min_win_rate": 0.7,
+    "reward_r": 2.0
+  },
+  "top_specs": [
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -48.259958071278824,
+        "exit_reasons": {
+          "stop_loss": 316,
+          "take_profit_2r": 118,
+          "time_exit": 43
+        },
+        "gate_passed": false,
+        "net_pnl": -23020.0,
+        "profit_factor": 0.7191484170072592,
+        "trade_count": 477,
+        "win_rate": 0.29979035639413,
+        "winning_trade_count": 143
+      },
+      "train": {
+        "avg_trade_net_pnl": 7.236467236467236,
+        "exit_reasons": {
+          "stop_loss": 219,
+          "take_profit_2r": 124,
+          "time_exit": 8
+        },
+        "gate_passed": false,
+        "net_pnl": 2540.0,
+        "profit_factor": 1.0452843644143341,
+        "trade_count": 351,
+        "win_rate": 0.37037037037037035,
+        "winning_trade_count": 130
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -50.806451612903224,
+        "exit_reasons": {
+          "stop_loss": 391,
+          "take_profit_2r": 144,
+          "time_exit": 54
+        },
+        "gate_passed": false,
+        "net_pnl": -29925.0,
+        "profit_factor": 0.7061567164179104,
+        "trade_count": 589,
+        "win_rate": 0.29711375212224106,
+        "winning_trade_count": 175
+      },
+      "train": {
+        "avg_trade_net_pnl": 4.696969696969697,
+        "exit_reasons": {
+          "stop_loss": 246,
+          "take_profit_2r": 136,
+          "time_exit": 14
+        },
+        "gate_passed": false,
+        "net_pnl": 1860.0,
+        "profit_factor": 1.0293630120767228,
+        "trade_count": 396,
+        "win_rate": 0.3686868686868687,
+        "winning_trade_count": 146
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -45.32169117647059,
+        "exit_reasons": {
+          "stop_loss": 361,
+          "take_profit_2r": 137,
+          "time_exit": 46
+        },
+        "gate_passed": false,
+        "net_pnl": -24655.0,
+        "profit_factor": 0.7361973036593195,
+        "trade_count": 544,
+        "win_rate": 0.3125,
+        "winning_trade_count": 170
+      },
+      "train": {
+        "avg_trade_net_pnl": 6.066838046272494,
+        "exit_reasons": {
+          "stop_loss": 243,
+          "take_profit_2r": 136,
+          "time_exit": 10
+        },
+        "gate_passed": false,
+        "net_pnl": 2360.0,
+        "profit_factor": 1.0379329743630956,
+        "trade_count": 389,
+        "win_rate": 0.3676092544987147,
+        "winning_trade_count": 143
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -45.34412955465587,
+        "exit_reasons": {
+          "stop_loss": 325,
+          "take_profit_2r": 123,
+          "time_exit": 46
+        },
+        "gate_passed": false,
+        "net_pnl": -22400.0,
+        "profit_factor": 0.734612878383982,
+        "trade_count": 494,
+        "win_rate": 0.305668016194332,
+        "winning_trade_count": 151
+      },
+      "train": {
+        "avg_trade_net_pnl": 3.136729222520107,
+        "exit_reasons": {
+          "stop_loss": 233,
+          "take_profit_2r": 129,
+          "time_exit": 11
+        },
+        "gate_passed": false,
+        "net_pnl": 1170.0,
+        "profit_factor": 1.0195930670685758,
+        "trade_count": 373,
+        "win_rate": 0.3672922252010724,
+        "winning_trade_count": 137
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -35.3238199780461,
+        "exit_reasons": {
+          "stop_loss": 655,
+          "take_profit_2r": 248,
+          "time_exit": 8
+        },
+        "gate_passed": false,
+        "net_pnl": -32180.0,
+        "profit_factor": 0.6361169220331316,
+        "trade_count": 911,
+        "win_rate": 0.27991218441273324,
+        "winning_trade_count": 255
+      },
+      "train": {
+        "avg_trade_net_pnl": -4.665924276169265,
+        "exit_reasons": {
+          "stop_loss": 572,
+          "take_profit_2r": 325,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -4190.0,
+        "profit_factor": 0.9458061178296578,
+        "trade_count": 898,
+        "win_rate": 0.3619153674832962,
+        "winning_trade_count": 325
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -44.76228209191759,
+        "exit_reasons": {
+          "stop_loss": 416,
+          "take_profit_2r": 158,
+          "time_exit": 57
+        },
+        "gate_passed": false,
+        "net_pnl": -28245.0,
+        "profit_factor": 0.7385690485005554,
+        "trade_count": 631,
+        "win_rate": 0.3074484944532488,
+        "winning_trade_count": 194
+      },
+      "train": {
+        "avg_trade_net_pnl": 0.7665903890160183,
+        "exit_reasons": {
+          "stop_loss": 277,
+          "take_profit_2r": 149,
+          "time_exit": 11
+        },
+        "gate_passed": false,
+        "net_pnl": 335.0,
+        "profit_factor": 1.0047213022338102,
+        "trade_count": 437,
+        "win_rate": 0.36155606407322655,
+        "winning_trade_count": 158
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -30.64963503649635,
+        "exit_reasons": {
+          "stop_loss": 486,
+          "take_profit_2r": 198,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -20995.0,
+        "profit_factor": 0.6800030483158055,
+        "trade_count": 685,
+        "win_rate": 0.2905109489051095,
+        "winning_trade_count": 199
+      },
+      "train": {
+        "avg_trade_net_pnl": -6.666666666666667,
+        "exit_reasons": {
+          "stop_loss": 490,
+          "take_profit_2r": 271,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -5080.0,
+        "profit_factor": 0.9232048374905518,
+        "trade_count": 762,
+        "win_rate": 0.3569553805774278,
+        "winning_trade_count": 272
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -49.654205607476634,
+        "exit_reasons": {
+          "stop_loss": 353,
+          "take_profit_2r": 131,
+          "time_exit": 51
+        },
+        "gate_passed": false,
+        "net_pnl": -26565.0,
+        "profit_factor": 0.7107626980238445,
+        "trade_count": 535,
+        "win_rate": 0.2953271028037383,
+        "winning_trade_count": 158
+      },
+      "train": {
+        "avg_trade_net_pnl": -4.21875,
+        "exit_reasons": {
+          "stop_loss": 246,
+          "take_profit_2r": 130,
+          "time_exit": 8
+        },
+        "gate_passed": false,
+        "net_pnl": -1620.0,
+        "profit_factor": 0.9742161387872036,
+        "trade_count": 384,
+        "win_rate": 0.3567708333333333,
+        "winning_trade_count": 137
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -39.6690518783542,
+        "exit_reasons": {
+          "stop_loss": 364,
+          "take_profit_2r": 142,
+          "time_exit": 53
+        },
+        "gate_passed": false,
+        "net_pnl": -22175.0,
+        "profit_factor": 0.7642963435374149,
+        "trade_count": 559,
+        "win_rate": 0.32021466905187834,
+        "winning_trade_count": 179
+      },
+      "train": {
+        "avg_trade_net_pnl": -4.1525423728813555,
+        "exit_reasons": {
+          "stop_loss": 264,
+          "take_profit_2r": 139,
+          "time_exit": 10
+        },
+        "gate_passed": false,
+        "net_pnl": -1715.0,
+        "profit_factor": 0.9746189137191061,
+        "trade_count": 413,
+        "win_rate": 0.35351089588377727,
+        "winning_trade_count": 146
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -48.745019920318725,
+        "exit_reasons": {
+          "stop_loss": 333,
+          "take_profit_2r": 124,
+          "time_exit": 45
+        },
+        "gate_passed": false,
+        "net_pnl": -24470.0,
+        "profit_factor": 0.717599538372764,
+        "trade_count": 502,
+        "win_rate": 0.30278884462151395,
+        "winning_trade_count": 152
+      },
+      "train": {
+        "avg_trade_net_pnl": -9.383954154727794,
+        "exit_reasons": {
+          "stop_loss": 224,
+          "take_profit_2r": 113,
+          "time_exit": 12
+        },
+        "gate_passed": false,
+        "net_pnl": -3275.0,
+        "profit_factor": 0.9429690901175446,
+        "trade_count": 349,
+        "win_rate": 0.3524355300859599,
+        "winning_trade_count": 123
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -42.05314009661836,
+        "exit_reasons": {
+          "stop_loss": 411,
+          "take_profit_2r": 165,
+          "time_exit": 45
+        },
+        "gate_passed": false,
+        "net_pnl": -26115.0,
+        "profit_factor": 0.7556262574275956,
+        "trade_count": 621,
+        "win_rate": 0.3075684380032206,
+        "winning_trade_count": 191
+      },
+      "train": {
+        "avg_trade_net_pnl": -5.672676837725382,
+        "exit_reasons": {
+          "stop_loss": 462,
+          "take_profit_2r": 241,
+          "time_exit": 18
+        },
+        "gate_passed": false,
+        "net_pnl": -4090.0,
+        "profit_factor": 0.9655099717502214,
+        "trade_count": 721,
+        "win_rate": 0.3522884882108183,
+        "winning_trade_count": 254
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -42.45384615384615,
+        "exit_reasons": {
+          "stop_loss": 429,
+          "take_profit_2r": 170,
+          "time_exit": 51
+        },
+        "gate_passed": false,
+        "net_pnl": -27595.0,
+        "profit_factor": 0.7521444289756142,
+        "trade_count": 650,
+        "win_rate": 0.30615384615384617,
+        "winning_trade_count": 199
+      },
+      "train": {
+        "avg_trade_net_pnl": -6.570469798657718,
+        "exit_reasons": {
+          "stop_loss": 479,
+          "take_profit_2r": 249,
+          "time_exit": 17
+        },
+        "gate_passed": false,
+        "net_pnl": -4895.0,
+        "profit_factor": 0.9601433049708912,
+        "trade_count": 745,
+        "win_rate": 0.3503355704697987,
+        "winning_trade_count": 261
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -21.264150943396228,
+        "exit_reasons": {
+          "stop_loss": 543,
+          "take_profit_2r": 250,
+          "time_exit": 2
+        },
+        "gate_passed": false,
+        "net_pnl": -16905.0,
+        "profit_factor": 0.7693881727030898,
+        "trade_count": 795,
+        "win_rate": 0.3169811320754717,
+        "winning_trade_count": 252
+      },
+      "train": {
+        "avg_trade_net_pnl": -10.518072289156626,
+        "exit_reasons": {
+          "stop_loss": 543,
+          "take_profit_2r": 287
+        },
+        "gate_passed": false,
+        "net_pnl": -8730.0,
+        "profit_factor": 0.8809085328422345,
+        "trade_count": 830,
+        "win_rate": 0.3457831325301205,
+        "winning_trade_count": 287
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -40.42723631508678,
+        "exit_reasons": {
+          "stop_loss": 496,
+          "take_profit_2r": 196,
+          "time_exit": 57
+        },
+        "gate_passed": false,
+        "net_pnl": -30280.0,
+        "profit_factor": 0.7632340292438815,
+        "trade_count": 749,
+        "win_rate": 0.31241655540720964,
+        "winning_trade_count": 234
+      },
+      "train": {
+        "avg_trade_net_pnl": -8.163636363636364,
+        "exit_reasons": {
+          "stop_loss": 532,
+          "take_profit_2r": 274,
+          "time_exit": 19
+        },
+        "gate_passed": false,
+        "net_pnl": -6735.0,
+        "profit_factor": 0.950666569000879,
+        "trade_count": 825,
+        "win_rate": 0.34545454545454546,
+        "winning_trade_count": 285
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -22.466755319148938,
+        "exit_reasons": {
+          "stop_loss": 516,
+          "take_profit_2r": 235,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -16895.0,
+        "profit_factor": 0.7578472122688835,
+        "trade_count": 752,
+        "win_rate": 0.3125,
+        "winning_trade_count": 235
+      },
+      "train": {
+        "avg_trade_net_pnl": -11.291718170580964,
+        "exit_reasons": {
+          "stop_loss": 531,
+          "take_profit_2r": 278
+        },
+        "gate_passed": false,
+        "net_pnl": -9135.0,
+        "profit_factor": 0.8725674827369743,
+        "trade_count": 809,
+        "win_rate": 0.34363411619283063,
+        "winning_trade_count": 278
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -35.12931034482759,
+        "exit_reasons": {
+          "stop_loss": 376,
+          "take_profit_2r": 154,
+          "time_exit": 50
+        },
+        "gate_passed": false,
+        "net_pnl": -20375.0,
+        "profit_factor": 0.7914854423578775,
+        "trade_count": 580,
+        "win_rate": 0.31724137931034485,
+        "winning_trade_count": 184
+      },
+      "train": {
+        "avg_trade_net_pnl": -10.925394548063128,
+        "exit_reasons": {
+          "stop_loss": 455,
+          "take_profit_2r": 230,
+          "time_exit": 12
+        },
+        "gate_passed": false,
+        "net_pnl": -7615.0,
+        "profit_factor": 0.9344889883000688,
+        "trade_count": 697,
+        "win_rate": 0.3428981348637016,
+        "winning_trade_count": 239
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -31.821428571428573,
+        "exit_reasons": {
+          "stop_loss": 596,
+          "take_profit_2r": 237,
+          "time_exit": 7
+        },
+        "gate_passed": false,
+        "net_pnl": -26730.0,
+        "profit_factor": 0.6679296850736071,
+        "trade_count": 840,
+        "win_rate": 0.2892857142857143,
+        "winning_trade_count": 243
+      },
+      "train": {
+        "avg_trade_net_pnl": -12.235023041474655,
+        "exit_reasons": {
+          "stop_loss": 572,
+          "take_profit_2r": 296
+        },
+        "gate_passed": false,
+        "net_pnl": -10620.0,
+        "profit_factor": 0.8624708624708625,
+        "trade_count": 868,
+        "win_rate": 0.34101382488479265,
+        "winning_trade_count": 296
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -31.93019943019943,
+        "exit_reasons": {
+          "stop_loss": 499,
+          "take_profit_2r": 199,
+          "time_exit": 4
+        },
+        "gate_passed": false,
+        "net_pnl": -22415.0,
+        "profit_factor": 0.667433234421365,
+        "trade_count": 702,
+        "win_rate": 0.28774928774928776,
+        "winning_trade_count": 202
+      },
+      "train": {
+        "avg_trade_net_pnl": -12.782909930715935,
+        "exit_reasons": {
+          "stop_loss": 286,
+          "take_profit_2r": 147
+        },
+        "gate_passed": false,
+        "net_pnl": -5535.0,
+        "profit_factor": 0.8566433566433567,
+        "trade_count": 433,
+        "win_rate": 0.3394919168591224,
+        "winning_trade_count": 147
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -42.6578947368421,
+        "exit_reasons": {
+          "stop_loss": 379,
+          "take_profit_2r": 147,
+          "time_exit": 44
+        },
+        "gate_passed": false,
+        "net_pnl": -24315.0,
+        "profit_factor": 0.7516470047495021,
+        "trade_count": 570,
+        "win_rate": 0.30701754385964913,
+        "winning_trade_count": 175
+      },
+      "train": {
+        "avg_trade_net_pnl": -14.549483013293944,
+        "exit_reasons": {
+          "stop_loss": 446,
+          "take_profit_2r": 220,
+          "time_exit": 11
+        },
+        "gate_passed": false,
+        "net_pnl": -9850.0,
+        "profit_factor": 0.9134370331312066,
+        "trade_count": 677,
+        "win_rate": 0.33825701624815363,
+        "winning_trade_count": 229
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -30.1285930408472,
+        "exit_reasons": {
+          "stop_loss": 468,
+          "take_profit_2r": 192,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -19915.0,
+        "profit_factor": 0.6847894903450459,
+        "trade_count": 661,
+        "win_rate": 0.291981845688351,
+        "winning_trade_count": 193
+      },
+      "train": {
+        "avg_trade_net_pnl": -13.554054054054054,
+        "exit_reasons": {
+          "stop_loss": 490,
+          "take_profit_2r": 249,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -10030.0,
+        "profit_factor": 0.8483749055177626,
+        "trade_count": 740,
+        "win_rate": 0.33783783783783783,
+        "winning_trade_count": 250
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -28.618827160493826,
+        "exit_reasons": {
+          "stop_loss": 414,
+          "take_profit_2r": 179,
+          "time_exit": 55
+        },
+        "gate_passed": false,
+        "net_pnl": -18545.0,
+        "profit_factor": 0.8275926184167712,
+        "trade_count": 648,
+        "win_rate": 0.3333333333333333,
+        "winning_trade_count": 216
+      },
+      "train": {
+        "avg_trade_net_pnl": -16.254980079681275,
+        "exit_reasons": {
+          "stop_loss": 495,
+          "take_profit_2r": 242,
+          "time_exit": 16
+        },
+        "gate_passed": false,
+        "net_pnl": -12240.0,
+        "profit_factor": 0.9033518891389316,
+        "trade_count": 753,
+        "win_rate": 0.3346613545816733,
+        "winning_trade_count": 252
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 8.279483037156705,
+        "exit_reasons": {
+          "stop_loss": 360,
+          "take_profit_2r": 185,
+          "time_exit": 74
+        },
+        "gate_passed": false,
+        "net_pnl": 5125.0,
+        "profit_factor": 1.054921502437979,
+        "trade_count": 619,
+        "win_rate": 0.39095315024232635,
+        "winning_trade_count": 242
+      },
+      "train": {
+        "avg_trade_net_pnl": -23.549295774647888,
+        "exit_reasons": {
+          "stop_loss": 233,
+          "take_profit_2r": 107,
+          "time_exit": 15
+        },
+        "gate_passed": false,
+        "net_pnl": -8360.0,
+        "profit_factor": 0.860142199916353,
+        "trade_count": 355,
+        "win_rate": 0.3323943661971831,
+        "winning_trade_count": 118
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -23.75984251968504,
+        "exit_reasons": {
+          "stop_loss": 526,
+          "take_profit_2r": 235,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -18105.0,
+        "profit_factor": 0.7450359104351499,
+        "trade_count": 762,
+        "win_rate": 0.30971128608923887,
+        "winning_trade_count": 236
+      },
+      "train": {
+        "avg_trade_net_pnl": -15.451127819548873,
+        "exit_reasons": {
+          "stop_loss": 533,
+          "take_profit_2r": 265
+        },
+        "gate_passed": false,
+        "net_pnl": -12330.0,
+        "profit_factor": 0.8286429018136335,
+        "trade_count": 798,
+        "win_rate": 0.33208020050125314,
+        "winning_trade_count": 265
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -24.504950495049506,
+        "exit_reasons": {
+          "stop_loss": 490,
+          "take_profit_2r": 217
+        },
+        "gate_passed": false,
+        "net_pnl": -17325.0,
+        "profit_factor": 0.7380952380952381,
+        "trade_count": 707,
+        "win_rate": 0.3069306930693069,
+        "winning_trade_count": 217
+      },
+      "train": {
+        "avg_trade_net_pnl": -15.619354838709677,
+        "exit_reasons": {
+          "stop_loss": 518,
+          "take_profit_2r": 257
+        },
+        "gate_passed": false,
+        "net_pnl": -12105.0,
+        "profit_factor": 0.8268983268983269,
+        "trade_count": 775,
+        "win_rate": 0.33161290322580644,
+        "winning_trade_count": 257
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -42.63418079096045,
+        "exit_reasons": {
+          "stop_loss": 467,
+          "take_profit_2r": 185,
+          "time_exit": 56
+        },
+        "gate_passed": false,
+        "net_pnl": -30185.0,
+        "profit_factor": 0.7503308519437552,
+        "trade_count": 708,
+        "win_rate": 0.307909604519774,
+        "winning_trade_count": 218
+      },
+      "train": {
+        "avg_trade_net_pnl": -19.39450686641698,
+        "exit_reasons": {
+          "stop_loss": 528,
+          "take_profit_2r": 252,
+          "time_exit": 21
+        },
+        "gate_passed": false,
+        "net_pnl": -15535.0,
+        "profit_factor": 0.8851768358032448,
+        "trade_count": 801,
+        "win_rate": 0.33083645443196,
+        "winning_trade_count": 265
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -35.12242268041237,
+        "exit_reasons": {
+          "stop_loss": 558,
+          "take_profit_2r": 213,
+          "time_exit": 5
+        },
+        "gate_passed": false,
+        "net_pnl": -27255.0,
+        "profit_factor": 0.6384799044966176,
+        "trade_count": 776,
+        "win_rate": 0.27835051546391754,
+        "winning_trade_count": 216
+      },
+      "train": {
+        "avg_trade_net_pnl": -15.92050209205021,
+        "exit_reasons": {
+          "stop_loss": 319,
+          "take_profit_2r": 158,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -7610.0,
+        "profit_factor": 0.8236793327154773,
+        "trade_count": 478,
+        "win_rate": 0.3305439330543933,
+        "winning_trade_count": 158
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -38.144654088050316,
+        "exit_reasons": {
+          "stop_loss": 419,
+          "take_profit_2r": 169,
+          "time_exit": 48
+        },
+        "gate_passed": false,
+        "net_pnl": -24260.0,
+        "profit_factor": 0.7763952255864326,
+        "trade_count": 636,
+        "win_rate": 0.3191823899371069,
+        "winning_trade_count": 203
+      },
+      "train": {
+        "avg_trade_net_pnl": -20.14442916093535,
+        "exit_reasons": {
+          "stop_loss": 483,
+          "take_profit_2r": 229,
+          "time_exit": 15
+        },
+        "gate_passed": false,
+        "net_pnl": -14645.0,
+        "profit_factor": 0.8812679881632819,
+        "trade_count": 727,
+        "win_rate": 0.33012379642365886,
+        "winning_trade_count": 240
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -28.4,
+        "exit_reasons": {
+          "stop_loss": 404,
+          "take_profit_2r": 170,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -16330.0,
+        "profit_factor": 0.700806156101136,
+        "trade_count": 575,
+        "win_rate": 0.2956521739130435,
+        "winning_trade_count": 170
+      },
+      "train": {
+        "avg_trade_net_pnl": -16.591511936339522,
+        "exit_reasons": {
+          "stop_loss": 253,
+          "take_profit_2r": 124
+        },
+        "gate_passed": false,
+        "net_pnl": -6255.0,
+        "profit_factor": 0.8168642951251647,
+        "trade_count": 377,
+        "win_rate": 0.32891246684350134,
+        "winning_trade_count": 124
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 6.672727272727273,
+        "exit_reasons": {
+          "stop_loss": 322,
+          "take_profit_2r": 161,
+          "time_exit": 67
+        },
+        "gate_passed": false,
+        "net_pnl": 3670.0,
+        "profit_factor": 1.044155687902304,
+        "trade_count": 550,
+        "win_rate": 0.3890909090909091,
+        "winning_trade_count": 214
+      },
+      "train": {
+        "avg_trade_net_pnl": -26.635220125786162,
+        "exit_reasons": {
+          "stop_loss": 211,
+          "take_profit_2r": 95,
+          "time_exit": 12
+        },
+        "gate_passed": false,
+        "net_pnl": -8470.0,
+        "profit_factor": 0.8433801775147929,
+        "trade_count": 318,
+        "win_rate": 0.3270440251572327,
+        "winning_trade_count": 104
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -32.25045372050817,
+        "exit_reasons": {
+          "stop_loss": 393,
+          "take_profit_2r": 157,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -17770.0,
+        "profit_factor": 0.6653168848290799,
+        "trade_count": 551,
+        "win_rate": 0.2849364791288566,
+        "winning_trade_count": 157
+      },
+      "train": {
+        "avg_trade_net_pnl": -19.120734908136484,
+        "exit_reasons": {
+          "stop_loss": 258,
+          "take_profit_2r": 122,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -7285.0,
+        "profit_factor": 0.7908412288257249,
+        "trade_count": 381,
+        "win_rate": 0.3228346456692913,
+        "winning_trade_count": 123
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -22.473997028231796,
+        "exit_reasons": {
+          "stop_loss": 461,
+          "take_profit_2r": 209,
+          "time_exit": 3
+        },
+        "gate_passed": false,
+        "net_pnl": -15125.0,
+        "profit_factor": 0.757223113964687,
+        "trade_count": 673,
+        "win_rate": 0.3135215453194651,
+        "winning_trade_count": 211
+      },
+      "train": {
+        "avg_trade_net_pnl": -19.513274336283185,
+        "exit_reasons": {
+          "stop_loss": 307,
+          "take_profit_2r": 145
+        },
+        "gate_passed": false,
+        "net_pnl": -8820.0,
+        "profit_factor": 0.7871878393051032,
+        "trade_count": 452,
+        "win_rate": 0.32079646017699115,
+        "winning_trade_count": 145
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -2.655440414507772,
+        "exit_reasons": {
+          "stop_loss": 463,
+          "take_profit_2r": 229,
+          "time_exit": 80
+        },
+        "gate_passed": false,
+        "net_pnl": -2050.0,
+        "profit_factor": 0.9828852896977792,
+        "trade_count": 772,
+        "win_rate": 0.37305699481865284,
+        "winning_trade_count": 288
+      },
+      "train": {
+        "avg_trade_net_pnl": -27.216687422166874,
+        "exit_reasons": {
+          "stop_loss": 542,
+          "take_profit_2r": 247,
+          "time_exit": 14
+        },
+        "gate_passed": false,
+        "net_pnl": -21855.0,
+        "profit_factor": 0.8421679786235285,
+        "trade_count": 803,
+        "win_rate": 0.32004981320049813,
+        "winning_trade_count": 257
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -24.295665634674922,
+        "exit_reasons": {
+          "stop_loss": 446,
+          "take_profit_2r": 198,
+          "time_exit": 2
+        },
+        "gate_passed": false,
+        "net_pnl": -15695.0,
+        "profit_factor": 0.7396101202820407,
+        "trade_count": 646,
+        "win_rate": 0.3080495356037152,
+        "winning_trade_count": 199
+      },
+      "train": {
+        "avg_trade_net_pnl": -20.339578454332553,
+        "exit_reasons": {
+          "stop_loss": 291,
+          "take_profit_2r": 136
+        },
+        "gate_passed": false,
+        "net_pnl": -8685.0,
+        "profit_factor": 0.7789232531500573,
+        "trade_count": 427,
+        "win_rate": 0.3185011709601874,
+        "winning_trade_count": 136
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 9.590443686006825,
+        "exit_reasons": {
+          "stop_loss": 335,
+          "take_profit_2r": 171,
+          "time_exit": 80
+        },
+        "gate_passed": false,
+        "net_pnl": 5620.0,
+        "profit_factor": 1.0646720368239355,
+        "trade_count": 586,
+        "win_rate": 0.39078498293515357,
+        "winning_trade_count": 229
+      },
+      "train": {
+        "avg_trade_net_pnl": -28.78491620111732,
+        "exit_reasons": {
+          "stop_loss": 240,
+          "take_profit_2r": 107,
+          "time_exit": 11
+        },
+        "gate_passed": false,
+        "net_pnl": -10305.0,
+        "profit_factor": 0.832275390625,
+        "trade_count": 358,
+        "win_rate": 0.31843575418994413,
+        "winning_trade_count": 114
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 4.266304347826087,
+        "exit_reasons": {
+          "stop_loss": 434,
+          "take_profit_2r": 221,
+          "time_exit": 81
+        },
+        "gate_passed": false,
+        "net_pnl": 3140.0,
+        "profit_factor": 1.0279272468537377,
+        "trade_count": 736,
+        "win_rate": 0.3845108695652174,
+        "winning_trade_count": 283
+      },
+      "train": {
+        "avg_trade_net_pnl": -31.222366710013002,
+        "exit_reasons": {
+          "stop_loss": 523,
+          "take_profit_2r": 232,
+          "time_exit": 14
+        },
+        "gate_passed": false,
+        "net_pnl": -24010.0,
+        "profit_factor": 0.8203113306391259,
+        "trade_count": 769,
+        "win_rate": 0.3159947984395319,
+        "winning_trade_count": 243
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 5.754147812971342,
+        "exit_reasons": {
+          "stop_loss": 389,
+          "take_profit_2r": 198,
+          "time_exit": 76
+        },
+        "gate_passed": false,
+        "net_pnl": 3815.0,
+        "profit_factor": 1.0379186959546765,
+        "trade_count": 663,
+        "win_rate": 0.38461538461538464,
+        "winning_trade_count": 255
+      },
+      "train": {
+        "avg_trade_net_pnl": -31.315136476426797,
+        "exit_reasons": {
+          "stop_loss": 270,
+          "take_profit_2r": 119,
+          "time_exit": 14
+        },
+        "gate_passed": false,
+        "net_pnl": -12620.0,
+        "profit_factor": 0.8178143496463115,
+        "trade_count": 403,
+        "win_rate": 0.315136476426799,
+        "winning_trade_count": 127
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -23.502415458937197,
+        "exit_reasons": {
+          "stop_loss": 427,
+          "take_profit_2r": 192,
+          "time_exit": 2
+        },
+        "gate_passed": false,
+        "net_pnl": -14595.0,
+        "profit_factor": 0.7474695042823774,
+        "trade_count": 621,
+        "win_rate": 0.30917874396135264,
+        "winning_trade_count": 192
+      },
+      "train": {
+        "avg_trade_net_pnl": -21.906474820143885,
+        "exit_reasons": {
+          "stop_loss": 286,
+          "take_profit_2r": 131
+        },
+        "gate_passed": false,
+        "net_pnl": -9135.0,
+        "profit_factor": 0.7634032634032634,
+        "trade_count": 417,
+        "win_rate": 0.31414868105515587,
+        "winning_trade_count": 131
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "short",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -32.422413793103445,
+        "exit_reasons": {
+          "stop_loss": 414,
+          "take_profit_2r": 165,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -18805.0,
+        "profit_factor": 0.6637761487573753,
+        "trade_count": 580,
+        "win_rate": 0.28448275862068967,
+        "winning_trade_count": 165
+      },
+      "train": {
+        "avg_trade_net_pnl": -23.533007334963326,
+        "exit_reasons": {
+          "stop_loss": 282,
+          "take_profit_2r": 126,
+          "time_exit": 1
+        },
+        "gate_passed": false,
+        "net_pnl": -9625.0,
+        "profit_factor": 0.7471762542684528,
+        "trade_count": 409,
+        "win_rate": 0.3105134474327628,
+        "winning_trade_count": 127
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -13.101023017902813,
+        "exit_reasons": {
+          "stop_loss": 515,
+          "take_profit_2r": 263,
+          "time_exit": 4
+        },
+        "gate_passed": false,
+        "net_pnl": -10245.0,
+        "profit_factor": 0.8527911487894245,
+        "trade_count": 782,
+        "win_rate": 0.3388746803069054,
+        "winning_trade_count": 265
+      },
+      "train": {
+        "avg_trade_net_pnl": -23.593350383631712,
+        "exit_reasons": {
+          "stop_loss": 270,
+          "take_profit_2r": 121
+        },
+        "gate_passed": false,
+        "net_pnl": -9225.0,
+        "profit_factor": 0.7469135802469136,
+        "trade_count": 391,
+        "win_rate": 0.309462915601023,
+        "winning_trade_count": 121
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -5.5606060606060606,
+        "exit_reasons": {
+          "stop_loss": 421,
+          "take_profit_2r": 236,
+          "time_exit": 3
+        },
+        "gate_passed": false,
+        "net_pnl": -3670.0,
+        "profit_factor": 0.9355065459977155,
+        "trade_count": 660,
+        "win_rate": 0.35909090909090907,
+        "winning_trade_count": 237
+      },
+      "train": {
+        "avg_trade_net_pnl": -25.11627906976744,
+        "exit_reasons": {
+          "stop_loss": 239,
+          "take_profit_2r": 105
+        },
+        "gate_passed": false,
+        "net_pnl": -8640.0,
+        "profit_factor": 0.7322175732217573,
+        "trade_count": 344,
+        "win_rate": 0.30523255813953487,
+        "winning_trade_count": 105
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -11.639892904953147,
+        "exit_reasons": {
+          "stop_loss": 489,
+          "take_profit_2r": 255,
+          "time_exit": 3
+        },
+        "gate_passed": false,
+        "net_pnl": -8695.0,
+        "profit_factor": 0.8684966727162734,
+        "trade_count": 747,
+        "win_rate": 0.3427041499330656,
+        "winning_trade_count": 256
+      },
+      "train": {
+        "avg_trade_net_pnl": -25.457902511078288,
+        "exit_reasons": {
+          "stop_loss": 471,
+          "take_profit_2r": 206
+        },
+        "gate_passed": false,
+        "net_pnl": -17235.0,
+        "profit_factor": 0.7289455060155697,
+        "trade_count": 677,
+        "win_rate": 0.30428360413589367,
+        "winning_trade_count": 206
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 8.570391872278664,
+        "exit_reasons": {
+          "stop_loss": 406,
+          "take_profit_2r": 217,
+          "time_exit": 66
+        },
+        "gate_passed": false,
+        "net_pnl": 5905.0,
+        "profit_factor": 1.0564234866943767,
+        "trade_count": 689,
+        "win_rate": 0.386066763425254,
+        "winning_trade_count": 266
+      },
+      "train": {
+        "avg_trade_net_pnl": -38.316326530612244,
+        "exit_reasons": {
+          "stop_loss": 471,
+          "take_profit_2r": 197,
+          "time_exit": 18
+        },
+        "gate_passed": false,
+        "net_pnl": -26285.0,
+        "profit_factor": 0.7819486498817869,
+        "trade_count": 686,
+        "win_rate": 0.3032069970845481,
+        "winning_trade_count": 208
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -10.715962441314554,
+        "exit_reasons": {
+          "stop_loss": 556,
+          "take_profit_2r": 293,
+          "time_exit": 3
+        },
+        "gate_passed": false,
+        "net_pnl": -9130.0,
+        "profit_factor": 0.8785015636436223,
+        "trade_count": 852,
+        "win_rate": 0.34507042253521125,
+        "winning_trade_count": 294
+      },
+      "train": {
+        "avg_trade_net_pnl": -26.85580774365821,
+        "exit_reasons": {
+          "stop_loss": 524,
+          "take_profit_2r": 225
+        },
+        "gate_passed": false,
+        "net_pnl": -20115.0,
+        "profit_factor": 0.7156488549618321,
+        "trade_count": 749,
+        "win_rate": 0.30040053404539385,
+        "winning_trade_count": 225
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -14.288413098236775,
+        "exit_reasons": {
+          "stop_loss": 525,
+          "take_profit_2r": 265,
+          "time_exit": 4
+        },
+        "gate_passed": false,
+        "net_pnl": -11345.0,
+        "profit_factor": 0.8402562658406083,
+        "trade_count": 794,
+        "win_rate": 0.3350125944584383,
+        "winning_trade_count": 266
+      },
+      "train": {
+        "avg_trade_net_pnl": -27.93103448275862,
+        "exit_reasons": {
+          "stop_loss": 489,
+          "take_profit_2r": 207
+        },
+        "gate_passed": false,
+        "net_pnl": -19440.0,
+        "profit_factor": 0.7055214723926381,
+        "trade_count": 696,
+        "win_rate": 0.2974137931034483,
+        "winning_trade_count": 207
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 3.949447077409163,
+        "exit_reasons": {
+          "stop_loss": 380,
+          "take_profit_2r": 198,
+          "time_exit": 55
+        },
+        "gate_passed": false,
+        "net_pnl": 2500.0,
+        "profit_factor": 1.0255427841634739,
+        "trade_count": 633,
+        "win_rate": 0.37756714060031593,
+        "winning_trade_count": 239
+      },
+      "train": {
+        "avg_trade_net_pnl": -42.801587301587304,
+        "exit_reasons": {
+          "stop_loss": 437,
+          "take_profit_2r": 180,
+          "time_exit": 13
+        },
+        "gate_passed": false,
+        "net_pnl": -26965.0,
+        "profit_factor": 0.759101264126502,
+        "trade_count": 630,
+        "win_rate": 0.2968253968253968,
+        "winning_trade_count": 187
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -7.663551401869159,
+        "exit_reasons": {
+          "stop_loss": 550,
+          "take_profit_2r": 300,
+          "time_exit": 6
+        },
+        "gate_passed": false,
+        "net_pnl": -6560.0,
+        "profit_factor": 0.9117389841910528,
+        "trade_count": 856,
+        "win_rate": 0.35514018691588783,
+        "winning_trade_count": 304
+      },
+      "train": {
+        "avg_trade_net_pnl": -28.30316742081448,
+        "exit_reasons": {
+          "stop_loss": 311,
+          "take_profit_2r": 131
+        },
+        "gate_passed": false,
+        "net_pnl": -12510.0,
+        "profit_factor": 0.7020364415862809,
+        "trade_count": 442,
+        "win_rate": 0.29638009049773756,
+        "winning_trade_count": 131
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 16.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 7.808988764044944,
+        "exit_reasons": {
+          "stop_loss": 423,
+          "take_profit_2r": 223,
+          "time_exit": 66
+        },
+        "gate_passed": false,
+        "net_pnl": 5560.0,
+        "profit_factor": 1.0511428965644116,
+        "trade_count": 712,
+        "win_rate": 0.3904494382022472,
+        "winning_trade_count": 278
+      },
+      "train": {
+        "avg_trade_net_pnl": -43.9,
+        "exit_reasons": {
+          "stop_loss": 485,
+          "take_profit_2r": 196,
+          "time_exit": 19
+        },
+        "gate_passed": false,
+        "net_pnl": -30730.0,
+        "profit_factor": 0.7527258096962381,
+        "trade_count": 700,
+        "win_rate": 0.2957142857142857,
+        "winning_trade_count": 207
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 3.3714285714285714,
+        "exit_reasons": {
+          "stop_loss": 416,
+          "take_profit_2r": 211,
+          "time_exit": 73
+        },
+        "gate_passed": false,
+        "net_pnl": 2360.0,
+        "profit_factor": 1.0219688154526414,
+        "trade_count": 700,
+        "win_rate": 0.3842857142857143,
+        "winning_trade_count": 269
+      },
+      "train": {
+        "avg_trade_net_pnl": -43.958333333333336,
+        "exit_reasons": {
+          "stop_loss": 518,
+          "take_profit_2r": 211,
+          "time_exit": 15
+        },
+        "gate_passed": false,
+        "net_pnl": -32705.0,
+        "profit_factor": 0.7532256847506225,
+        "trade_count": 744,
+        "win_rate": 0.2956989247311828,
+        "winning_trade_count": 220
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 60,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 300,
+        "stop_ticks": 48.0
+      },
+      "test": {
+        "avg_trade_net_pnl": 3.5892857142857144,
+        "exit_reasons": {
+          "stop_loss": 333,
+          "take_profit_2r": 168,
+          "time_exit": 59
+        },
+        "gate_passed": false,
+        "net_pnl": 2010.0,
+        "profit_factor": 1.023417021028718,
+        "trade_count": 560,
+        "win_rate": 0.38571428571428573,
+        "winning_trade_count": 216
+      },
+      "train": {
+        "avg_trade_net_pnl": -46.6812865497076,
+        "exit_reasons": {
+          "stop_loss": 236,
+          "take_profit_2r": 93,
+          "time_exit": 13
+        },
+        "gate_passed": false,
+        "net_pnl": -15965.0,
+        "profit_factor": 0.7366163490885095,
+        "trade_count": 342,
+        "win_rate": 0.2953216374269006,
+        "winning_trade_count": 101
+      }
+    },
+    {
+      "spec": {
+        "cooldown_seconds": 300,
+        "direction": "long",
+        "fast_seconds": 30,
+        "max_hold_seconds": 900,
+        "max_spread_ticks": 2.0,
+        "min_aligned_imbalance": 0.0,
+        "min_depth": 2.0,
+        "min_fast_move_ticks": 8.0,
+        "min_slow_move_ticks": 32.0,
+        "slow_seconds": 180,
+        "stop_ticks": 24.0
+      },
+      "test": {
+        "avg_trade_net_pnl": -5.724137931034483,
+        "exit_reasons": {
+          "stop_loss": 463,
+          "take_profit_2r": 259,
+          "time_exit": 3
+        },
+        "gate_passed": false,
+        "net_pnl": -4150.0,
+        "profit_factor": 0.9336636828644501,
+        "trade_count": 725,
+        "win_rate": 0.3586206896551724,
+        "winning_trade_count": 260
+      },
+      "train": {
+        "avg_trade_net_pnl": -29.0625,
+        "exit_reasons": {
+          "stop_loss": 271,
+          "take_profit_2r": 113
+        },
+        "gate_passed": false,
+        "net_pnl": -11160.0,
+        "profit_factor": 0.6949569495694957,
+        "trade_count": 384,
+        "win_rate": 0.2942708333333333,
+        "winning_trade_count": 113
+      }
+    }
+  ]
+}
