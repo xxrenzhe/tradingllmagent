@@ -122,10 +122,11 @@ Reversal extension: `reports/nq_mbp1_microstructure_2r_reversal_search_2026-05-0
 - Holdout result: 627 trades, 30.94% win rate, net PnL -$29,545.00.
 - Gate result: failed; reversal improves train PnL but fails the holdout win-rate and profitability gates.
 
-Medium-grid specificity search: `reports/nq_mbp1_microstructure_2r_medium_specific_search_2026-05-03.json`.
+Medium-grid candidate-index search: `reports/nq_mbp1_microstructure_2r_medium_candidate_index_search_2026-05-03.json`.
 
 - Added cached one-second MBP-1 snapshots to avoid repeatedly scanning the full 505,942,666 normalized quote rows.
-- Evaluated the 200 most specific medium-grid continuation/reversal specs.
+- Added candidate-index replay to avoid scanning every one-second row for every spec.
+- Evaluated the full 1,152-spec medium grid across continuation and reversal modes.
 - Best train-ranked spec: short continuation, aligned imbalance >= 0.25, 48-tick stop, 96-tick target.
 - Train result: 110 trades, 47.27% win rate, net PnL $7,585.00.
 - Holdout result: 320 trades, 31.88% win rate, net PnL -$11,035.00.

@@ -46,6 +46,22 @@ class QuoteRow:
     spread: float
 
 
+class ReplayContext:
+    def __init__(self, rows: Sequence[QuoteRow], tick_size: float) -> None:
+        self.rows = rows
+        self.tick_size = tick_size
+        self.timestamps = [row.timestamp.timestamp() for row in rows]
+        self.dates = [row.timestamp.date() for row in rows]
+        self.in_session = [in_trade_session(row.timestamp) for row in rows]
+        self.spread_ticks = [row.spread / tick_size if tick_size > 0 else 0.0 for row in rows]
+        self.imbalance = [
+            (row.bid_size - row.ask_size) / (row.bid_size + row.ask_size)
+            if row.bid_size + row.ask_size
+            else 0.0
+            for row in rows
+        ]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Search standalone MBP-1 quote microstructure strategies with fixed 2R brackets.")
     parser.add_argument("--data-root", type=Path, default=Path("data"))
@@ -61,6 +77,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--include-reversal", action="store_true")
     parser.add_argument("--max-specs", type=int)
     parser.add_argument("--sort-specs-by-specificity", action="store_true")
+    parser.add_argument("--candidate-index-replay", action="store_true")
     parser.add_argument("--snapshot-cache", type=Path, default=Path("reports/cache/nq_mbp1_second_quotes_2026-03-03_2026-05-01.parquet"))
     parser.add_argument("--output", type=Path, default=Path("reports/nq_mbp1_microstructure_2r_search_2026-05-03.json"))
     args = parser.parse_args(argv)
@@ -79,9 +96,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         specs = specs[: max(args.max_specs, 0)]
     print(f"evaluating {len(specs)} specs", flush=True)
     evaluated = []
+    train_context = ReplayContext(train_rows, symbol_config.tick_size) if args.candidate_index_replay else None
+    test_context = ReplayContext(test_rows, symbol_config.tick_size) if args.candidate_index_replay else None
     for index, spec in enumerate(specs, start=1):
-        train = replay_strategy(train_rows, spec, symbol_config.tick_size, symbol_config.point_value)
-        test = replay_strategy(test_rows, spec, symbol_config.tick_size, symbol_config.point_value)
+        if args.candidate_index_replay:
+            train = replay_strategy_from_candidates(train_context, spec, symbol_config.point_value)
+            test = replay_strategy_from_candidates(test_context, spec, symbol_config.point_value)
+        else:
+            train = replay_strategy(train_rows, spec, symbol_config.tick_size, symbol_config.point_value)
+            test = replay_strategy(test_rows, spec, symbol_config.tick_size, symbol_config.point_value)
         row = {
             "spec": asdict(spec),
             "train": summarize_trades(train, args.min_train_trades, args.min_win_rate),
@@ -130,6 +153,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "include_reversal": args.include_reversal,
             "max_specs": args.max_specs,
             "sort_specs_by_specificity": args.sort_specs_by_specificity,
+            "candidate_index_replay": args.candidate_index_replay,
         },
         "coverage": {
             "quote_file_count": len(files),
@@ -417,6 +441,65 @@ def replay_strategy(
         last_exit_index = int(trade["exit_index"])
         last_entry_time = row.timestamp
     return trades
+
+
+def replay_strategy_from_candidates(
+    context: ReplayContext | None,
+    spec: StrategySpec,
+    point_value: float,
+) -> list[dict[str, Any]]:
+    if context is None:
+        return []
+    trades = []
+    last_exit_index = -1
+    last_entry_timestamp: float | None = None
+    for entry_index in candidate_entry_indexes(context, spec):
+        if entry_index <= last_exit_index:
+            continue
+        entry_timestamp = context.timestamps[entry_index]
+        if last_entry_timestamp is not None and entry_timestamp - last_entry_timestamp < spec.cooldown_seconds:
+            continue
+        trade = simulate_trade(context.rows, entry_index, spec, context.tick_size, point_value)
+        if trade is None:
+            continue
+        trades.append(trade)
+        last_exit_index = int(trade["exit_index"])
+        last_entry_timestamp = entry_timestamp
+    return trades
+
+
+def candidate_entry_indexes(context: ReplayContext, spec: StrategySpec) -> list[int]:
+    rows = context.rows
+    indexes = []
+    start_index = max(spec.fast_seconds, spec.slow_seconds)
+    for index in range(start_index, len(rows)):
+        if not context.in_session[index]:
+            continue
+        slow_index = index - spec.slow_seconds
+        if context.dates[index] != context.dates[slow_index]:
+            continue
+        if context.spread_ticks[index] > spec.max_spread_ticks:
+            continue
+        row = rows[index]
+        relevant_depth = row.ask_size if spec.direction == "long" else row.bid_size
+        if relevant_depth < spec.min_depth:
+            continue
+        aligned_imbalance = context.imbalance[index] if spec.direction == "long" else -context.imbalance[index]
+        if aligned_imbalance < spec.min_aligned_imbalance:
+            continue
+        fast_move = (row.mid - rows[index - spec.fast_seconds].mid) / context.tick_size
+        slow_move = (row.mid - rows[slow_index].mid) / context.tick_size
+        if spec.mode == "reversal":
+            fast_move = -fast_move
+            slow_move = -slow_move
+        elif spec.mode != "continuation":
+            raise ValueError(f"Unsupported strategy mode: {spec.mode}")
+        if spec.direction == "short":
+            fast_move = -fast_move
+            slow_move = -slow_move
+        if fast_move >= spec.min_fast_move_ticks and slow_move >= spec.min_slow_move_ticks:
+            indexes.append(index)
+    return indexes
 
 
 def entry_signal(rows: Sequence[QuoteRow], index: int, spec: StrategySpec, tick_size: float) -> bool:

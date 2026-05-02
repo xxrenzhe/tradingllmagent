@@ -183,7 +183,7 @@
           }
         },
         {
-          "artifact": "reports/nq_mbp1_microstructure_2r_medium_specific_search_2026-05-03.json",
+          "artifact": "reports/nq_mbp1_microstructure_2r_medium_candidate_index_search_2026-05-03.json",
           "finding": {
             "coverage": {
               "quote_file_count": 52,
@@ -423,7 +423,7 @@
           }
         },
         {
-          "artifact": "reports/nq_mbp1_microstructure_2r_medium_specific_search_2026-05-03.json",
+          "artifact": "reports/nq_mbp1_microstructure_2r_medium_candidate_index_search_2026-05-03.json",
           "finding": {
             "coverage": {
               "quote_file_count": 52,
@@ -662,7 +662,7 @@
           }
         },
         {
-          "artifact": "reports/nq_mbp1_microstructure_2r_medium_specific_search_2026-05-03.json",
+          "artifact": "reports/nq_mbp1_microstructure_2r_medium_candidate_index_search_2026-05-03.json",
           "finding": {
             "coverage": {
               "quote_file_count": 52,

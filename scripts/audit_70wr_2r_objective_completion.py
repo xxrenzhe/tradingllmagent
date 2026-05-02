@@ -23,7 +23,7 @@ DEFAULT_REPORTS = {
     "vol_objective": Path("reports/nq_vol_execution_70wr_2r_objective_audit_2026-05-02.json"),
     "mbp1_microstructure_2r": Path("reports/nq_mbp1_microstructure_2r_search_2026-05-03.json"),
     "mbp1_microstructure_2r_reversal": Path("reports/nq_mbp1_microstructure_2r_reversal_search_2026-05-03.json"),
-    "mbp1_microstructure_2r_medium": Path("reports/nq_mbp1_microstructure_2r_medium_specific_search_2026-05-03.json"),
+    "mbp1_microstructure_2r_medium": Path("reports/nq_mbp1_microstructure_2r_medium_candidate_index_search_2026-05-03.json"),
     "assessment": Path("reports/black_box_70pct_winrate_2r_strategy_assessment_2026-05-02.md"),
 }
 
