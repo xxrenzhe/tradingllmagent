@@ -585,6 +585,96 @@ def build_signal_table(con: duckdb.DuckDBPyConnection) -> None:
             AND close <= session_low_prev + range20 * 0.10
             AND z50 <= -1.0
             AND volume_bin <= 1
+          UNION ALL
+          SELECT *, 'rsi_extreme_reversal', 1
+          FROM feature_base
+          WHERE rsi14 <= 28.0
+            AND z20 <= -0.75
+            AND close_location >= 0.55
+            AND volume_bin <= 2
+          UNION ALL
+          SELECT *, 'rsi_extreme_reversal', -1
+          FROM feature_base
+          WHERE rsi14 >= 72.0
+            AND z20 >= 0.75
+            AND close_location <= 0.45
+            AND volume_bin <= 2
+          UNION ALL
+          SELECT *, 'stoch_extreme_reversal', 1
+          FROM feature_base
+          WHERE stoch20 <= 0.15
+            AND close_location >= 0.60
+            AND z50 <= -0.35
+          UNION ALL
+          SELECT *, 'stoch_extreme_reversal', -1
+          FROM feature_base
+          WHERE stoch20 >= 0.85
+            AND close_location <= 0.40
+            AND z50 >= 0.35
+          UNION ALL
+          SELECT *, 'ma_reacceleration', 1
+          FROM feature_base
+          WHERE ma9 > ma20
+            AND ma20 > ma50
+            AND prev_close <= ma9
+            AND close > ma9
+            AND ret1 > 0
+            AND volume_bin >= 0
+          UNION ALL
+          SELECT *, 'ma_reacceleration', -1
+          FROM feature_base
+          WHERE ma9 < ma20
+            AND ma20 < ma50
+            AND prev_close >= ma9
+            AND close < ma9
+            AND ret1 < 0
+            AND volume_bin >= 0
+          UNION ALL
+          SELECT *, 'prior_close_reclaim', 1
+          FROM feature_base
+          WHERE prior_day_close IS NOT NULL
+            AND prev_close < prior_day_close
+            AND close >= prior_day_close
+            AND close > session_vwap
+            AND volume_bin >= 0
+          UNION ALL
+          SELECT *, 'prior_close_reclaim', -1
+          FROM feature_base
+          WHERE prior_day_close IS NOT NULL
+            AND prev_close > prior_day_close
+            AND close <= prior_day_close
+            AND close < session_vwap
+            AND volume_bin >= 0
+          UNION ALL
+          SELECT *, 'midday_zscore_reversion', 1
+          FROM feature_base
+          WHERE ny_min BETWEEN 720 AND 899
+            AND z20 <= -1.25
+            AND close_location >= 0.60
+            AND volume_bin <= 1
+          UNION ALL
+          SELECT *, 'midday_zscore_reversion', -1
+          FROM feature_base
+          WHERE ny_min BETWEEN 720 AND 899
+            AND z20 >= 1.25
+            AND close_location <= 0.40
+            AND volume_bin <= 1
+          UNION ALL
+          SELECT *, 'closing_drive_continuation', 1
+          FROM feature_base
+          WHERE ny_min BETWEEN 900 AND 1019
+            AND close > session_vwap
+            AND ret15 > range60 * 0.50
+            AND close_location >= 0.60
+            AND volume_bin >= 0
+          UNION ALL
+          SELECT *, 'closing_drive_continuation', -1
+          FROM feature_base
+          WHERE ny_min BETWEEN 900 AND 1019
+            AND close < session_vwap
+            AND ret15 < -range60 * 0.50
+            AND close_location <= 0.40
+            AND volume_bin >= 0
         ) raw
         WHERE fixed_exit_time IS NOT NULL
           AND (epoch(fixed_exit_time) - epoch(entry_time)) / 60.0 BETWEEN 15 AND 17
@@ -648,6 +738,12 @@ def signal_family_names() -> list[str]:
         "trend_pullback_reclaim",
         "low_volume_drift",
         "session_extreme_reversion",
+        "rsi_extreme_reversal",
+        "stoch_extreme_reversal",
+        "ma_reacceleration",
+        "prior_close_reclaim",
+        "midday_zscore_reversion",
+        "closing_drive_continuation",
     ]
 
 

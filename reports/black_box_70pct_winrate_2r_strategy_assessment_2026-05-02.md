@@ -79,6 +79,25 @@ After confirming historical bars exist under `data/bars`, the expanded high-edge
 
 This directly addresses the available `data/bars` evidence: even before quote/tick execution replay, the strict 2R bar-level candidate fails both the 70% win-rate requirement and the long-term profitability gate.
 
+### Independent Signal Family Expansion
+
+Source files:
+
+- `reports/nq_expanded_high_edge_walk_forward_newfamilies_2r_defensive_caps_2026-05-02.json`
+- `reports/nq_expanded_high_edge_walk_forward_newfamilies_2r_stress3_2026-05-02.json`
+- `reports/nq_expanded_high_edge_walk_forward_newfamilies_floor_caps_stress2_2026-05-02.json`
+- `reports/nq_expanded_high_edge_walk_forward_newfamilies_floor_caps_stress3_2026-05-02.json`
+- `reports/nq_expanded_high_edge_walk_forward_newfamilies_stress3_2026-05-02.json`
+
+The signal search was expanded with RSI and stochastic extreme reversals, moving-average reacceleration, prior-close reclaim, midday z-score reversion, and closing-drive continuation families. These were evaluated through the same rolling train-years / next-year out-of-sample protocol.
+
+- Best strict 2R defensive capped run: failed; positive years 4 of 6; failed 2022 and 2024 profitability; failed 2026 trade floor; OOS net PnL -198,265.00.
+- Strict 2R under 3x stress: failed; positive years 3 of 6; failed 2022, 2024, and 2025; OOS net PnL -940,150.00.
+- New-family capped 2x stress: failed; positive years 3 of 6; failed 2022, 2025, and 2026; OOS net PnL -258,332.50.
+- New-family capped 3x stress: failed; positive years 1 of 6; failed 2021, 2022, 2023, 2025, and 2026; OOS net PnL -313,556.25.
+
+This closes the obvious next attempt: adding independent bar-signal families increased the candidate group count, but it still did not produce a non-overfit 70% win-rate / 2R / cost-stressed strategy.
+
 ## Black-Box Test Result
 
 Black-box execution replay is now available for the provided recent MBP-1 zip, but only for the two-month Databento window.
