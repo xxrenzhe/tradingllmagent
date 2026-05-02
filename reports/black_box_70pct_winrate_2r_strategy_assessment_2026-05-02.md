@@ -114,7 +114,15 @@ The provided two-month Databento MBP-1 quote window was also searched directly a
 - Holdout result: 477 trades, 29.98% win rate, net PnL -$23,020.00.
 - Gate result: failed; no train-selected standalone MBP-1 2R strategy passed the 70% win-rate, trade-count, and positive-PnL holdout gates.
 
-This closes a separate tick-data path: direct MBP-1 microstructure mining also does not produce the requested 70%/2R candidate.
+Reversal extension: `reports/nq_mbp1_microstructure_2r_reversal_search_2026-05-03.json`.
+
+- Added mean-reversion/reversal modes to the same fixed 2R quote strategy search.
+- Best train-ranked reversal spec: short reversal, 48-tick stop, 96-tick target.
+- Train result: 365 trades, 41.37% win rate, net PnL $13,430.00.
+- Holdout result: 627 trades, 30.94% win rate, net PnL -$29,545.00.
+- Gate result: failed; reversal improves train PnL but fails the holdout win-rate and profitability gates.
+
+This closes a separate tick-data path: direct MBP-1 continuation and reversal microstructure mining also do not produce the requested 70%/2R candidate.
 
 ### Relaxed 55% Win-Rate / 1.5R Fallback Gate
 

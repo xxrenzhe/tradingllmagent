@@ -21,6 +21,7 @@ from tlm.storage import write_json
 
 @dataclass(frozen=True)
 class StrategySpec:
+    mode: str
     direction: str
     fast_seconds: int
     slow_seconds: int
@@ -56,6 +57,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--min-test-trades", type=int, default=100)
     parser.add_argument("--min-win-rate", type=float, default=0.70)
     parser.add_argument("--full-grid", action="store_true")
+    parser.add_argument("--include-reversal", action="store_true")
     parser.add_argument("--output", type=Path, default=Path("reports/nq_mbp1_microstructure_2r_search_2026-05-03.json"))
     args = parser.parse_args(argv)
 
@@ -66,7 +68,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     split_index = len(rows) // 2
     train_rows = rows[:split_index]
     test_rows = rows[split_index:]
-    specs = strategy_grid(full_grid=args.full_grid)
+    specs = strategy_grid(full_grid=args.full_grid, include_reversal=args.include_reversal)
     print(f"evaluating {len(specs)} specs", flush=True)
     evaluated = []
     for index, spec in enumerate(specs, start=1):
@@ -115,6 +117,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             },
             "spec_count": len(specs),
             "full_grid": args.full_grid,
+            "include_reversal": args.include_reversal,
         },
         "coverage": {
             "quote_file_count": len(files),
@@ -196,8 +199,9 @@ def load_second_quotes_for_file(path: Path) -> list[tuple[Any, ...]]:
         con.close()
 
 
-def strategy_grid(*, full_grid: bool = False) -> list[StrategySpec]:
+def strategy_grid(*, full_grid: bool = False, include_reversal: bool = False) -> list[StrategySpec]:
     specs = []
+    modes = ("continuation", "reversal") if include_reversal else ("continuation",)
     fast_slow_grid = ((10, 60), (30, 180), (60, 300)) if full_grid else ((30, 180), (60, 300))
     fast_move_grid = (4.0, 8.0, 12.0, 20.0) if full_grid else (8.0, 16.0)
     slow_move_grid = (8.0, 16.0, 32.0) if full_grid else (16.0, 32.0)
@@ -205,29 +209,31 @@ def strategy_grid(*, full_grid: bool = False) -> list[StrategySpec]:
     depth_grid = (1.0, 2.0, 4.0) if full_grid else (1.0, 2.0)
     imbalance_grid = (-0.25, 0.0, 0.25) if full_grid else (0.0,)
     stop_grid = (16.0, 24.0, 32.0, 48.0) if full_grid else (24.0, 48.0)
-    for direction in ("long", "short"):
-        for fast_seconds, slow_seconds in fast_slow_grid:
-            for min_fast_move_ticks in fast_move_grid:
-                for min_slow_move_ticks in slow_move_grid:
-                    for max_spread_ticks in spread_grid:
-                        for min_depth in depth_grid:
-                            for min_aligned_imbalance in imbalance_grid:
-                                for stop_ticks in stop_grid:
-                                    specs.append(
-                                        StrategySpec(
-                                            direction=direction,
-                                            fast_seconds=fast_seconds,
-                                            slow_seconds=slow_seconds,
-                                            min_fast_move_ticks=min_fast_move_ticks,
-                                            min_slow_move_ticks=min_slow_move_ticks,
-                                            max_spread_ticks=max_spread_ticks,
-                                            min_depth=min_depth,
-                                            min_aligned_imbalance=min_aligned_imbalance,
-                                            stop_ticks=stop_ticks,
-                                            max_hold_seconds=900,
-                                            cooldown_seconds=300,
+    for mode in modes:
+        for direction in ("long", "short"):
+            for fast_seconds, slow_seconds in fast_slow_grid:
+                for min_fast_move_ticks in fast_move_grid:
+                    for min_slow_move_ticks in slow_move_grid:
+                        for max_spread_ticks in spread_grid:
+                            for min_depth in depth_grid:
+                                for min_aligned_imbalance in imbalance_grid:
+                                    for stop_ticks in stop_grid:
+                                        specs.append(
+                                            StrategySpec(
+                                                mode=mode,
+                                                direction=direction,
+                                                fast_seconds=fast_seconds,
+                                                slow_seconds=slow_seconds,
+                                                min_fast_move_ticks=min_fast_move_ticks,
+                                                min_slow_move_ticks=min_slow_move_ticks,
+                                                max_spread_ticks=max_spread_ticks,
+                                                min_depth=min_depth,
+                                                min_aligned_imbalance=min_aligned_imbalance,
+                                                stop_ticks=stop_ticks,
+                                                max_hold_seconds=900,
+                                                cooldown_seconds=300,
+                                            )
                                         )
-                                    )
     return specs
 
 
@@ -278,6 +284,11 @@ def entry_signal(rows: Sequence[QuoteRow], index: int, spec: StrategySpec, tick_
         return False
     fast_move = (row.mid - rows[fast_index].mid) / tick_size
     slow_move = (row.mid - rows[slow_index].mid) / tick_size
+    if spec.mode == "reversal":
+        fast_move = -fast_move
+        slow_move = -slow_move
+    elif spec.mode != "continuation":
+        raise ValueError(f"Unsupported strategy mode: {spec.mode}")
     if spec.direction == "short":
         fast_move = -fast_move
         slow_move = -slow_move
