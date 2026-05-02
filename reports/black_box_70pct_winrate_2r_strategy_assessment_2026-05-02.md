@@ -132,7 +132,14 @@ Medium-grid candidate-index search: `reports/nq_mbp1_microstructure_2r_medium_ca
 - Holdout result: 320 trades, 31.88% win rate, net PnL -$11,035.00.
 - Gate result: failed; still far below the requested 70% win-rate and positive holdout gates.
 
-This closes a separate tick-data path: direct MBP-1 continuation, reversal, and stricter medium-grid microstructure mining also do not produce the requested 70%/2R candidate.
+Full-grid candidate-index search: `reports/nq_mbp1_microstructure_2r_full_grid_candidate_index_search_2026-05-03.json`.
+
+- Evaluated the full 10,368-spec continuation/reversal grid with candidate-index replay.
+- Best train-ranked full-grid spec had 2 train trades at 100% win rate, which fails the 100-trade floor.
+- Its holdout result was 48 trades, 33.33% win rate, net PnL -$990.00.
+- Gate result: failed; the full MBP-1 2R grid still does not produce a train-selected 70% win-rate candidate.
+
+This closes a separate tick-data path: direct MBP-1 continuation, reversal, medium-grid, and full-grid microstructure mining also do not produce the requested 70%/2R candidate.
 
 ### Relaxed 55% Win-Rate / 1.5R Fallback Gate
 

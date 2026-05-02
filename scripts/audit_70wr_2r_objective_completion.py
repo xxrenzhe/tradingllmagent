@@ -24,6 +24,7 @@ DEFAULT_REPORTS = {
     "mbp1_microstructure_2r": Path("reports/nq_mbp1_microstructure_2r_search_2026-05-03.json"),
     "mbp1_microstructure_2r_reversal": Path("reports/nq_mbp1_microstructure_2r_reversal_search_2026-05-03.json"),
     "mbp1_microstructure_2r_medium": Path("reports/nq_mbp1_microstructure_2r_medium_candidate_index_search_2026-05-03.json"),
+    "mbp1_microstructure_2r_full": Path("reports/nq_mbp1_microstructure_2r_full_grid_candidate_index_search_2026-05-03.json"),
     "assessment": Path("reports/black_box_70pct_winrate_2r_strategy_assessment_2026-05-02.md"),
 }
 
@@ -62,6 +63,7 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
     mbp1_microstructure_2r = evidence.get("mbp1_microstructure_2r")
     mbp1_microstructure_2r_reversal = evidence.get("mbp1_microstructure_2r_reversal")
     mbp1_microstructure_2r_medium = evidence.get("mbp1_microstructure_2r_medium")
+    mbp1_microstructure_2r_full = evidence.get("mbp1_microstructure_2r_full")
 
     requirements = [
         requirement(
@@ -92,6 +94,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                 {
                     "artifact": str(DEFAULT_REPORTS["mbp1_microstructure_2r_medium"]),
                     "finding": microstructure_finding(mbp1_microstructure_2r_medium),
+                },
+                {
+                    "artifact": str(DEFAULT_REPORTS["mbp1_microstructure_2r_full"]),
+                    "finding": microstructure_finding(mbp1_microstructure_2r_full),
                 },
             ],
             gap="No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, SMC v1 has 0% full-history win rate, and VOL has no >=70% prescreen row.",
@@ -125,6 +131,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                     "artifact": str(DEFAULT_REPORTS["mbp1_microstructure_2r_medium"]),
                     "finding": microstructure_finding(mbp1_microstructure_2r_medium),
                 },
+                {
+                    "artifact": str(DEFAULT_REPORTS["mbp1_microstructure_2r_full"]),
+                    "finding": microstructure_finding(mbp1_microstructure_2r_full),
+                },
             ],
             gap="Strict 2R expanded-high-edge walk-forward fails, SMC v1 net-R gates are negative rather than >= 2R, and VOL generated specs are below 2R.",
         ),
@@ -156,6 +166,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                 {
                     "artifact": str(DEFAULT_REPORTS["mbp1_microstructure_2r_medium"]),
                     "finding": microstructure_finding(mbp1_microstructure_2r_medium),
+                },
+                {
+                    "artifact": str(DEFAULT_REPORTS["mbp1_microstructure_2r_full"]),
+                    "finding": microstructure_finding(mbp1_microstructure_2r_full),
                 },
             ],
             gap="No locked walk-forward candidate survives the explicit 70%/2R objective gates; VOL has no final-target rows.",

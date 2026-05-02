@@ -246,6 +246,69 @@
               "reward_r": 2.0
             }
           }
+        },
+        {
+          "artifact": "reports/nq_mbp1_microstructure_2r_full_grid_candidate_index_search_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "quote_file_count": 52,
+              "second_quote_count": 3488665,
+              "test_second_quote_count": 1744333,
+              "train_second_quote_count": 1744332
+            },
+            "decision": {
+              "live_ready": false,
+              "live_ready_reason": "A two-month quote-only search cannot establish long-term profitability or paper readiness without multi-year walk-forward and live/paper evidence.",
+              "passed": false,
+              "reason": "No train-selected standalone MBP-1 2R strategy passed the 70% win-rate, trade-count, and positive-PnL holdout gates."
+            },
+            "selected_spec": {
+              "cooldown_seconds": 300,
+              "direction": "short",
+              "fast_seconds": 10,
+              "max_hold_seconds": 900,
+              "max_spread_ticks": 3.0,
+              "min_aligned_imbalance": 0.25,
+              "min_depth": 4.0,
+              "min_fast_move_ticks": 12.0,
+              "min_slow_move_ticks": 32.0,
+              "mode": "continuation",
+              "slow_seconds": 60,
+              "stop_ticks": 48.0
+            },
+            "selected_test": {
+              "avg_trade_net_pnl": -20.625,
+              "exit_reasons": {
+                "stop_loss": 30,
+                "take_profit_2r": 14,
+                "time_exit": 4
+              },
+              "gate_passed": false,
+              "net_pnl": -990.0,
+              "profit_factor": 0.8720103425985779,
+              "trade_count": 48,
+              "win_rate": 0.3333333333333333,
+              "winning_trade_count": 16
+            },
+            "selected_train": {
+              "avg_trade_net_pnl": 465.0,
+              "exit_reasons": {
+                "take_profit_2r": 2
+              },
+              "gate_passed": false,
+              "net_pnl": 930.0,
+              "profit_factor": null,
+              "trade_count": 2,
+              "win_rate": 1.0,
+              "winning_trade_count": 2
+            },
+            "target": {
+              "min_test_trades": 100,
+              "min_train_trades": 100,
+              "min_win_rate": 0.7,
+              "reward_r": 2.0
+            }
+          }
         }
       ],
       "gap": "No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, SMC v1 has 0% full-history win rate, and VOL has no >=70% prescreen row.",
@@ -486,6 +549,69 @@
               "reward_r": 2.0
             }
           }
+        },
+        {
+          "artifact": "reports/nq_mbp1_microstructure_2r_full_grid_candidate_index_search_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "quote_file_count": 52,
+              "second_quote_count": 3488665,
+              "test_second_quote_count": 1744333,
+              "train_second_quote_count": 1744332
+            },
+            "decision": {
+              "live_ready": false,
+              "live_ready_reason": "A two-month quote-only search cannot establish long-term profitability or paper readiness without multi-year walk-forward and live/paper evidence.",
+              "passed": false,
+              "reason": "No train-selected standalone MBP-1 2R strategy passed the 70% win-rate, trade-count, and positive-PnL holdout gates."
+            },
+            "selected_spec": {
+              "cooldown_seconds": 300,
+              "direction": "short",
+              "fast_seconds": 10,
+              "max_hold_seconds": 900,
+              "max_spread_ticks": 3.0,
+              "min_aligned_imbalance": 0.25,
+              "min_depth": 4.0,
+              "min_fast_move_ticks": 12.0,
+              "min_slow_move_ticks": 32.0,
+              "mode": "continuation",
+              "slow_seconds": 60,
+              "stop_ticks": 48.0
+            },
+            "selected_test": {
+              "avg_trade_net_pnl": -20.625,
+              "exit_reasons": {
+                "stop_loss": 30,
+                "take_profit_2r": 14,
+                "time_exit": 4
+              },
+              "gate_passed": false,
+              "net_pnl": -990.0,
+              "profit_factor": 0.8720103425985779,
+              "trade_count": 48,
+              "win_rate": 0.3333333333333333,
+              "winning_trade_count": 16
+            },
+            "selected_train": {
+              "avg_trade_net_pnl": 465.0,
+              "exit_reasons": {
+                "take_profit_2r": 2
+              },
+              "gate_passed": false,
+              "net_pnl": 930.0,
+              "profit_factor": null,
+              "trade_count": 2,
+              "win_rate": 1.0,
+              "winning_trade_count": 2
+            },
+            "target": {
+              "min_test_trades": 100,
+              "min_train_trades": 100,
+              "min_win_rate": 0.7,
+              "reward_r": 2.0
+            }
+          }
         }
       ],
       "gap": "Strict 2R expanded-high-edge walk-forward fails, SMC v1 net-R gates are negative rather than >= 2R, and VOL generated specs are below 2R.",
@@ -717,6 +843,69 @@
               "trade_count": 110,
               "win_rate": 0.4727272727272727,
               "winning_trade_count": 52
+            },
+            "target": {
+              "min_test_trades": 100,
+              "min_train_trades": 100,
+              "min_win_rate": 0.7,
+              "reward_r": 2.0
+            }
+          }
+        },
+        {
+          "artifact": "reports/nq_mbp1_microstructure_2r_full_grid_candidate_index_search_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "quote_file_count": 52,
+              "second_quote_count": 3488665,
+              "test_second_quote_count": 1744333,
+              "train_second_quote_count": 1744332
+            },
+            "decision": {
+              "live_ready": false,
+              "live_ready_reason": "A two-month quote-only search cannot establish long-term profitability or paper readiness without multi-year walk-forward and live/paper evidence.",
+              "passed": false,
+              "reason": "No train-selected standalone MBP-1 2R strategy passed the 70% win-rate, trade-count, and positive-PnL holdout gates."
+            },
+            "selected_spec": {
+              "cooldown_seconds": 300,
+              "direction": "short",
+              "fast_seconds": 10,
+              "max_hold_seconds": 900,
+              "max_spread_ticks": 3.0,
+              "min_aligned_imbalance": 0.25,
+              "min_depth": 4.0,
+              "min_fast_move_ticks": 12.0,
+              "min_slow_move_ticks": 32.0,
+              "mode": "continuation",
+              "slow_seconds": 60,
+              "stop_ticks": 48.0
+            },
+            "selected_test": {
+              "avg_trade_net_pnl": -20.625,
+              "exit_reasons": {
+                "stop_loss": 30,
+                "take_profit_2r": 14,
+                "time_exit": 4
+              },
+              "gate_passed": false,
+              "net_pnl": -990.0,
+              "profit_factor": 0.8720103425985779,
+              "trade_count": 48,
+              "win_rate": 0.3333333333333333,
+              "winning_trade_count": 16
+            },
+            "selected_train": {
+              "avg_trade_net_pnl": 465.0,
+              "exit_reasons": {
+                "take_profit_2r": 2
+              },
+              "gate_passed": false,
+              "net_pnl": 930.0,
+              "profit_factor": null,
+              "trade_count": 2,
+              "win_rate": 1.0,
+              "winning_trade_count": 2
             },
             "target": {
               "min_test_trades": 100,
