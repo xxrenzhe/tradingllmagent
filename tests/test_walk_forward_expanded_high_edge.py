@@ -22,6 +22,7 @@ from scripts.search_expanded_high_edge_cooldown import (
     replay_with_regime_cooldown,
     signal_regime_key,
 )
+from scripts.audit_70wr_2r_objective_completion import build_completion_audit
 from tlm.low_r_regime_basket import LowRRegimeBasketConfig, RegimeEdge
 
 
@@ -219,6 +220,42 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         self.assertEqual(summary["decision"]["test_year_count"], 0)
         self.assertEqual(summary["multiple_testing"]["evaluated_train_combo_count"], 3)
         self.assertEqual(summary["multiple_testing"]["penalty_decision"], "fail")
+
+    def test_completion_audit_requires_all_objective_gates(self) -> None:
+        audit = build_completion_audit(
+            {
+                "expanded_2r": {
+                    "summary": {"decision": {"passed": False, "failed_positive_years": [2022]}}
+                },
+                "expanded_70wr_2r": {
+                    "summary": {"decision": {"passed": False, "failed_reasons": ["no_ok_test_folds"]}}
+                },
+                "smc_objective": {
+                    "full_history": {"metrics": {"net_pnl": -10.0}},
+                    "final_holdout": {"summary": {"summary": {"metrics": {"trade_count": 0}}}},
+                    "objective_gates": [
+                        {"name": "full_history_win_rate_ge_target", "passed": False, "actual": 0.0},
+                        {"name": "walk_forward_test_win_rate_ge_target", "passed": False, "actual": 0.0},
+                        {"name": "full_history_net_r_p75_ge_target", "passed": False, "actual": -1.0},
+                        {"name": "walk_forward_test_net_r_p75_ge_target", "passed": False, "actual": -1.0},
+                    ],
+                },
+                "tick_coverage": {
+                    "decision": {"passed": True, "reason": None},
+                    "expected_quote_days": 52,
+                    "analyzed_quote_days": 52,
+                    "validated_trade_count": 159,
+                },
+                "execution_stress": {
+                    "decision": {"passed": False, "cost_stress_passed": False, "quote_replay_passed": True}
+                },
+                "assessment": "reject promotion",
+            }
+        )
+
+        self.assertFalse(audit["decision"]["achieved"])
+        self.assertIn("black_box_tick_test", [row["id"] for row in audit["requirements"] if row["passed"]])
+        self.assertIn("win_rate_70pct", audit["decision"]["failed_requirements"])
 
     def test_cooldown_replay_suppresses_same_regime_entries(self) -> None:
         edge = RegimeEdge(

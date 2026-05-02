@@ -1,0 +1,262 @@
+{
+  "artifact": "70wr_2r_objective_completion_audit",
+  "decision": {
+    "achieved": false,
+    "failed_requirements": [
+      "win_rate_70pct",
+      "reward_2r",
+      "non_overfit_walk_forward",
+      "long_term_profitability",
+      "execution_cost_stress",
+      "live_ready"
+    ],
+    "reason": "At least one required objective gate remains unmet; do not promote or mark complete."
+  },
+  "objective": "Train a 70% win-rate, 2R, non-overfit, live-ready, long-term profitable, black-box-tested NQ/MNQ strategy using data/bars and data/raw/databento/GLBX-20260502-QG6TRKVV9Q.zip.",
+  "requirements": [
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_70wr_2r_hard_gate_2026-05-02.json",
+          "finding": {
+            "failed_positive_years": [],
+            "failed_reasons": [
+              "no_ok_test_folds"
+            ],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [],
+            "passed": false,
+            "positive_test_years": 0,
+            "test_year_count": 0,
+            "trade_floor_years": 0,
+            "win_rate_gate_years": 0
+          }
+        },
+        {
+          "artifact": "reports/nq_smc_lqem_ce_v1_objective_gates_2026-05-02.json",
+          "finding": [
+            {
+              "actual": 0.0,
+              "name": "full_history_win_rate_ge_target",
+              "passed": false,
+              "threshold": ">= 0.7"
+            },
+            {
+              "actual": 0.0,
+              "name": "walk_forward_test_win_rate_ge_target",
+              "passed": false,
+              "threshold": ">= 0.7 on every test fold"
+            }
+          ]
+        }
+      ],
+      "gap": "No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, and SMC v1 has 0% full-history win rate.",
+      "id": "win_rate_70pct",
+      "passed": false,
+      "requirement": "Strategy must demonstrate at least 70% win rate after costs."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_2r_gate_2026-05-02.json",
+          "finding": {
+            "failed_positive_years": [
+              2022,
+              2025,
+              2026
+            ],
+            "failed_trade_floor_years": [
+              2024
+            ],
+            "passed": false,
+            "positive_test_years": 3,
+            "test_year_count": 6,
+            "trade_floor_years": 5
+          }
+        },
+        {
+          "artifact": "reports/nq_smc_lqem_ce_v1_objective_gates_2026-05-02.json",
+          "finding": [
+            {
+              "actual": -1.0645292207792207,
+              "name": "full_history_net_r_p75_ge_target",
+              "passed": false,
+              "threshold": ">= 2.0"
+            },
+            {
+              "actual": -1.1666666666666667,
+              "name": "walk_forward_test_net_r_p75_ge_target",
+              "passed": false,
+              "threshold": ">= 2.0 on every test fold"
+            }
+          ]
+        }
+      ],
+      "gap": "Strict 2R expanded-high-edge walk-forward fails, and SMC v1 net-R gates are negative rather than >= 2R.",
+      "id": "reward_2r",
+      "passed": false,
+      "requirement": "Strategy must target and realize a 2R reward profile."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_70wr_2r_hard_gate_2026-05-02.json",
+          "finding": {
+            "failed_positive_years": [],
+            "failed_reasons": [
+              "no_ok_test_folds"
+            ],
+            "failed_trade_floor_years": [],
+            "failed_win_rate_years": [],
+            "passed": false,
+            "positive_test_years": 0,
+            "test_year_count": 0,
+            "trade_floor_years": 0,
+            "win_rate_gate_years": 0
+          }
+        },
+        {
+          "artifact": "reports/nq_smc_lqem_ce_v1_objective_gates_2026-05-02.json",
+          "finding": [
+            {
+              "actual": 0.0,
+              "name": "walk_forward_test_win_rate_ge_target",
+              "passed": false,
+              "threshold": ">= 0.7 on every test fold"
+            },
+            {
+              "actual": -1.1666666666666667,
+              "name": "walk_forward_test_net_r_p75_ge_target",
+              "passed": false,
+              "threshold": ">= 2.0 on every test fold"
+            }
+          ]
+        }
+      ],
+      "gap": "No locked walk-forward candidate survives the explicit 70%/2R objective gates.",
+      "id": "non_overfit_walk_forward",
+      "passed": false,
+      "requirement": "Strategy must pass locked train/test or walk-forward validation without post-hoc overfit."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_walk_forward_2r_gate_2026-05-02.json",
+          "finding": {
+            "failed_positive_years": [
+              2022,
+              2025,
+              2026
+            ],
+            "failed_trade_floor_years": [
+              2024
+            ],
+            "passed": false,
+            "positive_test_years": 3,
+            "test_year_count": 6,
+            "trade_floor_years": 5
+          }
+        },
+        {
+          "artifact": "reports/nq_smc_lqem_ce_v1_objective_gates_2026-05-02.json",
+          "finding": {
+            "final_holdout_metrics": {
+              "annual_trades": 0.0,
+              "avg_loss_net_pnl": null,
+              "avg_trade_net_pnl": null,
+              "avg_win_net_pnl": null,
+              "gross_loss": 0,
+              "gross_profit": 0,
+              "largest_loss_net_pnl": null,
+              "largest_win_net_pnl": null,
+              "losing_trade_count": 0,
+              "max_consecutive_losses": 0,
+              "max_drawdown": 0.0,
+              "max_drawdown_pct": 0.0,
+              "net_pnl": 0,
+              "net_pnl_to_max_drawdown": null,
+              "payoff_ratio": null,
+              "profit_factor": null,
+              "sharpe": null,
+              "trade_count": 0,
+              "win_rate": null,
+              "winning_trade_count": 0
+            },
+            "full_history_net_pnl": -760.0
+          }
+        }
+      ],
+      "gap": "Strict 2R expanded-high-edge fails positive years; SMC v1 full-history net PnL is negative and final holdout has no trades.",
+      "id": "long_term_profitability",
+      "passed": false,
+      "requirement": "Strategy must show long-term positive profitability across years and holdout periods."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_mbp1_quote_coverage_audit_2026-05-02.json",
+          "finding": {
+            "analyzed_quote_days": 52,
+            "decision": {
+              "passed": true,
+              "reason": null
+            },
+            "expected_quote_days": 52,
+            "validated_trade_count": 159
+          }
+        }
+      ],
+      "gap": null,
+      "id": "black_box_tick_test",
+      "passed": true,
+      "requirement": "Provided Databento tick/quote window must be normalized, audited, and used for black-box execution evidence."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/nq_expanded_high_edge_execution_stress_mbp1_full_2026-05-02.json",
+          "finding": {
+            "cost_stress_passed": false,
+            "passed": false,
+            "quote_replay_passed": true,
+            "reason": "Bar-level cost stress failed."
+          }
+        }
+      ],
+      "gap": "Quote replay passes for the available tick window, but bar-level cost stress still fails.",
+      "id": "execution_cost_stress",
+      "passed": false,
+      "requirement": "Execution validation must survive cost stress before live readiness."
+    },
+    {
+      "evidence": [
+        {
+          "artifact": "reports/black_box_70pct_winrate_2r_strategy_assessment_2026-05-02.md",
+          "finding": "Main assessment rejects live promotion."
+        },
+        {
+          "artifact": "reports/nq_expanded_high_edge_execution_stress_mbp1_full_2026-05-02.json",
+          "finding": {
+            "cost_stress_passed": false,
+            "passed": false,
+            "quote_replay_passed": true,
+            "reason": "Bar-level cost stress failed."
+          }
+        }
+      ],
+      "gap": "Core objective gates and cost-stress gates fail, so live readiness is not established.",
+      "id": "live_ready",
+      "passed": false,
+      "requirement": "Strategy must be directly usable in live trading with promotion gates passed."
+    }
+  ],
+  "success_criteria": [
+    "Strategy must demonstrate at least 70% win rate after costs.",
+    "Strategy must target and realize a 2R reward profile.",
+    "Strategy must pass locked train/test or walk-forward validation without post-hoc overfit.",
+    "Strategy must show long-term positive profitability across years and holdout periods.",
+    "Provided Databento tick/quote window must be normalized, audited, and used for black-box execution evidence.",
+    "Execution validation must survive cost stress before live readiness.",
+    "Strategy must be directly usable in live trading with promotion gates passed."
+  ]
+}
