@@ -61,6 +61,24 @@ Source: `reports/nq_smc_lqem_optimization_balanced_r2_2026-05-01.md`
 
 This is the only reviewed candidate explicitly aligned with an R2-style objective, and it fails promotion.
 
+### Locked 2R Bar-Level Walk-Forward Check
+
+Source: `reports/nq_expanded_high_edge_walk_forward_2r_gate_2026-05-02.json`
+
+After confirming historical bars exist under `data/bars`, the expanded high-edge walk-forward search was rerun with `--take-profit-r-grid 2.0` to force every selected edge to use a 2R take-profit target.
+
+- Data scope: `data/bars/1m/NQ_CME`, 2019-01-01 to 2026-04-27.
+- Selection method: rolling train years, next-year out-of-sample replay.
+- Gate result: failed.
+- Out-of-sample total net PnL: -330,000.00.
+- Positive out-of-sample years: 3 of 6.
+- Failed positive years: 2022, 2025, 2026.
+- Failed trade-floor year: 2024.
+- Best out-of-sample test-year win rate: 52.44% in 2023.
+- Worst out-of-sample test-year PnL: -1,026,465.00 in 2022.
+
+This directly addresses the available `data/bars` evidence: even before quote/tick execution replay, the strict 2R bar-level candidate fails both the 70% win-rate requirement and the long-term profitability gate.
+
 ## Black-Box Test Result
 
 Black-box execution replay is blocked in the current workspace.
