@@ -195,6 +195,16 @@ Tick-derived intraday search: `reports/nq_tick_derived_intraday_search_55wr_15r_
 - Holdout result for that selected spec: 41 trades, 21.95% win rate, net PnL -$3,975.00.
 - Gate result: failed; no train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.
 
+Low-frequency bar search: `reports/nq_low_frequency_bar_2r_search_2026-05-03.json`.
+
+- Aggregated 4,930 historical 1m bar files into 4,068 regular-session daily bars from 2010-06-07 to 2026-04-27.
+- Evaluated 3,072 daily breakout/reversal specs using previous-years train selection and next-year OOS replay.
+- Test years: 2016 through 2026.
+- Selected folds: 2023, 2025, and 2026 only; the other 8 test years had no train-side candidate passing the selection gate.
+- Aggregate OOS result across selected folds: 24 trades, 50.00% win rate, net PnL $10,440.00.
+- Strict 70%/2R gate: failed in every test year.
+- Relaxed 55%/1.5R gate: failed in 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2024, 2025, and 2026.
+
 The fallback remains below the acceptance threshold. It produces no candidate eligible for quote replay, paper shadow, or live promotion.
 
 ### Independent Signal Family Expansion

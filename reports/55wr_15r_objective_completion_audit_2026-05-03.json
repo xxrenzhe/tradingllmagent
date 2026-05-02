@@ -398,6 +398,42 @@
       "uses_1_5r_only": true
     }
   ],
+  "low_frequency_bar_report": {
+    "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+    "decision": {
+      "fallback_failed_years": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025,
+        2026
+      ],
+      "fallback_passed": false,
+      "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+      "oos_win_rate": 0.5,
+      "passed": false,
+      "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold.",
+      "selected_fold_count": 3,
+      "strict_passed": false
+    },
+    "fallback_reward_r": 1.5,
+    "family": "low_frequency_bar",
+    "method": {
+      "aggregation": "Regular trading hours 14:30-20:00 UTC are aggregated to one daily OHLC bar.",
+      "scope": "Low-frequency session/daily strategy family built from historical data/bars 1m NQ_CME files.",
+      "selection": "Each fold selects specs using only the previous train-years; the next calendar year is untouched OOS."
+    },
+    "oos_min_year_win_rate": 0.0,
+    "oos_total_net_pnl": 10440.0,
+    "oos_total_trades": 24,
+    "passed": false,
+    "reward_gate_passed": true
+  },
   "low_r_report": {
     "artifact": "experiments/profit_mining/low_r_high_frequency_15r_forced_baseline_2019_2026.json",
     "decision": {
@@ -530,7 +566,7 @@
     "reward_gate_passed": true
   },
   "objective": "Fallback objective: find a 55%+ win-rate, 1.5R+, non-overfit, long-term profitable, live-ready strategy if the 70%/2R target cannot be found.",
-  "report_hash": "d9e84cda635b1f87b217b06d6dab04b018b1d6caa261578555bfecfdf0f24450",
+  "report_hash": "413f1b5c3b98b7a9f0c8e23607e863605017d0f8cfb279af80a37e6c8e971a88",
   "requirements": [
     {
       "evidence": [
@@ -958,6 +994,10 @@
         {
           "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
           "min_reward_r": 1.5
+        },
+        {
+          "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+          "fallback_reward_r": 1.5
         }
       ],
       "gap": "Expanded searches forced 1.5R, but no full strategy family passes 55%/1.5R gates.",
@@ -1155,6 +1195,32 @@
           },
           "family": "tick_derived_intraday",
           "oos_min_year_win_rate": 0.21951219512195122
+        },
+        {
+          "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+          "decision": {
+            "fallback_failed_years": [
+              2016,
+              2017,
+              2018,
+              2019,
+              2020,
+              2021,
+              2022,
+              2024,
+              2025,
+              2026
+            ],
+            "fallback_passed": false,
+            "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+            "oos_win_rate": 0.5,
+            "passed": false,
+            "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold.",
+            "selected_fold_count": 3,
+            "strict_passed": false
+          },
+          "family": "low_frequency_bar",
+          "oos_min_year_win_rate": 0.0
         }
       ],
       "gap": "No relaxed strategy family passes the 55% win-rate gate.",
@@ -1616,6 +1682,36 @@
             "scope": "All normalized Databento MBP-1 quote files in the requested two-month window.",
             "selection": "Chronological first half selects specs; second half is untouched holdout."
           }
+        },
+        {
+          "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+          "decision": {
+            "fallback_failed_years": [
+              2016,
+              2017,
+              2018,
+              2019,
+              2020,
+              2021,
+              2022,
+              2024,
+              2025,
+              2026
+            ],
+            "fallback_passed": false,
+            "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+            "oos_win_rate": 0.5,
+            "passed": false,
+            "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold.",
+            "selected_fold_count": 3,
+            "strict_passed": false
+          },
+          "family": "low_frequency_bar",
+          "method": {
+            "aggregation": "Regular trading hours 14:30-20:00 UTC are aggregated to one daily OHLC bar.",
+            "scope": "Low-frequency session/daily strategy family built from historical data/bars 1m NQ_CME files.",
+            "selection": "Each fold selects specs using only the previous train-years; the next calendar year is untouched OOS."
+          }
         }
       ],
       "gap": "The protocol is walk-forward, but no candidate survives all gates.",
@@ -1689,6 +1785,12 @@
           "failed_positive_years": [],
           "family": "tick_derived_intraday",
           "oos_total_net_pnl": -3975.0
+        },
+        {
+          "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+          "failed_positive_years": [],
+          "family": "low_frequency_bar",
+          "oos_total_net_pnl": 10440.0
         }
       ],
       "gap": "Relaxed runs still have negative OOS years, no qualifying rows, or negative full-history PnL.",
@@ -1874,6 +1976,31 @@
             "selected_test_trade_count": 41,
             "selected_test_win_rate": 0.21951219512195122,
             "strict_70wr_2r_passed": false
+          },
+          "passed": false
+        },
+        {
+          "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+          "decision": {
+            "fallback_failed_years": [
+              2016,
+              2017,
+              2018,
+              2019,
+              2020,
+              2021,
+              2022,
+              2024,
+              2025,
+              2026
+            ],
+            "fallback_passed": false,
+            "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+            "oos_win_rate": 0.5,
+            "passed": false,
+            "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold.",
+            "selected_fold_count": 3,
+            "strict_passed": false
           },
           "passed": false
         }
@@ -2893,6 +3020,42 @@
       "oos_min_year_win_rate": 0.21951219512195122,
       "oos_total_net_pnl": -3975.0,
       "oos_total_trades": 41,
+      "passed": false,
+      "reward_gate_passed": true
+    },
+    {
+      "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+      "decision": {
+        "fallback_failed_years": [
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025,
+          2026
+        ],
+        "fallback_passed": false,
+        "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+        "oos_win_rate": 0.5,
+        "passed": false,
+        "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold.",
+        "selected_fold_count": 3,
+        "strict_passed": false
+      },
+      "fallback_reward_r": 1.5,
+      "family": "low_frequency_bar",
+      "method": {
+        "aggregation": "Regular trading hours 14:30-20:00 UTC are aggregated to one daily OHLC bar.",
+        "scope": "Low-frequency session/daily strategy family built from historical data/bars 1m NQ_CME files.",
+        "selection": "Each fold selects specs using only the previous train-years; the next calendar year is untouched OOS."
+      },
+      "oos_min_year_win_rate": 0.0,
+      "oos_total_net_pnl": 10440.0,
+      "oos_total_trades": 24,
       "passed": false,
       "reward_gate_passed": true
     }

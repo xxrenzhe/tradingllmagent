@@ -27,6 +27,7 @@ DEFAULT_LOW_R_SUBSET_REPORT = Path("reports/low_r_15r_subset_search_55wr_wide_20
 DEFAULT_LOW_R_SUBSET_WALK_FORWARD_REPORT = Path("reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json")
 DEFAULT_TICK_MICROSTRUCTURE_REPORT = Path("reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json")
 DEFAULT_TICK_DERIVED_INTRADAY_REPORT = Path("reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json")
+DEFAULT_LOW_FREQUENCY_BAR_REPORT = Path("reports/nq_low_frequency_bar_2r_search_2026-05-03.json")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -40,6 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--low-r-subset-walk-forward-report", type=Path, default=DEFAULT_LOW_R_SUBSET_WALK_FORWARD_REPORT)
     parser.add_argument("--tick-microstructure-report", type=Path, default=DEFAULT_TICK_MICROSTRUCTURE_REPORT)
     parser.add_argument("--tick-derived-intraday-report", type=Path, default=DEFAULT_TICK_DERIVED_INTRADAY_REPORT)
+    parser.add_argument("--low-frequency-bar-report", type=Path, default=DEFAULT_LOW_FREQUENCY_BAR_REPORT)
     parser.add_argument("--output", type=Path, default=Path("reports/55wr_15r_objective_completion_audit_2026-05-02.json"))
     parser.add_argument("--markdown-output", type=Path, default=Path("reports/55wr_15r_objective_completion_audit_2026-05-02.md"))
     args = parser.parse_args(argv)
@@ -69,6 +71,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.tick_derived_intraday_report.exists()
         else None
     )
+    low_frequency_bar_report = (
+        (args.low_frequency_bar_report, load_json(args.low_frequency_bar_report))
+        if args.low_frequency_bar_report.exists()
+        else None
+    )
     payload = build_relaxed_audit(
         expanded_reports,
         vol_report=vol_report,
@@ -78,6 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         low_r_subset_walk_forward_report=low_r_subset_walk_forward_report,
         tick_microstructure_report=tick_microstructure_report,
         tick_derived_intraday_report=tick_derived_intraday_report,
+        low_frequency_bar_report=low_frequency_bar_report,
     )
     write_json(args.output, payload)
     args.markdown_output.write_text(render_markdown(payload), encoding="utf-8")
@@ -95,6 +103,7 @@ def build_relaxed_audit(
     low_r_subset_walk_forward_report: tuple[Path, dict[str, Any]] | None = None,
     tick_microstructure_report: tuple[Path, dict[str, Any]] | None = None,
     tick_derived_intraday_report: tuple[Path, dict[str, Any]] | None = None,
+    low_frequency_bar_report: tuple[Path, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     expanded_rows = [summarize_expanded_report(path, payload) for path, payload in reports]
     vol_row = summarize_vol_report(*vol_report) if vol_report else None
@@ -116,6 +125,11 @@ def build_relaxed_audit(
         if tick_derived_intraday_report
         else None
     )
+    low_frequency_bar_row = (
+        summarize_low_frequency_bar_report(*low_frequency_bar_report)
+        if low_frequency_bar_report
+        else None
+    )
     strategy_family_rows = expanded_rows + [
         row
         for row in (
@@ -126,6 +140,7 @@ def build_relaxed_audit(
             low_r_subset_walk_forward_row,
             tick_microstructure_row,
             tick_derived_intraday_row,
+            low_frequency_bar_row,
         )
         if row is not None
     ]
@@ -149,6 +164,8 @@ def build_relaxed_audit(
         reward_evidence.append({"artifact": tick_microstructure_row["artifact"], "min_take_profit_r": tick_microstructure_row["min_take_profit_r"]})
     if tick_derived_intraday_row:
         reward_evidence.append({"artifact": tick_derived_intraday_row["artifact"], "min_reward_r": tick_derived_intraday_row["min_reward_r"]})
+    if low_frequency_bar_row:
+        reward_evidence.append({"artifact": low_frequency_bar_row["artifact"], "fallback_reward_r": low_frequency_bar_row["fallback_reward_r"]})
     requirements = [
         requirement(
             "reward_1_5r",
@@ -200,6 +217,7 @@ def build_relaxed_audit(
         "low_r_subset_walk_forward_report": low_r_subset_walk_forward_row,
         "tick_microstructure_report": tick_microstructure_row,
         "tick_derived_intraday_report": tick_derived_intraday_row,
+        "low_frequency_bar_report": low_frequency_bar_row,
         "best_expanded_report": best,
         "strategy_family_reports": strategy_family_rows,
         "requirements": requirements,
@@ -445,6 +463,35 @@ def summarize_tick_derived_intraday_report(path: Path, payload: dict[str, Any]) 
         "oos_total_net_pnl": test.get("net_pnl"),
         "oos_total_trades": test.get("trade_count"),
         "oos_min_year_win_rate": test.get("win_rate"),
+    }
+
+
+def summarize_low_frequency_bar_report(path: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    target = payload.get("target") or {}
+    summary = payload.get("summary") or {}
+    decision = summary.get("decision") or payload.get("decision") or {}
+    return {
+        "family": "low_frequency_bar",
+        "artifact": str(path),
+        "passed": bool(decision.get("fallback_passed")),
+        "decision": {
+            **decision,
+            "strict_passed": bool(decision.get("passed")),
+            "fallback_passed": bool(decision.get("fallback_passed")),
+            "oos_win_rate": summary.get("oos_win_rate"),
+            "selected_fold_count": summary.get("selected_fold_count"),
+            "fallback_failed_years": summary.get("fallback_failed_years"),
+        },
+        "reward_gate_passed": float(target.get("fallback_reward_r") or 0.0) >= 1.5,
+        "fallback_reward_r": target.get("fallback_reward_r"),
+        "method": {
+            "selection": (payload.get("method") or {}).get("selection"),
+            "scope": (payload.get("method") or {}).get("scope"),
+            "aggregation": (payload.get("method") or {}).get("aggregation"),
+        },
+        "oos_total_net_pnl": summary.get("oos_total_net_pnl"),
+        "oos_total_trades": summary.get("oos_total_trades"),
+        "oos_min_year_win_rate": summary.get("oos_min_year_win_rate"),
     }
 
 

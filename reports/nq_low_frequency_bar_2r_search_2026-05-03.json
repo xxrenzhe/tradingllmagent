@@ -1,0 +1,383 @@
+{
+  "artifact": "nq_low_frequency_bar_2r_search",
+  "coverage": {
+    "daily_bar_count": 4068,
+    "first_day": "2010-06-07",
+    "last_day": "2026-04-27",
+    "source_file_count": 4930,
+    "year_count": 17
+  },
+  "date_from": "2010-06-06",
+  "date_to": "2026-04-27",
+  "decision": {
+    "fallback_passed": false,
+    "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+    "passed": false,
+    "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+  },
+  "folds": [
+    {
+      "evaluated_train_passing_spec_count": 0,
+      "fallback_test_gate_passed": false,
+      "selected": null,
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 258,
+      "test_year": 2016,
+      "train_daily_bars": 1265,
+      "train_years": [
+        2011,
+        2012,
+        2013,
+        2014,
+        2015
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 0,
+      "fallback_test_gate_passed": false,
+      "selected": null,
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 257,
+      "test_year": 2017,
+      "train_daily_bars": 1269,
+      "train_years": [
+        2012,
+        2013,
+        2014,
+        2015,
+        2016
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 0,
+      "fallback_test_gate_passed": false,
+      "selected": null,
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 257,
+      "test_year": 2018,
+      "train_daily_bars": 1275,
+      "train_years": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 0,
+      "fallback_test_gate_passed": false,
+      "selected": null,
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 258,
+      "test_year": 2019,
+      "train_daily_bars": 1280,
+      "train_years": [
+        2014,
+        2015,
+        2016,
+        2017,
+        2018
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 0,
+      "fallback_test_gate_passed": false,
+      "selected": null,
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 257,
+      "test_year": 2020,
+      "train_daily_bars": 1288,
+      "train_years": [
+        2015,
+        2016,
+        2017,
+        2018,
+        2019
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 0,
+      "fallback_test_gate_passed": false,
+      "selected": null,
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 258,
+      "test_year": 2021,
+      "train_daily_bars": 1287,
+      "train_years": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 0,
+      "fallback_test_gate_passed": false,
+      "selected": null,
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 258,
+      "test_year": 2022,
+      "train_daily_bars": 1287,
+      "train_years": [
+        2017,
+        2018,
+        2019,
+        2020,
+        2021
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 8,
+      "fallback_test_gate_passed": true,
+      "selected": {
+        "spec": {
+          "direction": "long",
+          "entry_buffer_ticks": 0.0,
+          "lookback_days": 10,
+          "max_hold_days": 5,
+          "max_range_atr": 3.0,
+          "max_stop_ticks": 360.0,
+          "min_range_atr": 0.0,
+          "min_stop_ticks": 48.0,
+          "min_trend_atr": 0.8,
+          "mode": "breakout",
+          "reward_r": 1.5,
+          "stop_atr_multiple": 1.25
+        },
+        "test": {
+          "avg_trade_net_pnl": 1048.6363636363637,
+          "exit_reasons": {
+            "stop_loss": 3,
+            "stop_loss_conservative": 1,
+            "take_profit_1.5r": 7
+          },
+          "net_pnl": 11535.0,
+          "profit_factor": 2.5888429752066116,
+          "trade_count": 11,
+          "win_rate": 0.6363636363636364,
+          "winning_trade_count": 7
+        },
+        "train": {
+          "avg_trade_net_pnl": 606.7158564814815,
+          "exit_reasons": {
+            "stop_loss": 23,
+            "take_profit_1.5r": 25,
+            "time_exit": 6
+          },
+          "fallback_gate_passed": true,
+          "net_pnl": 32762.65625,
+          "profit_factor": 1.7896340315279693,
+          "strict_gate_passed": false,
+          "trade_count": 54,
+          "win_rate": 0.5555555555555556,
+          "winning_trade_count": 30
+        }
+      },
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 257,
+      "test_year": 2023,
+      "train_daily_bars": 1288,
+      "train_years": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 0,
+      "fallback_test_gate_passed": false,
+      "selected": null,
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 259,
+      "test_year": 2024,
+      "train_daily_bars": 1288,
+      "train_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 24,
+      "fallback_test_gate_passed": false,
+      "selected": {
+        "spec": {
+          "direction": "long",
+          "entry_buffer_ticks": 8.0,
+          "lookback_days": 10,
+          "max_hold_days": 5,
+          "max_range_atr": 3.0,
+          "max_stop_ticks": 360.0,
+          "min_range_atr": 0.0,
+          "min_stop_ticks": 48.0,
+          "min_trend_atr": 0.8,
+          "mode": "breakout",
+          "reward_r": 1.5,
+          "stop_atr_multiple": 0.75
+        },
+        "test": {
+          "avg_trade_net_pnl": -84.23076923076923,
+          "exit_reasons": {
+            "stop_loss": 7,
+            "stop_loss_conservative": 1,
+            "take_profit_1.5r": 5
+          },
+          "net_pnl": -1095.0,
+          "profit_factor": 0.9245867768595041,
+          "trade_count": 13,
+          "win_rate": 0.38461538461538464,
+          "winning_trade_count": 5
+        },
+        "train": {
+          "avg_trade_net_pnl": 700.8928571428571,
+          "exit_reasons": {
+            "stop_loss": 23,
+            "stop_loss_conservative": 1,
+            "take_profit_1.5r": 31,
+            "time_exit": 1
+          },
+          "fallback_gate_passed": true,
+          "net_pnl": 39250.0,
+          "profit_factor": 1.8923496646584064,
+          "strict_gate_passed": false,
+          "trade_count": 56,
+          "win_rate": 0.5535714285714286,
+          "winning_trade_count": 31
+        }
+      },
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 257,
+      "test_year": 2025,
+      "train_daily_bars": 1289,
+      "train_years": [
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ]
+    },
+    {
+      "evaluated_train_passing_spec_count": 32,
+      "fallback_test_gate_passed": false,
+      "selected": {
+        "spec": {
+          "direction": "long",
+          "entry_buffer_ticks": 0.0,
+          "lookback_days": 10,
+          "max_hold_days": 5,
+          "max_range_atr": 3.0,
+          "max_stop_ticks": 240.0,
+          "min_range_atr": 0.0,
+          "min_stop_ticks": 48.0,
+          "min_trend_atr": 0.8,
+          "mode": "breakout",
+          "reward_r": 1.5,
+          "stop_atr_multiple": 0.75
+        },
+        "test": {
+          "avg_trade_net_pnl": null,
+          "exit_reasons": {},
+          "net_pnl": 0,
+          "profit_factor": null,
+          "trade_count": 0,
+          "win_rate": 0.0,
+          "winning_trade_count": 0
+        },
+        "train": {
+          "avg_trade_net_pnl": 552.8571428571429,
+          "exit_reasons": {
+            "stop_loss": 20,
+            "stop_loss_conservative": 3,
+            "take_profit_1.5r": 33
+          },
+          "fallback_gate_passed": true,
+          "net_pnl": 30960.0,
+          "profit_factor": 2.107890499194847,
+          "strict_gate_passed": false,
+          "trade_count": 56,
+          "win_rate": 0.5892857142857143,
+          "winning_trade_count": 33
+        }
+      },
+      "strict_test_gate_passed": false,
+      "test_daily_bars": 81,
+      "test_year": 2026,
+      "train_daily_bars": 1289,
+      "train_years": [
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ]
+    }
+  ],
+  "method": {
+    "aggregation": "Regular trading hours 14:30-20:00 UTC are aggregated to one daily OHLC bar.",
+    "entry_exit": "Entry is next daily open adjusted by a tick buffer; stops/targets are replayed on daily high/low with conservative stop-first collision handling.",
+    "scope": "Low-frequency session/daily strategy family built from historical data/bars 1m NQ_CME files.",
+    "selection": "Each fold selects specs using only the previous train-years; the next calendar year is untouched OOS.",
+    "spec_count": 3072,
+    "test_start_year": 2016,
+    "train_years": 5
+  },
+  "schema_version": 1,
+  "summary": {
+    "decision": {
+      "fallback_passed": false,
+      "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+      "passed": false,
+      "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+    },
+    "fallback_failed_years": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2024,
+      2025,
+      2026
+    ],
+    "min_test_trades": 8,
+    "oos_min_year_pnl": -1095.0,
+    "oos_min_year_win_rate": 0.0,
+    "oos_total_net_pnl": 10440.0,
+    "oos_total_trades": 24,
+    "oos_win_rate": 0.5,
+    "oos_winning_trade_count": 12,
+    "selected_fold_count": 3,
+    "strict_failed_years": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025,
+      2026
+    ],
+    "test_year_count": 11
+  },
+  "symbol": "NQ_CME",
+  "target": {
+    "fallback_reward_r": 1.5,
+    "fallback_win_rate": 0.55,
+    "min_test_trades": 8,
+    "min_train_trades": 40,
+    "strict_reward_r": 2.0,
+    "strict_win_rate": 0.7
+  }
+}

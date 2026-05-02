@@ -15,6 +15,7 @@
 - reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json: family=low_r_15r_subset_walk_forward, passed=False, profile=None, oos_net=271807.5, min_win_rate=0.4134529147982063
 - reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json: family=tick_microstructure_filter, passed=False, profile=None, oos_net=7220.0, min_win_rate=0.6111111111111112
 - reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json: family=tick_derived_intraday, passed=False, profile=None, oos_net=-3975.0, min_win_rate=0.21951219512195122
+- reports/nq_low_frequency_bar_2r_search_2026-05-03.json: family=low_frequency_bar, passed=False, profile=None, oos_net=10440.0, min_win_rate=0.0
 
 ## Checklist
 

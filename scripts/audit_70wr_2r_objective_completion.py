@@ -26,6 +26,7 @@ DEFAULT_REPORTS = {
     "mbp1_microstructure_2r_medium": Path("reports/nq_mbp1_microstructure_2r_medium_candidate_index_search_2026-05-03.json"),
     "mbp1_microstructure_2r_full": Path("reports/nq_mbp1_microstructure_2r_full_grid_candidate_index_search_2026-05-03.json"),
     "tick_derived_intraday": Path("reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json"),
+    "low_frequency_bar": Path("reports/nq_low_frequency_bar_2r_search_2026-05-03.json"),
     "assessment": Path("reports/black_box_70pct_winrate_2r_strategy_assessment_2026-05-02.md"),
 }
 
@@ -66,6 +67,7 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
     mbp1_microstructure_2r_medium = evidence.get("mbp1_microstructure_2r_medium")
     mbp1_microstructure_2r_full = evidence.get("mbp1_microstructure_2r_full")
     tick_derived_intraday = evidence.get("tick_derived_intraday")
+    low_frequency_bar = evidence.get("low_frequency_bar")
 
     requirements = [
         requirement(
@@ -104,6 +106,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                 {
                     "artifact": str(DEFAULT_REPORTS["tick_derived_intraday"]),
                     "finding": microstructure_finding(tick_derived_intraday),
+                },
+                {
+                    "artifact": str(DEFAULT_REPORTS["low_frequency_bar"]),
+                    "finding": low_frequency_finding(low_frequency_bar),
                 },
             ],
             gap="No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, SMC v1 has 0% full-history win rate, and VOL has no >=70% prescreen row.",
@@ -145,6 +151,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                     "artifact": str(DEFAULT_REPORTS["tick_derived_intraday"]),
                     "finding": microstructure_finding(tick_derived_intraday),
                 },
+                {
+                    "artifact": str(DEFAULT_REPORTS["low_frequency_bar"]),
+                    "finding": low_frequency_finding(low_frequency_bar),
+                },
             ],
             gap="Strict 2R expanded-high-edge walk-forward fails, SMC v1 net-R gates are negative rather than >= 2R, and VOL generated specs are below 2R.",
         ),
@@ -185,6 +195,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                     "artifact": str(DEFAULT_REPORTS["tick_derived_intraday"]),
                     "finding": microstructure_finding(tick_derived_intraday),
                 },
+                {
+                    "artifact": str(DEFAULT_REPORTS["low_frequency_bar"]),
+                    "finding": low_frequency_finding(low_frequency_bar),
+                },
             ],
             gap="No locked walk-forward candidate survives the explicit 70%/2R objective gates; VOL has no final-target rows.",
         ),
@@ -203,6 +217,10 @@ def build_completion_audit(evidence: dict[str, Any]) -> dict[str, Any]:
                         "full_history_net_pnl": smc_objective["full_history"]["metrics"]["net_pnl"],
                         "final_holdout_metrics": (smc_objective.get("final_holdout", {}).get("summary") or {}).get("summary", {}).get("metrics", {}),
                     },
+                },
+                {
+                    "artifact": str(DEFAULT_REPORTS["low_frequency_bar"]),
+                    "finding": low_frequency_finding(low_frequency_bar),
                 },
             ],
             gap="Strict 2R expanded-high-edge fails positive years; SMC v1 full-history net PnL is negative and final holdout has no trades.",
@@ -300,6 +318,17 @@ def microstructure_finding(report: dict[str, Any] | None) -> dict[str, Any]:
         "selected_spec": selected.get("spec"),
         "selected_train": selected.get("train"),
         "selected_test": selected.get("test"),
+    }
+
+
+def low_frequency_finding(report: dict[str, Any] | None) -> dict[str, Any]:
+    if not report:
+        return {"status": "missing"}
+    return {
+        "decision": report.get("decision"),
+        "target": report.get("target"),
+        "coverage": report.get("coverage"),
+        "summary": report.get("summary"),
     }
 
 

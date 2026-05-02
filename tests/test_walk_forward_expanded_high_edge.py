@@ -310,6 +310,19 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
                     },
                     "decision": {"passed": False, "strict_70wr_2r_passed": False},
                 },
+                "low_frequency_bar": {
+                    "target": {"strict_reward_r": 2.0, "fallback_reward_r": 1.5},
+                    "coverage": {"daily_bar_count": 4000},
+                    "summary": {
+                        "oos_win_rate": 0.50,
+                        "oos_total_trades": 24,
+                        "oos_total_net_pnl": 10440.0,
+                        "strict_failed_years": [2023],
+                        "fallback_failed_years": [2025],
+                        "decision": {"passed": False, "fallback_passed": False},
+                    },
+                    "decision": {"passed": False, "fallback_passed": False},
+                },
                 "assessment": "reject promotion",
             }
         )
@@ -324,6 +337,7 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         self.assertEqual(by_artifact["nq_mbp1_microstructure_2r_medium_candidate_index_search_2026-05-03.json"]["selected_test"]["win_rate"], 0.32)
         self.assertEqual(by_artifact["nq_mbp1_microstructure_2r_full_grid_candidate_index_search_2026-05-03.json"]["selected_train"]["trade_count"], 2)
         self.assertEqual(by_artifact["nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json"]["selected_test"]["win_rate"], 0.51)
+        self.assertEqual(by_artifact["nq_low_frequency_bar_2r_search_2026-05-03.json"]["summary"]["oos_win_rate"], 0.50)
 
     def test_relaxed_audit_rejects_low_r_probe_below_55pct(self) -> None:
         audit = build_relaxed_audit(
@@ -500,6 +514,52 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         self.assertTrue(tick["decision"]["objective_passed_but_not_live_ready"])
         self.assertEqual(tick["decision"]["selected_test_trade_count"], 90)
         self.assertIn("live_ready", audit["decision"]["failed_requirements"])
+
+    def test_relaxed_audit_includes_low_frequency_bar_failure(self) -> None:
+        audit = build_relaxed_audit(
+            [
+                (
+                    Path("expanded.json"),
+                    {
+                        "method": {"take_profit_r_grid": [1.5]},
+                        "summary": {
+                            "decision": {"passed": False},
+                            "oos_total_net_pnl": -100.0,
+                            "oos_total_trades": 10,
+                            "oos_min_year_win_rate": 0.4,
+                        },
+                    },
+                )
+            ],
+            low_frequency_bar_report=(
+                Path("low_frequency.json"),
+                {
+                    "target": {"fallback_reward_r": 1.5},
+                    "coverage": {"daily_bar_count": 4000},
+                    "method": {
+                        "selection": "train-only previous years, next-year OOS",
+                        "scope": "daily bars",
+                        "aggregation": "RTH daily",
+                    },
+                    "summary": {
+                        "oos_total_net_pnl": 10440.0,
+                        "oos_total_trades": 24,
+                        "oos_win_rate": 0.5,
+                        "oos_min_year_win_rate": 0.0,
+                        "selected_fold_count": 3,
+                        "fallback_failed_years": [2025, 2026],
+                        "decision": {"passed": False, "fallback_passed": False},
+                    },
+                    "decision": {"passed": False, "fallback_passed": False},
+                },
+            ),
+        )
+
+        row = next(item for item in audit["strategy_family_reports"] if item["family"] == "low_frequency_bar")
+        self.assertFalse(row["passed"])
+        self.assertEqual(row["decision"]["oos_win_rate"], 0.5)
+        self.assertEqual(row["oos_total_trades"], 24)
+        self.assertIn("win_rate_55pct", audit["decision"]["failed_requirements"])
 
     def test_low_r_subset_walk_forward_summary_requires_all_test_gates(self) -> None:
         summary = summarize_low_r_subset_walk_forward(

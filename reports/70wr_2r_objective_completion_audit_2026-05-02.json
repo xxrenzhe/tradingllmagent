@@ -376,6 +376,74 @@
               "strict_win_rate": 0.7
             }
           }
+        },
+        {
+          "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "daily_bar_count": 4068,
+              "first_day": "2010-06-07",
+              "last_day": "2026-04-27",
+              "source_file_count": 4930,
+              "year_count": 17
+            },
+            "decision": {
+              "fallback_passed": false,
+              "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+              "passed": false,
+              "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+            },
+            "summary": {
+              "decision": {
+                "fallback_passed": false,
+                "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+                "passed": false,
+                "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+              },
+              "fallback_failed_years": [
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2024,
+                2025,
+                2026
+              ],
+              "min_test_trades": 8,
+              "oos_min_year_pnl": -1095.0,
+              "oos_min_year_win_rate": 0.0,
+              "oos_total_net_pnl": 10440.0,
+              "oos_total_trades": 24,
+              "oos_win_rate": 0.5,
+              "oos_winning_trade_count": 12,
+              "selected_fold_count": 3,
+              "strict_failed_years": [
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2023,
+                2024,
+                2025,
+                2026
+              ],
+              "test_year_count": 11
+            },
+            "target": {
+              "fallback_reward_r": 1.5,
+              "fallback_win_rate": 0.55,
+              "min_test_trades": 8,
+              "min_train_trades": 40,
+              "strict_reward_r": 2.0,
+              "strict_win_rate": 0.7
+            }
+          }
         }
       ],
       "gap": "No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, SMC v1 has 0% full-history win rate, and VOL has no >=70% prescreen row.",
@@ -742,6 +810,74 @@
               "min_test_trades": 80,
               "min_train_trades": 80,
               "min_win_rate": 0.55,
+              "strict_reward_r": 2.0,
+              "strict_win_rate": 0.7
+            }
+          }
+        },
+        {
+          "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "daily_bar_count": 4068,
+              "first_day": "2010-06-07",
+              "last_day": "2026-04-27",
+              "source_file_count": 4930,
+              "year_count": 17
+            },
+            "decision": {
+              "fallback_passed": false,
+              "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+              "passed": false,
+              "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+            },
+            "summary": {
+              "decision": {
+                "fallback_passed": false,
+                "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+                "passed": false,
+                "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+              },
+              "fallback_failed_years": [
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2024,
+                2025,
+                2026
+              ],
+              "min_test_trades": 8,
+              "oos_min_year_pnl": -1095.0,
+              "oos_min_year_win_rate": 0.0,
+              "oos_total_net_pnl": 10440.0,
+              "oos_total_trades": 24,
+              "oos_win_rate": 0.5,
+              "oos_winning_trade_count": 12,
+              "selected_fold_count": 3,
+              "strict_failed_years": [
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2023,
+                2024,
+                2025,
+                2026
+              ],
+              "test_year_count": 11
+            },
+            "target": {
+              "fallback_reward_r": 1.5,
+              "fallback_win_rate": 0.55,
+              "min_test_trades": 8,
+              "min_train_trades": 40,
               "strict_reward_r": 2.0,
               "strict_win_rate": 0.7
             }
@@ -1115,6 +1251,74 @@
               "strict_win_rate": 0.7
             }
           }
+        },
+        {
+          "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "daily_bar_count": 4068,
+              "first_day": "2010-06-07",
+              "last_day": "2026-04-27",
+              "source_file_count": 4930,
+              "year_count": 17
+            },
+            "decision": {
+              "fallback_passed": false,
+              "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+              "passed": false,
+              "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+            },
+            "summary": {
+              "decision": {
+                "fallback_passed": false,
+                "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+                "passed": false,
+                "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+              },
+              "fallback_failed_years": [
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2024,
+                2025,
+                2026
+              ],
+              "min_test_trades": 8,
+              "oos_min_year_pnl": -1095.0,
+              "oos_min_year_win_rate": 0.0,
+              "oos_total_net_pnl": 10440.0,
+              "oos_total_trades": 24,
+              "oos_win_rate": 0.5,
+              "oos_winning_trade_count": 12,
+              "selected_fold_count": 3,
+              "strict_failed_years": [
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2023,
+                2024,
+                2025,
+                2026
+              ],
+              "test_year_count": 11
+            },
+            "target": {
+              "fallback_reward_r": 1.5,
+              "fallback_win_rate": 0.55,
+              "min_test_trades": 8,
+              "min_train_trades": 40,
+              "strict_reward_r": 2.0,
+              "strict_win_rate": 0.7
+            }
+          }
         }
       ],
       "gap": "No locked walk-forward candidate survives the explicit 70%/2R objective gates; VOL has no final-target rows.",
@@ -1167,6 +1371,74 @@
               "winning_trade_count": 0
             },
             "full_history_net_pnl": -760.0
+          }
+        },
+        {
+          "artifact": "reports/nq_low_frequency_bar_2r_search_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "daily_bar_count": 4068,
+              "first_day": "2010-06-07",
+              "last_day": "2026-04-27",
+              "source_file_count": 4930,
+              "year_count": 17
+            },
+            "decision": {
+              "fallback_passed": false,
+              "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+              "passed": false,
+              "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+            },
+            "summary": {
+              "decision": {
+                "fallback_passed": false,
+                "fallback_reason": "No low-frequency bar strategy passed every next-year OOS 55% win-rate / 1.5R fold.",
+                "passed": false,
+                "reason": "No low-frequency bar strategy passed every next-year OOS 70% win-rate / 2R fold."
+              },
+              "fallback_failed_years": [
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2024,
+                2025,
+                2026
+              ],
+              "min_test_trades": 8,
+              "oos_min_year_pnl": -1095.0,
+              "oos_min_year_win_rate": 0.0,
+              "oos_total_net_pnl": 10440.0,
+              "oos_total_trades": 24,
+              "oos_win_rate": 0.5,
+              "oos_winning_trade_count": 12,
+              "selected_fold_count": 3,
+              "strict_failed_years": [
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2023,
+                2024,
+                2025,
+                2026
+              ],
+              "test_year_count": 11
+            },
+            "target": {
+              "fallback_reward_r": 1.5,
+              "fallback_win_rate": 0.55,
+              "min_test_trades": 8,
+              "min_train_trades": 40,
+              "strict_reward_r": 2.0,
+              "strict_win_rate": 0.7
+            }
           }
         }
       ],
