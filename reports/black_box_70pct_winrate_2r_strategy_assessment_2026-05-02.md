@@ -118,6 +118,14 @@ Related low-R high-frequency probe: `experiments/profit_mining/low_r_high_freque
 - Full-sample win rate: 50.85%, below the relaxed 55% threshold.
 - It is not walk-forward-selected and uses `max_concurrent_positions=99`, so it is not live-ready even aside from the win-rate miss.
 
+Low-R subset search: `reports/low_r_15r_subset_search_55wr_wide_2026-05-03.json`.
+
+- Forced 1.5R on the 19-edge low-R basket, enumerated subsets up to 10 edges by approximate single-edge statistics, then exact-replayed the top 80 subsets.
+- Passing subsets: 0.
+- Best exact subset: edge indexes `[5, 6, 15]`, net PnL $888,047.50, profit factor 1.310, 7,542 trades.
+- Best exact subset win rate: 53.53%, still below 55%.
+- Best exact subset positive years: 6 of 8, so it also fails long-term stability.
+
 The fallback remains below the acceptance threshold. It produces no candidate eligible for quote replay, paper shadow, or live promotion.
 
 ### Independent Signal Family Expansion

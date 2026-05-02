@@ -299,6 +299,18 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
                     }
                 },
             ),
+            low_r_subset_report=(
+                Path("subset.json"),
+                {
+                    "target": {"forced_take_profit_r": 1.5},
+                    "decision": {"passed": False, "passing_count": 0},
+                    "best_exact": {
+                        "edge_indexes": [5, 6, 15],
+                        "metrics": {"win_rate": 0.535, "net_pnl": 1000.0, "trade_count": 100},
+                        "constraints": {"positive_years": 6},
+                    },
+                },
+            ),
         )
 
         self.assertFalse(audit["decision"]["achieved"])
@@ -306,6 +318,9 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         low_r = next(row for row in audit["strategy_family_reports"] if row["family"] == "low_r_high_frequency_probe")
         self.assertFalse(low_r["passed"])
         self.assertEqual(low_r["decision"]["win_rate"], 0.548)
+        subset = next(row for row in audit["strategy_family_reports"] if row["family"] == "low_r_15r_subset_search")
+        self.assertFalse(subset["passed"])
+        self.assertEqual(subset["decision"]["best_win_rate"], 0.535)
 
     def test_cooldown_replay_suppresses_same_regime_entries(self) -> None:
         edge = RegimeEdge(
