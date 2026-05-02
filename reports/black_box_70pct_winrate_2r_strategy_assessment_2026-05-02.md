@@ -186,6 +186,15 @@ Tick microstructure filter audit: `reports/nq_tick_microstructure_filter_audit_5
 - The best train-ranked rule had 69.23% train win rate and 61.11% holdout win rate, but only 13 train trades and 18 holdout trades, below the trade-count floor.
 - Baseline no-filter holdout was profitable with 60.94% win rate, but the train half was 53.13%, so the 2-month tick window does not establish a robust train-selected strategy.
 
+Tick-derived intraday search: `reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json`.
+
+- Aggregated all 52 normalized MBP-1 quote days into 60,413 one-minute bid/ask/mid bars with spread, depth, imbalance, and quote-count features.
+- Evaluated 41,472 continuation/reversal specs with 1.5R and 2R targets.
+- Selection method: chronological first half train, second half untouched holdout.
+- Best train-ranked spec was a short reversal with a 48-tick stop and 2R target, but it had only 1 train trade.
+- Holdout result for that selected spec: 41 trades, 21.95% win rate, net PnL -$3,975.00.
+- Gate result: failed; no train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.
+
 The fallback remains below the acceptance threshold. It produces no candidate eligible for quote replay, paper shadow, or live promotion.
 
 ### Independent Signal Family Expansion

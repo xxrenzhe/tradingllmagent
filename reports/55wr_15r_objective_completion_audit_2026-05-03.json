@@ -530,7 +530,7 @@
     "reward_gate_passed": true
   },
   "objective": "Fallback objective: find a 55%+ win-rate, 1.5R+, non-overfit, long-term profitable, live-ready strategy if the 70%/2R target cannot be found.",
-  "report_hash": "8ba59e534a504359035ed5ca814afd7fdde4a97d5980d78ce36f43d49dfa096c",
+  "report_hash": "d9e84cda635b1f87b217b06d6dab04b018b1d6caa261578555bfecfdf0f24450",
   "requirements": [
     {
       "evidence": [
@@ -954,6 +954,10 @@
         {
           "artifact": "reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json",
           "min_take_profit_r": 1.5
+        },
+        {
+          "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+          "min_reward_r": 1.5
         }
       ],
       "gap": "Expanded searches forced 1.5R, but no full strategy family passes 55%/1.5R gates.",
@@ -1120,6 +1124,37 @@
           },
           "family": "tick_microstructure_filter",
           "oos_min_year_win_rate": 0.6111111111111112
+        },
+        {
+          "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+          "decision": {
+            "live_ready": false,
+            "live_ready_reason": "This analyzes the full two-month tick window, but it is not a multi-year walk-forward or live/paper readiness result.",
+            "minute_bar_count": 60413,
+            "objective_passed_but_not_live_ready": false,
+            "passed": false,
+            "reason": "No train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.",
+            "selected_spec": {
+              "cooldown_minutes": 30,
+              "direction": "short",
+              "fast_minutes": 5,
+              "max_hold_minutes": 90,
+              "max_spread_ticks": 2.0,
+              "min_abs_imbalance": 0.0,
+              "min_depth": 1.0,
+              "min_fast_move_ticks": 16.0,
+              "min_slow_move_ticks": 32.0,
+              "mode": "reversal",
+              "reward_r": 2.0,
+              "slow_minutes": 30,
+              "stop_ticks": 48.0
+            },
+            "selected_test_trade_count": 41,
+            "selected_test_win_rate": 0.21951219512195122,
+            "strict_70wr_2r_passed": false
+          },
+          "family": "tick_derived_intraday",
+          "oos_min_year_win_rate": 0.21951219512195122
         }
       ],
       "gap": "No relaxed strategy family passes the 55% win-rate gate.",
@@ -1545,6 +1580,42 @@
             "scope": "Only trades from the existing MBP-1 quote replay window are analyzed.",
             "selection": "Candidate filters use only entry-time observable quote features; first half of trades selects the filter, second half is holdout."
           }
+        },
+        {
+          "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+          "decision": {
+            "live_ready": false,
+            "live_ready_reason": "This analyzes the full two-month tick window, but it is not a multi-year walk-forward or live/paper readiness result.",
+            "minute_bar_count": 60413,
+            "objective_passed_but_not_live_ready": false,
+            "passed": false,
+            "reason": "No train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.",
+            "selected_spec": {
+              "cooldown_minutes": 30,
+              "direction": "short",
+              "fast_minutes": 5,
+              "max_hold_minutes": 90,
+              "max_spread_ticks": 2.0,
+              "min_abs_imbalance": 0.0,
+              "min_depth": 1.0,
+              "min_fast_move_ticks": 16.0,
+              "min_slow_move_ticks": 32.0,
+              "mode": "reversal",
+              "reward_r": 2.0,
+              "slow_minutes": 30,
+              "stop_ticks": 48.0
+            },
+            "selected_test_trade_count": 41,
+            "selected_test_win_rate": 0.21951219512195122,
+            "strict_70wr_2r_passed": false
+          },
+          "family": "tick_derived_intraday",
+          "method": {
+            "entry_timing": "Signals are computed at minute close using only current and prior minute bars; fills occur on the next minute's bid/ask open.",
+            "long_term_limit": "The report covers the provided recent tick window only and cannot establish long-term profitability by itself.",
+            "scope": "All normalized Databento MBP-1 quote files in the requested two-month window.",
+            "selection": "Chronological first half selects specs; second half is untouched holdout."
+          }
         }
       ],
       "gap": "The protocol is walk-forward, but no candidate survives all gates.",
@@ -1612,6 +1683,12 @@
           "failed_positive_years": [],
           "family": "tick_microstructure_filter",
           "oos_total_net_pnl": 7220.0
+        },
+        {
+          "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+          "failed_positive_years": [],
+          "family": "tick_derived_intraday",
+          "oos_total_net_pnl": -3975.0
         }
       ],
       "gap": "Relaxed runs still have negative OOS years, no qualifying rows, or negative full-history PnL.",
@@ -1767,6 +1844,36 @@
             "selected_rule": "relevant_depth >= 2 AND aligned_imbalance >= -0.142857",
             "selected_test_trade_count": 18,
             "selected_test_win_rate": 0.6111111111111112
+          },
+          "passed": false
+        },
+        {
+          "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+          "decision": {
+            "live_ready": false,
+            "live_ready_reason": "This analyzes the full two-month tick window, but it is not a multi-year walk-forward or live/paper readiness result.",
+            "minute_bar_count": 60413,
+            "objective_passed_but_not_live_ready": false,
+            "passed": false,
+            "reason": "No train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.",
+            "selected_spec": {
+              "cooldown_minutes": 30,
+              "direction": "short",
+              "fast_minutes": 5,
+              "max_hold_minutes": 90,
+              "max_spread_ticks": 2.0,
+              "min_abs_imbalance": 0.0,
+              "min_depth": 1.0,
+              "min_fast_move_ticks": 16.0,
+              "min_slow_move_ticks": 32.0,
+              "mode": "reversal",
+              "reward_r": 2.0,
+              "slow_minutes": 30,
+              "stop_ticks": 48.0
+            },
+            "selected_test_trade_count": 41,
+            "selected_test_win_rate": 0.21951219512195122,
+            "strict_70wr_2r_passed": false
           },
           "passed": false
         }
@@ -2746,8 +2853,92 @@
       "oos_total_trades": 18,
       "passed": false,
       "reward_gate_passed": true
+    },
+    {
+      "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+      "decision": {
+        "live_ready": false,
+        "live_ready_reason": "This analyzes the full two-month tick window, but it is not a multi-year walk-forward or live/paper readiness result.",
+        "minute_bar_count": 60413,
+        "objective_passed_but_not_live_ready": false,
+        "passed": false,
+        "reason": "No train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.",
+        "selected_spec": {
+          "cooldown_minutes": 30,
+          "direction": "short",
+          "fast_minutes": 5,
+          "max_hold_minutes": 90,
+          "max_spread_ticks": 2.0,
+          "min_abs_imbalance": 0.0,
+          "min_depth": 1.0,
+          "min_fast_move_ticks": 16.0,
+          "min_slow_move_ticks": 32.0,
+          "mode": "reversal",
+          "reward_r": 2.0,
+          "slow_minutes": 30,
+          "stop_ticks": 48.0
+        },
+        "selected_test_trade_count": 41,
+        "selected_test_win_rate": 0.21951219512195122,
+        "strict_70wr_2r_passed": false
+      },
+      "family": "tick_derived_intraday",
+      "method": {
+        "entry_timing": "Signals are computed at minute close using only current and prior minute bars; fills occur on the next minute's bid/ask open.",
+        "long_term_limit": "The report covers the provided recent tick window only and cannot establish long-term profitability by itself.",
+        "scope": "All normalized Databento MBP-1 quote files in the requested two-month window.",
+        "selection": "Chronological first half selects specs; second half is untouched holdout."
+      },
+      "min_reward_r": 1.5,
+      "oos_min_year_win_rate": 0.21951219512195122,
+      "oos_total_net_pnl": -3975.0,
+      "oos_total_trades": 41,
+      "passed": false,
+      "reward_gate_passed": true
     }
   ],
+  "tick_derived_intraday_report": {
+    "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+    "decision": {
+      "live_ready": false,
+      "live_ready_reason": "This analyzes the full two-month tick window, but it is not a multi-year walk-forward or live/paper readiness result.",
+      "minute_bar_count": 60413,
+      "objective_passed_but_not_live_ready": false,
+      "passed": false,
+      "reason": "No train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.",
+      "selected_spec": {
+        "cooldown_minutes": 30,
+        "direction": "short",
+        "fast_minutes": 5,
+        "max_hold_minutes": 90,
+        "max_spread_ticks": 2.0,
+        "min_abs_imbalance": 0.0,
+        "min_depth": 1.0,
+        "min_fast_move_ticks": 16.0,
+        "min_slow_move_ticks": 32.0,
+        "mode": "reversal",
+        "reward_r": 2.0,
+        "slow_minutes": 30,
+        "stop_ticks": 48.0
+      },
+      "selected_test_trade_count": 41,
+      "selected_test_win_rate": 0.21951219512195122,
+      "strict_70wr_2r_passed": false
+    },
+    "family": "tick_derived_intraday",
+    "method": {
+      "entry_timing": "Signals are computed at minute close using only current and prior minute bars; fills occur on the next minute's bid/ask open.",
+      "long_term_limit": "The report covers the provided recent tick window only and cannot establish long-term profitability by itself.",
+      "scope": "All normalized Databento MBP-1 quote files in the requested two-month window.",
+      "selection": "Chronological first half selects specs; second half is untouched holdout."
+    },
+    "min_reward_r": 1.5,
+    "oos_min_year_win_rate": 0.21951219512195122,
+    "oos_total_net_pnl": -3975.0,
+    "oos_total_trades": 41,
+    "passed": false,
+    "reward_gate_passed": true
+  },
   "tick_microstructure_report": {
     "artifact": "reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json",
     "decision": {

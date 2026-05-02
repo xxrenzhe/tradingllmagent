@@ -309,6 +309,73 @@
               "reward_r": 2.0
             }
           }
+        },
+        {
+          "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "date_count": 52,
+              "minute_bar_count": 60413,
+              "quote_file_count": 52,
+              "test_minute_bar_count": 30207,
+              "train_minute_bar_count": 30206
+            },
+            "decision": {
+              "live_ready": false,
+              "live_ready_reason": "This analyzes the full two-month tick window, but it is not a multi-year walk-forward or live/paper readiness result.",
+              "passed": false,
+              "reason": "No train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.",
+              "strict_70wr_2r_passed": false
+            },
+            "selected_spec": {
+              "cooldown_minutes": 30,
+              "direction": "short",
+              "fast_minutes": 5,
+              "max_hold_minutes": 90,
+              "max_spread_ticks": 2.0,
+              "min_abs_imbalance": 0.0,
+              "min_depth": 1.0,
+              "min_fast_move_ticks": 16.0,
+              "min_slow_move_ticks": 32.0,
+              "mode": "reversal",
+              "reward_r": 2.0,
+              "slow_minutes": 30,
+              "stop_ticks": 48.0
+            },
+            "selected_test": {
+              "avg_trade_net_pnl": -96.95121951219512,
+              "exit_reasons": {
+                "stop_loss": 32,
+                "take_profit_2r": 9
+              },
+              "gate_passed": false,
+              "net_pnl": -3975.0,
+              "profit_factor": 0.5128676470588235,
+              "trade_count": 41,
+              "win_rate": 0.21951219512195122,
+              "winning_trade_count": 9
+            },
+            "selected_train": {
+              "avg_trade_net_pnl": 465.0,
+              "exit_reasons": {
+                "take_profit_2r": 1
+              },
+              "gate_passed": false,
+              "net_pnl": 465.0,
+              "profit_factor": null,
+              "trade_count": 1,
+              "win_rate": 1.0,
+              "winning_trade_count": 1
+            },
+            "target": {
+              "min_reward_r": 1.5,
+              "min_test_trades": 80,
+              "min_train_trades": 80,
+              "min_win_rate": 0.55,
+              "strict_reward_r": 2.0,
+              "strict_win_rate": 0.7
+            }
+          }
         }
       ],
       "gap": "No candidate passes the 70% win-rate gate; expanded-high-edge has no train-selected 70%/2R fold, SMC v1 has 0% full-history win rate, and VOL has no >=70% prescreen row.",
@@ -612,6 +679,73 @@
               "reward_r": 2.0
             }
           }
+        },
+        {
+          "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "date_count": 52,
+              "minute_bar_count": 60413,
+              "quote_file_count": 52,
+              "test_minute_bar_count": 30207,
+              "train_minute_bar_count": 30206
+            },
+            "decision": {
+              "live_ready": false,
+              "live_ready_reason": "This analyzes the full two-month tick window, but it is not a multi-year walk-forward or live/paper readiness result.",
+              "passed": false,
+              "reason": "No train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.",
+              "strict_70wr_2r_passed": false
+            },
+            "selected_spec": {
+              "cooldown_minutes": 30,
+              "direction": "short",
+              "fast_minutes": 5,
+              "max_hold_minutes": 90,
+              "max_spread_ticks": 2.0,
+              "min_abs_imbalance": 0.0,
+              "min_depth": 1.0,
+              "min_fast_move_ticks": 16.0,
+              "min_slow_move_ticks": 32.0,
+              "mode": "reversal",
+              "reward_r": 2.0,
+              "slow_minutes": 30,
+              "stop_ticks": 48.0
+            },
+            "selected_test": {
+              "avg_trade_net_pnl": -96.95121951219512,
+              "exit_reasons": {
+                "stop_loss": 32,
+                "take_profit_2r": 9
+              },
+              "gate_passed": false,
+              "net_pnl": -3975.0,
+              "profit_factor": 0.5128676470588235,
+              "trade_count": 41,
+              "win_rate": 0.21951219512195122,
+              "winning_trade_count": 9
+            },
+            "selected_train": {
+              "avg_trade_net_pnl": 465.0,
+              "exit_reasons": {
+                "take_profit_2r": 1
+              },
+              "gate_passed": false,
+              "net_pnl": 465.0,
+              "profit_factor": null,
+              "trade_count": 1,
+              "win_rate": 1.0,
+              "winning_trade_count": 1
+            },
+            "target": {
+              "min_reward_r": 1.5,
+              "min_test_trades": 80,
+              "min_train_trades": 80,
+              "min_win_rate": 0.55,
+              "strict_reward_r": 2.0,
+              "strict_win_rate": 0.7
+            }
+          }
         }
       ],
       "gap": "Strict 2R expanded-high-edge walk-forward fails, SMC v1 net-R gates are negative rather than >= 2R, and VOL generated specs are below 2R.",
@@ -912,6 +1046,73 @@
               "min_train_trades": 100,
               "min_win_rate": 0.7,
               "reward_r": 2.0
+            }
+          }
+        },
+        {
+          "artifact": "reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json",
+          "finding": {
+            "coverage": {
+              "date_count": 52,
+              "minute_bar_count": 60413,
+              "quote_file_count": 52,
+              "test_minute_bar_count": 30207,
+              "train_minute_bar_count": 30206
+            },
+            "decision": {
+              "live_ready": false,
+              "live_ready_reason": "This analyzes the full two-month tick window, but it is not a multi-year walk-forward or live/paper readiness result.",
+              "passed": false,
+              "reason": "No train-selected tick-derived intraday strategy passed the 55% win-rate, 1.5R, trade-count, and positive-PnL holdout gates.",
+              "strict_70wr_2r_passed": false
+            },
+            "selected_spec": {
+              "cooldown_minutes": 30,
+              "direction": "short",
+              "fast_minutes": 5,
+              "max_hold_minutes": 90,
+              "max_spread_ticks": 2.0,
+              "min_abs_imbalance": 0.0,
+              "min_depth": 1.0,
+              "min_fast_move_ticks": 16.0,
+              "min_slow_move_ticks": 32.0,
+              "mode": "reversal",
+              "reward_r": 2.0,
+              "slow_minutes": 30,
+              "stop_ticks": 48.0
+            },
+            "selected_test": {
+              "avg_trade_net_pnl": -96.95121951219512,
+              "exit_reasons": {
+                "stop_loss": 32,
+                "take_profit_2r": 9
+              },
+              "gate_passed": false,
+              "net_pnl": -3975.0,
+              "profit_factor": 0.5128676470588235,
+              "trade_count": 41,
+              "win_rate": 0.21951219512195122,
+              "winning_trade_count": 9
+            },
+            "selected_train": {
+              "avg_trade_net_pnl": 465.0,
+              "exit_reasons": {
+                "take_profit_2r": 1
+              },
+              "gate_passed": false,
+              "net_pnl": 465.0,
+              "profit_factor": null,
+              "trade_count": 1,
+              "win_rate": 1.0,
+              "winning_trade_count": 1
+            },
+            "target": {
+              "min_reward_r": 1.5,
+              "min_test_trades": 80,
+              "min_train_trades": 80,
+              "min_win_rate": 0.55,
+              "strict_reward_r": 2.0,
+              "strict_win_rate": 0.7
             }
           }
         }

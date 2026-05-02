@@ -26,6 +26,7 @@ DEFAULT_LOW_R_REPORT = Path("experiments/profit_mining/low_r_high_frequency_15r_
 DEFAULT_LOW_R_SUBSET_REPORT = Path("reports/low_r_15r_subset_search_55wr_wide_2026-05-03.json")
 DEFAULT_LOW_R_SUBSET_WALK_FORWARD_REPORT = Path("reports/low_r_15r_subset_walk_forward_55wr_2026-05-03.json")
 DEFAULT_TICK_MICROSTRUCTURE_REPORT = Path("reports/nq_tick_microstructure_filter_audit_55wr_15r_2026-05-03.json")
+DEFAULT_TICK_DERIVED_INTRADAY_REPORT = Path("reports/nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -38,6 +39,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--low-r-subset-report", type=Path, default=DEFAULT_LOW_R_SUBSET_REPORT)
     parser.add_argument("--low-r-subset-walk-forward-report", type=Path, default=DEFAULT_LOW_R_SUBSET_WALK_FORWARD_REPORT)
     parser.add_argument("--tick-microstructure-report", type=Path, default=DEFAULT_TICK_MICROSTRUCTURE_REPORT)
+    parser.add_argument("--tick-derived-intraday-report", type=Path, default=DEFAULT_TICK_DERIVED_INTRADAY_REPORT)
     parser.add_argument("--output", type=Path, default=Path("reports/55wr_15r_objective_completion_audit_2026-05-02.json"))
     parser.add_argument("--markdown-output", type=Path, default=Path("reports/55wr_15r_objective_completion_audit_2026-05-02.md"))
     args = parser.parse_args(argv)
@@ -62,6 +64,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.tick_microstructure_report.exists()
         else None
     )
+    tick_derived_intraday_report = (
+        (args.tick_derived_intraday_report, load_json(args.tick_derived_intraday_report))
+        if args.tick_derived_intraday_report.exists()
+        else None
+    )
     payload = build_relaxed_audit(
         expanded_reports,
         vol_report=vol_report,
@@ -70,6 +77,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         low_r_subset_report=low_r_subset_report,
         low_r_subset_walk_forward_report=low_r_subset_walk_forward_report,
         tick_microstructure_report=tick_microstructure_report,
+        tick_derived_intraday_report=tick_derived_intraday_report,
     )
     write_json(args.output, payload)
     args.markdown_output.write_text(render_markdown(payload), encoding="utf-8")
@@ -86,6 +94,7 @@ def build_relaxed_audit(
     low_r_subset_report: tuple[Path, dict[str, Any]] | None = None,
     low_r_subset_walk_forward_report: tuple[Path, dict[str, Any]] | None = None,
     tick_microstructure_report: tuple[Path, dict[str, Any]] | None = None,
+    tick_derived_intraday_report: tuple[Path, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     expanded_rows = [summarize_expanded_report(path, payload) for path, payload in reports]
     vol_row = summarize_vol_report(*vol_report) if vol_report else None
@@ -102,9 +111,22 @@ def build_relaxed_audit(
         if tick_microstructure_report
         else None
     )
+    tick_derived_intraday_row = (
+        summarize_tick_derived_intraday_report(*tick_derived_intraday_report)
+        if tick_derived_intraday_report
+        else None
+    )
     strategy_family_rows = expanded_rows + [
         row
-        for row in (vol_row, smc_row, low_r_row, low_r_subset_row, low_r_subset_walk_forward_row, tick_microstructure_row)
+        for row in (
+            vol_row,
+            smc_row,
+            low_r_row,
+            low_r_subset_row,
+            low_r_subset_walk_forward_row,
+            tick_microstructure_row,
+            tick_derived_intraday_row,
+        )
         if row is not None
     ]
     passing = [row for row in strategy_family_rows if row["passed"]]
@@ -125,6 +147,8 @@ def build_relaxed_audit(
         reward_evidence.append({"artifact": low_r_subset_walk_forward_row["artifact"], "forced_take_profit_r": low_r_subset_walk_forward_row["forced_take_profit_r"]})
     if tick_microstructure_row:
         reward_evidence.append({"artifact": tick_microstructure_row["artifact"], "min_take_profit_r": tick_microstructure_row["min_take_profit_r"]})
+    if tick_derived_intraday_row:
+        reward_evidence.append({"artifact": tick_derived_intraday_row["artifact"], "min_reward_r": tick_derived_intraday_row["min_reward_r"]})
     requirements = [
         requirement(
             "reward_1_5r",
@@ -175,6 +199,7 @@ def build_relaxed_audit(
         "low_r_subset_report": low_r_subset_row,
         "low_r_subset_walk_forward_report": low_r_subset_walk_forward_row,
         "tick_microstructure_report": tick_microstructure_row,
+        "tick_derived_intraday_report": tick_derived_intraday_row,
         "best_expanded_report": best,
         "strategy_family_reports": strategy_family_rows,
         "requirements": requirements,
@@ -382,6 +407,40 @@ def summarize_tick_microstructure_report(path: Path, payload: dict[str, Any]) ->
             "selection": (payload.get("method") or {}).get("selection"),
             "scope": (payload.get("method") or {}).get("scope"),
             "non_overfit_guardrail": (payload.get("method") or {}).get("non_overfit_guardrail"),
+        },
+        "oos_total_net_pnl": test.get("net_pnl"),
+        "oos_total_trades": test.get("trade_count"),
+        "oos_min_year_win_rate": test.get("win_rate"),
+    }
+
+
+def summarize_tick_derived_intraday_report(path: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    target = payload.get("target") or {}
+    coverage = payload.get("coverage") or {}
+    selected = payload.get("selected") or {}
+    decision = payload.get("decision") or {}
+    spec = selected.get("spec") or {}
+    test = selected.get("test") or {}
+    passed = bool(decision.get("passed")) and bool(decision.get("live_ready"))
+    return {
+        "family": "tick_derived_intraday",
+        "artifact": str(path),
+        "passed": passed,
+        "decision": {
+            **decision,
+            "objective_passed_but_not_live_ready": bool(decision.get("passed")) and not bool(decision.get("live_ready")),
+            "selected_spec": spec,
+            "selected_test_win_rate": test.get("win_rate"),
+            "selected_test_trade_count": test.get("trade_count"),
+            "minute_bar_count": coverage.get("minute_bar_count"),
+        },
+        "reward_gate_passed": float(spec.get("reward_r") or target.get("min_reward_r") or 0.0) >= 1.5,
+        "min_reward_r": target.get("min_reward_r"),
+        "method": {
+            "selection": (payload.get("method") or {}).get("selection"),
+            "scope": (payload.get("method") or {}).get("scope"),
+            "entry_timing": (payload.get("method") or {}).get("entry_timing"),
+            "long_term_limit": (payload.get("method") or {}).get("long_term_limit"),
         },
         "oos_total_net_pnl": test.get("net_pnl"),
         "oos_total_trades": test.get("trade_count"),

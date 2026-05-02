@@ -300,6 +300,16 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
                     },
                     "decision": {"passed": False},
                 },
+                "tick_derived_intraday": {
+                    "target": {"min_reward_r": 1.5, "strict_reward_r": 2.0},
+                    "coverage": {"minute_bar_count": 25000},
+                    "selected": {
+                        "spec": {"mode": "continuation", "direction": "long", "reward_r": 1.5},
+                        "train": {"win_rate": 0.56, "trade_count": 100, "gate_passed": True},
+                        "test": {"win_rate": 0.51, "trade_count": 120, "gate_passed": False},
+                    },
+                    "decision": {"passed": False, "strict_70wr_2r_passed": False},
+                },
                 "assessment": "reject promotion",
             }
         )
@@ -308,10 +318,12 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         self.assertIn("black_box_tick_test", [row["id"] for row in audit["requirements"] if row["passed"]])
         self.assertIn("win_rate_70pct", audit["decision"]["failed_requirements"])
         win_rate_requirement = next(row for row in audit["requirements"] if row["id"] == "win_rate_70pct")
-        self.assertEqual(win_rate_requirement["evidence"][-4]["finding"]["selected_test"]["win_rate"], 0.30)
-        self.assertEqual(win_rate_requirement["evidence"][-3]["finding"]["selected_spec"]["mode"], "reversal")
-        self.assertEqual(win_rate_requirement["evidence"][-2]["finding"]["selected_test"]["win_rate"], 0.32)
-        self.assertEqual(win_rate_requirement["evidence"][-1]["finding"]["selected_train"]["trade_count"], 2)
+        by_artifact = {Path(row["artifact"]).name: row["finding"] for row in win_rate_requirement["evidence"]}
+        self.assertEqual(by_artifact["nq_mbp1_microstructure_2r_search_2026-05-03.json"]["selected_test"]["win_rate"], 0.30)
+        self.assertEqual(by_artifact["nq_mbp1_microstructure_2r_reversal_search_2026-05-03.json"]["selected_spec"]["mode"], "reversal")
+        self.assertEqual(by_artifact["nq_mbp1_microstructure_2r_medium_candidate_index_search_2026-05-03.json"]["selected_test"]["win_rate"], 0.32)
+        self.assertEqual(by_artifact["nq_mbp1_microstructure_2r_full_grid_candidate_index_search_2026-05-03.json"]["selected_train"]["trade_count"], 2)
+        self.assertEqual(by_artifact["nq_tick_derived_intraday_search_55wr_15r_2026-05-03.json"]["selected_test"]["win_rate"], 0.51)
 
     def test_relaxed_audit_rejects_low_r_probe_below_55pct(self) -> None:
         audit = build_relaxed_audit(
@@ -445,6 +457,48 @@ class WalkForwardExpandedHighEdgeTests(unittest.TestCase):
         tick = next(row for row in audit["strategy_family_reports"] if row["family"] == "tick_microstructure_filter")
         self.assertFalse(tick["passed"])
         self.assertTrue(tick["decision"]["objective_passed_but_not_live_ready"])
+        self.assertIn("live_ready", audit["decision"]["failed_requirements"])
+
+    def test_relaxed_audit_rejects_tick_derived_intraday_without_live_readiness(self) -> None:
+        audit = build_relaxed_audit(
+            [
+                (
+                    Path("expanded.json"),
+                    {
+                        "method": {"take_profit_r_grid": [1.5]},
+                        "summary": {
+                            "decision": {"passed": False},
+                            "oos_total_net_pnl": -100.0,
+                            "oos_total_trades": 10,
+                            "oos_min_year_win_rate": 0.4,
+                        },
+                    },
+                )
+            ],
+            tick_derived_intraday_report=(
+                Path("tick_derived.json"),
+                {
+                    "target": {"min_reward_r": 1.5},
+                    "coverage": {"minute_bar_count": 25000},
+                    "method": {
+                        "selection": "first half train, second half holdout",
+                        "scope": "two-month MBP-1 window",
+                        "entry_timing": "next minute open",
+                        "long_term_limit": "two-month only",
+                    },
+                    "selected": {
+                        "spec": {"reward_r": 1.5},
+                        "test": {"win_rate": 0.58, "trade_count": 90, "net_pnl": 1000.0},
+                    },
+                    "decision": {"passed": True, "live_ready": False},
+                },
+            ),
+        )
+
+        tick = next(row for row in audit["strategy_family_reports"] if row["family"] == "tick_derived_intraday")
+        self.assertFalse(tick["passed"])
+        self.assertTrue(tick["decision"]["objective_passed_but_not_live_ready"])
+        self.assertEqual(tick["decision"]["selected_test_trade_count"], 90)
         self.assertIn("live_ready", audit["decision"]["failed_requirements"])
 
     def test_low_r_subset_walk_forward_summary_requires_all_test_gates(self) -> None:
